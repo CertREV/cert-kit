@@ -1,0 +1,230 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://contracts.certrev.com/cert-contract/cert-delivery-envelope.v1.schema.json",
+	"title": "CertDeliveryEnvelope",
+	"description": "A signed CertREV certification credential. The signature is a detached Ed25519 signature over the RFC-8785 (JCS) canonicalization of `payload`. `payload.content` holds structured FACTS; the schema.org JSON-LD is projected from them at the render edge and is NOT part of the signed payload.",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["payload", "signature"],
+	"properties": {
+		"payload": { "$ref": "#/$defs/CertPayload" },
+		"signature": { "$ref": "#/$defs/CertSignature" }
+	},
+	"$defs": {
+		"CertPayload": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["contractVersion", "certId", "subject", "content", "lifecycle"],
+			"properties": {
+				"contractVersion": {
+					"const": 1,
+					"description": "Envelope contract version. Bump on any breaking shape/signing-rule change."
+				},
+				"certId": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Stable CertREV certification id — idempotency key across pushes/reconciliations."
+				},
+				"subject": { "$ref": "#/$defs/CertSubject" },
+				"content": { "$ref": "#/$defs/CertContent" },
+				"lifecycle": { "$ref": "#/$defs/CertLifecycle" }
+			}
+		},
+		"CertSubject": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "Stable identity binding. The signature covers all of this; copying the envelope to a different article (externalId mismatch) or editing reviewed content (contentDigest mismatch) is detected at the edge.",
+			"required": ["platform", "externalId", "logicalArticleId", "canonicalUrls", "installationId", "contentDigest"],
+			"properties": {
+				"platform": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Platform the envelope was minted for, e.g. 'shopify', 'wordpress', 'headless'."
+				},
+				"externalId": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Stable per-placement id on the platform (WP post id as string, Shopify Article GID)."
+				},
+				"logicalArticleId": {
+					"type": "string",
+					"minLength": 1,
+					"description": "CertREV's platform-independent article identity; survives migration/republish."
+				},
+				"canonicalUrls": {
+					"type": "array",
+					"items": { "type": "string", "format": "uri" },
+					"description": "Every canonical public URL this credential may legitimately render on (primary + locale/slug variants)."
+				},
+				"installationId": {
+					"type": ["string", "null"],
+					"description": "App/connection install id that placed the credential; null when not applicable."
+				},
+				"contentDigest": {
+					"type": ["string", "null"],
+					"pattern": "^[0-9a-f]{64}$",
+					"description": "Lowercase hex SHA-256 over the canonicalized reviewed body — the anti-drift anchor. Null when content is not bound (edge then skips the drift check)."
+				}
+			}
+		},
+		"CertContent": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "Presentation-free certification FACTS. No HTML, no rendered JSON-LD — each edge renders + projects schema.org from these. `display` is OPTIONAL from v0.2 (presentation evicted to brand_render_defs; never-written by a v0.2 issuer, accepted-on-read from v0.1.x envelopes).",
+			"required": ["expert", "author", "memo", "certifiedAt", "contentModifiedAt", "verifyUrl"],
+			"properties": {
+				"expert": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["displayName", "credentials", "profileUrl", "photoUrl"],
+					"properties": {
+						"displayName": { "type": "string", "minLength": 1 },
+						"credentials": {
+							"type": "array",
+							"description": "VERIFIED credentials only.",
+							"items": {
+								"type": "object",
+								"additionalProperties": false,
+								"required": ["abbreviation", "fullName"],
+								"properties": {
+									"abbreviation": { "type": "string" },
+									"fullName": { "type": "string" },
+									"cardLabel": {
+										"type": ["string", "null"],
+										"description": "v0.2 (POR-9738): optional DISPLAY-only byline override; abbreviation stays the stable key."
+									},
+									"complianceClass": {
+										"enum": ["free", "gated", "fused", "locked"],
+										"description": "v0.2 per-field compliance class stamped at mint (the reviewer credential is the canonical `gated` datum)."
+									},
+									"claimBearing": {
+										"type": "boolean",
+										"description": "v0.2: does this field form a pre-click endorsement impression on the article face (pulls the compensation cue + scope line)?"
+									}
+								}
+							}
+						},
+						"profileUrl": { "type": ["string", "null"], "format": "uri" },
+						"photoUrl": { "type": ["string", "null"], "format": "uri" },
+						"bio": {
+							"type": ["string", "null"],
+							"description": "v0.2 (POR-9731): the reviewer's QA-VERIFIED short bio (contributors card)."
+						},
+						"background": {
+							"type": ["string", "null"],
+							"description": "v0.2 (POR-9731): the reviewer's QA-VERIFIED long background (profile modal body)."
+						},
+						"compensationCue": {
+							"type": ["string", "null"],
+							"description": "v0.2 (POR-10496 / POR-9731): first-class, pre-composed material-connection cue ('Compensated expert'); null for a pro-bono reviewer."
+						}
+					}
+				},
+				"author": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["name", "title"],
+					"properties": {
+						"name": { "type": "string" },
+						"title": { "type": ["string", "null"] },
+						"photoUrl": {
+							"type": ["string", "null"],
+							"format": "uri",
+							"description": "v0.2 (POR-9731): author headshot URL."
+						},
+						"bio": {
+							"type": ["string", "null"],
+							"description": "v0.2 (POR-9731): author short bio (verified-only, contributors card)."
+						}
+					}
+				},
+				"memo": {
+					"type": ["string", "null"],
+					"description": "Expert first-person memo (plain text/markdown), or null."
+				},
+				"certifiedAt": {
+					"type": "string",
+					"format": "date-time",
+					"description": "ISO-8601 — when the expert signed off."
+				},
+				"contentModifiedAt": {
+					"type": ["string", "null"],
+					"format": "date-time",
+					"description": "ISO-8601 latest content-version date, or null."
+				},
+				"verifyUrl": {
+					"type": "string",
+					"format": "uri",
+					"description": "Canonical public verification URL — the live source of truth."
+				},
+				"display": { "$ref": "#/$defs/CertDisplayConfig" },
+				"articleTitle": {
+					"type": ["string", "null"],
+					"description": "v0.5 (POR-10481): the certified article's title (certificate modal 'Certifies the article' block). Optional + omit-when-undefined; wired onto the signed bytes in v0.5."
+				},
+				"displayCertId": {
+					"type": ["string", "null"],
+					"description": "v0.5 (POR-10481): display-only pretty cert id (CR-YYYY-NNNN) for the modal meta row; a deterministic derivation of certId+year, not a second identity (verifyUrl is the real link)."
+				}
+			}
+		},
+		"CertDisplayConfig": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "Native theming inputs; all optional, edges fall back to theme defaults.",
+			"properties": {
+				"accentColor": { "type": ["string", "null"] },
+				"showExpertPhoto": { "type": "boolean" },
+				"showAuthor": { "type": "boolean" },
+				"showMemo": { "type": "boolean" },
+				"badgeStyle": { "enum": ["full", "compact"] }
+			}
+		},
+		"CertLifecycle": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["issuedAt", "expiresAt", "revokedAt", "revision"],
+			"properties": {
+				"issuedAt": { "type": "string", "format": "date-time" },
+				"expiresAt": {
+					"type": "string",
+					"format": "date-time",
+					"description": "Hard stop; after this the edge renders nothing until a fresh envelope arrives."
+				},
+				"revokedAt": {
+					"type": ["string", "null"],
+					"format": "date-time",
+					"description": "ISO-8601 when revoked, else null. Non-null → fail closed."
+				},
+				"revision": {
+					"type": "integer",
+					"minimum": 0,
+					"description": "Monotonic per-placement revision; last-writer-wins at the edge."
+				}
+			}
+		},
+		"CertSignature": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "Detached signature over canonicalize(payload). Does NOT cover itself.",
+			"required": ["alg", "kid", "sig", "signedAt"],
+			"properties": {
+				"alg": {
+					"const": "ed25519",
+					"description": "Ed25519 PureEdDSA — libsodium / WebCrypto / GCP KMS EC_SIGN_ED25519 compatible."
+				},
+				"kid": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Key id selecting the issuer public key. For the live root this is the GCP KMS cryptoKeyVersion resource name."
+				},
+				"sig": {
+					"type": "string",
+					"pattern": "^[A-Za-z0-9_-]+$",
+					"description": "base64url (unpadded) detached Ed25519 signature over the RFC-8785 canonical bytes of payload (raw 64-byte signature)."
+				},
+				"signedAt": { "type": "string", "format": "date-time" }
+			}
+		}
+	}
+}

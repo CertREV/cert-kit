@@ -1,0 +1,16 @@
+{
+	"name": "@certrev/cert-kit",
+	"private": true,
+	"description": "Public source for @certrev/cert-block and @certrev/cert-contract — the CertREV render + signed-envelope contract kit published to npm.",
+	"scripts": {
+		"build": "pnpm -r build",
+		"typecheck": "pnpm -r typecheck",
+		"test": "pnpm -r test",
+		"check": "biome check ."
+	},
+	"packageManager": "pnpm@10.0.0",
+	"license": "MIT",
+	"devDependencies": {
+		"@biomejs/biome": "2.4.16"
+	}
+}

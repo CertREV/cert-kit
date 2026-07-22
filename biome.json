@@ -1,0 +1,67 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"files": {
+		"ignoreUnknown": true,
+		"includes": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.json", "**/*.jsonc", "!**/cert-block/src/modal"]
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab",
+		"indentWidth": 2,
+		"lineWidth": 120
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"correctness": {
+				"noUnusedVariables": "warn",
+				"noUnusedImports": "warn",
+				"noUnusedFunctionParameters": "off"
+			},
+			"style": {
+				"useConst": "error",
+				"useNodejsImportProtocol": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "warn",
+				"useIterableCallbackReturn": "off",
+				"noImplicitAnyLet": "off",
+				"noAssignInExpressions": "off"
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "single",
+			"trailingCommas": "all",
+			"semicolons": "asNeeded"
+		}
+	},
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["**/dist/**", "**/node_modules/**"],
+			"formatter": { "enabled": false },
+			"linter": { "enabled": false },
+			"assist": { "enabled": false }
+		},
+		{
+			"includes": ["**/cert-contract/src/__tests__/vectors.json"],
+			"formatter": { "enabled": false },
+			"assist": { "enabled": false }
+		}
+	]
+}

@@ -1,0 +1,67 @@
+{
+	"$comment": "TS-produced Ed25519 signature over RFC-8785 JCS(payload) of a CertPayload, for the PHP cross-language verify test. The PHP test re-canonicalizes payload, asserts bytes==canonicalHex, then sodium_crypto_sign_verify_detached(base64url-decode(signature.sig), canonicalBytes, base64-decode(publicKeyRawBase64)).",
+	"kid": "php-crossverify-fixed-key-v1",
+	"publicKeyRawBase64": "fw0oo0kM1X1szH8a2Dtn37qgH3YV2TgPOi4coThmzZA=",
+	"publicKeySpkiBase64": "MCowBQYDK2VwAyEAfw0oo0kM1X1szH8a2Dtn37qgH3YV2TgPOi4coThmzZA=",
+	"canonical": "{\"certId\":\"cert_php_crossverify_001\",\"content\":{\"articleTitle\":\"Shea Butter: a reviewer’s evidence & sourcing note. 世界\",\"author\":{\"name\":\"Brand Team\",\"title\":null},\"certifiedAt\":\"2026-06-21T12:00:00.000Z\",\"contentModifiedAt\":null,\"display\":{\"accentColor\":\"#0a0\",\"badgeStyle\":\"full\",\"showExpertPhoto\":true},\"displayCertId\":\"CR-2026-7A2F\",\"expert\":{\"credentials\":[{\"abbreviation\":\"MD\",\"fullName\":\"Doctor of Medicine\"},{\"abbreviation\":\"PhD\",\"fullName\":\"Doctor of Philosophy\"}],\"displayName\":\"Dr. Élodie Müller\",\"photoUrl\":null,\"profileUrl\":\"https://certrev.com/experts/elodie\"},\"memo\":\"Verified across languages. 世界 → café ✅\",\"verifyUrl\":\"https://certrev.com/verify/cert_php_crossverify_001\"},\"contractVersion\":1,\"lifecycle\":{\"expiresAt\":\"2099-01-01T00:00:00.000Z\",\"issuedAt\":\"2026-06-21T12:00:00.000Z\",\"revision\":1,\"revokedAt\":null},\"subject\":{\"canonicalUrls\":[\"https://brand.example.com/2026/06/shea-butter\",\"https://brand.example.com/fr/beurre\"],\"contentDigest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"externalId\":\"4242\",\"installationId\":\"wpconn_77\",\"logicalArticleId\":\"art_php_xverify\",\"platform\":\"wordpress\"}}",
+	"canonicalHex": "7b22636572744964223a22636572745f7068705f63726f73737665726966795f303031222c22636f6e74656e74223a7b2261727469636c655469746c65223a2253686561204275747465723a2061207265766965776572e28099732065766964656e6365202620736f757263696e67206e6f74652e20e4b896e7958c222c22617574686f72223a7b226e616d65223a224272616e64205465616d222c227469746c65223a6e756c6c7d2c226365727469666965644174223a22323032362d30362d32315431323a30303a30302e3030305a222c22636f6e74656e744d6f6469666965644174223a6e756c6c2c22646973706c6179223a7b22616363656e74436f6c6f72223a2223306130222c2262616467655374796c65223a2266756c6c222c2273686f7745787065727450686f746f223a747275657d2c22646973706c6179436572744964223a2243522d323032362d37413246222c22657870657274223a7b2263726564656e7469616c73223a5b7b22616262726576696174696f6e223a224d44222c2266756c6c4e616d65223a22446f63746f72206f66204d65646963696e65227d2c7b22616262726576696174696f6e223a22506844222c2266756c6c4e616d65223a22446f63746f72206f66205068696c6f736f706879227d5d2c22646973706c61794e616d65223a2244722e20c3896c6f646965204dc3bc6c6c6572222c2270686f746f55726c223a6e756c6c2c2270726f66696c6555726c223a2268747470733a2f2f636572747265762e636f6d2f657870657274732f656c6f646965227d2c226d656d6f223a225665726966696564206163726f7373206c616e6775616765732e20e4b896e7958c20e2869220636166c3a920e29c85222c2276657269667955726c223a2268747470733a2f2f636572747265762e636f6d2f7665726966792f636572745f7068705f63726f73737665726966795f303031227d2c22636f6e747261637456657273696f6e223a312c226c6966656379636c65223a7b22657870697265734174223a22323039392d30312d30315430303a30303a30302e3030305a222c226973737565644174223a22323032362d30362d32315431323a30303a30302e3030305a222c227265766973696f6e223a312c227265766f6b65644174223a6e756c6c7d2c227375626a656374223a7b2263616e6f6e6963616c55726c73223a5b2268747470733a2f2f6272616e642e6578616d706c652e636f6d2f323032362f30362f736865612d627574746572222c2268747470733a2f2f6272616e642e6578616d706c652e636f6d2f66722f626575727265225d2c22636f6e74656e74446967657374223a2264646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464646464222c2265787465726e616c4964223a2234323432222c22696e7374616c6c6174696f6e4964223a227770636f6e6e5f3737222c226c6f676963616c41727469636c654964223a226172745f7068705f78766572696679222c22706c6174666f726d223a22776f72647072657373227d7d",
+	"sha256": "2edd55f90cbc1c605cc0afbda16566fc8a4977cafc81991723c44a1e9c144098",
+	"envelope": {
+		"payload": {
+			"contractVersion": 1,
+			"certId": "cert_php_crossverify_001",
+			"subject": {
+				"platform": "wordpress",
+				"externalId": "4242",
+				"logicalArticleId": "art_php_xverify",
+				"canonicalUrls": ["https://brand.example.com/2026/06/shea-butter", "https://brand.example.com/fr/beurre"],
+				"installationId": "wpconn_77",
+				"contentDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Élodie Müller",
+					"credentials": [
+						{
+							"abbreviation": "MD",
+							"fullName": "Doctor of Medicine"
+						},
+						{
+							"abbreviation": "PhD",
+							"fullName": "Doctor of Philosophy"
+						}
+					],
+					"profileUrl": "https://certrev.com/experts/elodie",
+					"photoUrl": null
+				},
+				"author": {
+					"name": "Brand Team",
+					"title": null
+				},
+				"memo": "Verified across languages. 世界 → café ✅",
+				"certifiedAt": "2026-06-21T12:00:00.000Z",
+				"contentModifiedAt": null,
+				"verifyUrl": "https://certrev.com/verify/cert_php_crossverify_001",
+				"display": {
+					"accentColor": "#0a0",
+					"showExpertPhoto": true,
+					"badgeStyle": "full"
+				},
+				"articleTitle": "Shea Butter: a reviewer’s evidence & sourcing note. 世界",
+				"displayCertId": "CR-2026-7A2F"
+			},
+			"lifecycle": {
+				"issuedAt": "2026-06-21T12:00:00.000Z",
+				"expiresAt": "2099-01-01T00:00:00.000Z",
+				"revokedAt": null,
+				"revision": 1
+			}
+		},
+		"signature": {
+			"alg": "ed25519",
+			"kid": "php-crossverify-fixed-key-v1",
+			"sig": "qggEdYpnU69O0NWjQ86yNzKbrC1XlEudapMSjBAL0cXL2kllNMaDshZ65fNrHGEAM8T5WiuHNRGcfQG0JY4hDw",
+			"signedAt": "2026-06-21T12:00:00.000Z"
+		}
+	}
+}

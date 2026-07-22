@@ -1,0 +1,17 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": "./src",
+		// Native Node ESM: emit an ESM dist whose relative imports carry explicit .js
+		// extensions, so the package resolves under native Node (the issuer mint script,
+		// Hydrogen/Next server runtimes, Deno) AND bundlers — not just bundlers. Mirrors
+		// @certrev/cert-block. The base config's `module: ESNext` + `moduleResolution:
+		// Bundler` emits EXTENSIONLESS specifiers, which native Node ESM rejects.
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"types": ["node"]
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/__tests__/**"]
+}
