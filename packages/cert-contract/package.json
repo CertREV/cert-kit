@@ -1,0 +1,56 @@
+{
+	"name": "@certrev/cert-contract",
+	"version": "0.5.1",
+	"description": "CertDeliveryEnvelope: detached-Ed25519-over-RFC-8785(JCS) signed certification credential. Signs structured facts (not rendered JSON-LD), with a fail-closed VerdictKernel every render edge runs. The VERIFY path + canonicalization are edge-runtime safe (WebCrypto, no node:crypto); the issuer SIGN path is on the './signer' subpath. Native-ESM packaged (type:module, .js-extension imports) so it resolves under raw Node/Deno as well as bundlers.",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./signer": {
+			"types": "./dist/signer.d.ts",
+			"default": "./dist/signer.js"
+		}
+	},
+	"files": [
+		"dist",
+		"src/*.ts",
+		"src/__tests__/*.json",
+		"schema",
+		"README.md",
+		"CHANGELOG.md"
+	],
+	"publishConfig": {
+		"registry": "https://registry.npmjs.org",
+		"access": "public"
+	},
+	"publishTargets": [
+		"npmjs",
+		"github-packages"
+	],
+	"scripts": {
+		"build": "tsc",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"canonicalize": "^3.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^20.0.0",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.5"
+	},
+	"keywords": [
+		"certrev",
+		"ed25519",
+		"rfc8785",
+		"jcs",
+		"json-canonicalization",
+		"signed-credential"
+	],
+	"license": "MIT"
+}

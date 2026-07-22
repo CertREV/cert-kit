@@ -1,0 +1,23 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": "./src",
+		// Native Node ESM resolution: emit an ESM dist whose relative imports carry
+		// explicit .js extensions so the package resolves under native Node (Hydrogen
+		// loaders, Next server runtime) and bundlers alike. Authoring convention:
+		// .tsx/.ts source writes ".js" specifiers; tsc preserves them.
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		// React JSX, no per-file React import needed (react-jsx runtime). DOM lib is
+		// required at compile time for the Web Component (customElements / HTMLElement)
+		// and for the SSR escaping helpers; the React components are render-pure and
+		// stay server-safe (no useState/useEffect/browser-only calls) — enforced by the
+		// SSR render tests, not by excluding DOM here.
+		"jsx": "react-jsx",
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"types": ["node"]
+	},
+	"include": ["src/**/*.ts", "src/**/*.tsx"],
+	"exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/*.test.tsx", "src/**/__tests__/**"]
+}

@@ -1,0 +1,61 @@
+{
+	"$comment": "Live GCP KMS-signed fixture (kid = cert-envelope-issuer v1). PHP verifies this against the REAL signing root: re-canonicalize payload, assert bytes==canonicalHex, sodium_crypto_sign_verify_detached(sig, bytes, rawPublic).",
+	"kid": "projects/portal-486217/locations/global/keyRings/certrev-signing/cryptoKeys/cert-envelope-issuer/cryptoKeyVersions/1",
+	"publicKeyRawBase64": "MWN956IOPjpAq900dL428VzA28TO/pVXnq3brwqUmwM=",
+	"publicKeySpkiBase64": "MCowBQYDK2VwAyEAMWN956IOPjpAq900dL428VzA28TO/pVXnq3brwqUmwM=",
+	"canonical": "{\"certId\":\"cert_kms_php_xverify_001\",\"content\":{\"author\":{\"name\":\"CertREV\",\"title\":null},\"certifiedAt\":\"2026-06-21T12:00:00.000Z\",\"contentModifiedAt\":null,\"display\":{\"accentColor\":\"#0a0\",\"badgeStyle\":\"full\",\"showExpertPhoto\":true},\"expert\":{\"credentials\":[{\"abbreviation\":\"MD\",\"fullName\":\"Doctor of Medicine\"}],\"displayName\":\"Dr. Triangle Proof\",\"photoUrl\":null,\"profileUrl\":\"https://certrev.com/experts/triangle\"},\"memo\":\"Signed by live GCP KMS, verified in PHP. 世界 🎯 café\",\"verifyUrl\":\"https://certrev.com/verify/cert_kms_php_xverify_001\"},\"contractVersion\":1,\"lifecycle\":{\"expiresAt\":\"2099-01-01T00:00:00.000Z\",\"issuedAt\":\"2026-06-21T12:00:00.000Z\",\"revision\":1,\"revokedAt\":null},\"subject\":{\"canonicalUrls\":[\"https://brand.example.com/2026/06/retinol\"],\"contentDigest\":\"a1b2c30000000000000000000000000000000000000000000000000000000000\",\"externalId\":\"90210\",\"installationId\":\"wpconn_kms\",\"logicalArticleId\":\"art_kms_php\",\"platform\":\"wordpress\"}}",
+	"canonicalHex": "7b22636572744964223a22636572745f6b6d735f7068705f787665726966795f303031222c22636f6e74656e74223a7b22617574686f72223a7b226e616d65223a2243657274524556222c227469746c65223a6e756c6c7d2c226365727469666965644174223a22323032362d30362d32315431323a30303a30302e3030305a222c22636f6e74656e744d6f6469666965644174223a6e756c6c2c22646973706c6179223a7b22616363656e74436f6c6f72223a2223306130222c2262616467655374796c65223a2266756c6c222c2273686f7745787065727450686f746f223a747275657d2c22657870657274223a7b2263726564656e7469616c73223a5b7b22616262726576696174696f6e223a224d44222c2266756c6c4e616d65223a22446f63746f72206f66204d65646963696e65227d5d2c22646973706c61794e616d65223a2244722e20547269616e676c652050726f6f66222c2270686f746f55726c223a6e756c6c2c2270726f66696c6555726c223a2268747470733a2f2f636572747265762e636f6d2f657870657274732f747269616e676c65227d2c226d656d6f223a225369676e6564206279206c69766520474350204b4d532c20766572696669656420696e205048502e20e4b896e7958c20f09f8eaf20636166c3a9222c2276657269667955726c223a2268747470733a2f2f636572747265762e636f6d2f7665726966792f636572745f6b6d735f7068705f787665726966795f303031227d2c22636f6e747261637456657273696f6e223a312c226c6966656379636c65223a7b22657870697265734174223a22323039392d30312d30315430303a30303a30302e3030305a222c226973737565644174223a22323032362d30362d32315431323a30303a30302e3030305a222c227265766973696f6e223a312c227265766f6b65644174223a6e756c6c7d2c227375626a656374223a7b2263616e6f6e6963616c55726c73223a5b2268747470733a2f2f6272616e642e6578616d706c652e636f6d2f323032362f30362f726574696e6f6c225d2c22636f6e74656e74446967657374223a2261316232633330303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030222c2265787465726e616c4964223a223930323130222c22696e7374616c6c6174696f6e4964223a227770636f6e6e5f6b6d73222c226c6f676963616c41727469636c654964223a226172745f6b6d735f706870222c22706c6174666f726d223a22776f72647072657373227d7d",
+	"sha256": "7d1a988b505622cef8258386b4634df3e7c2447c5b463b2373bc386e814a0b39",
+	"envelope": {
+		"payload": {
+			"contractVersion": 1,
+			"certId": "cert_kms_php_xverify_001",
+			"subject": {
+				"platform": "wordpress",
+				"externalId": "90210",
+				"logicalArticleId": "art_kms_php",
+				"canonicalUrls": ["https://brand.example.com/2026/06/retinol"],
+				"installationId": "wpconn_kms",
+				"contentDigest": "a1b2c30000000000000000000000000000000000000000000000000000000000"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Triangle Proof",
+					"credentials": [
+						{
+							"abbreviation": "MD",
+							"fullName": "Doctor of Medicine"
+						}
+					],
+					"profileUrl": "https://certrev.com/experts/triangle",
+					"photoUrl": null
+				},
+				"author": {
+					"name": "CertREV",
+					"title": null
+				},
+				"memo": "Signed by live GCP KMS, verified in PHP. 世界 🎯 café",
+				"certifiedAt": "2026-06-21T12:00:00.000Z",
+				"contentModifiedAt": null,
+				"verifyUrl": "https://certrev.com/verify/cert_kms_php_xverify_001",
+				"display": {
+					"accentColor": "#0a0",
+					"showExpertPhoto": true,
+					"badgeStyle": "full"
+				}
+			},
+			"lifecycle": {
+				"issuedAt": "2026-06-21T12:00:00.000Z",
+				"expiresAt": "2099-01-01T00:00:00.000Z",
+				"revokedAt": null,
+				"revision": 1
+			}
+		},
+		"signature": {
+			"alg": "ed25519",
+			"kid": "projects/portal-486217/locations/global/keyRings/certrev-signing/cryptoKeys/cert-envelope-issuer/cryptoKeyVersions/1",
+			"sig": "zzacyrD6_qILeEbflFMEY4vUHcVCYbRFnFoto76Hlv1YdQ_gNvXJqKh0cH9v0jxsOwDfgzIuut6QSjGZ9tt7BQ",
+			"signedAt": "2026-06-22T01:38:48.825Z"
+		}
+	}
+}

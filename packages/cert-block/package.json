@@ -1,0 +1,91 @@
+{
+	"name": "@certrev/cert-block",
+	"version": "0.5.3",
+	"description": "Headless / crypto_verify render edge for the CertREV CertDeliveryEnvelope. SSR-safe React components (<CertBadge>/<ExpertBio>/<CertRevBacklink>), a deterministic schema.org JSON-LD projector, a fail-closed verify layer over the shared VerdictKernel, and a framework-agnostic <certrev-badge> Web Component. Sign once (portal), render everywhere (Hydrogen / Next / Builder / universal embed).",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./builder": {
+			"types": "./dist/builder/index.d.ts",
+			"default": "./dist/builder/index.js"
+		},
+		"./webcomponent": {
+			"types": "./dist/webcomponent/certrev-badge.d.ts",
+			"default": "./dist/webcomponent/certrev-badge.js"
+		},
+		"./fixtures": {
+			"types": "./dist/contract/fixtures.d.ts",
+			"default": "./dist/contract/fixtures.js"
+		},
+		"./modal": {
+			"types": "./dist/modal/index.d.ts",
+			"default": "./dist/modal/index.js"
+		},
+		"./modal/placement": {
+			"types": "./dist/modal/placement.d.ts",
+			"default": "./dist/modal/placement.js"
+		},
+		"./modal/certrev-cert.js": "./dist/modal/certrev-cert.js"
+	},
+	"files": [
+		"dist",
+		"src",
+		"README.md",
+		"CHANGELOG.md"
+	],
+	"publishConfig": {
+		"registry": "https://registry.npmjs.org",
+		"access": "public"
+	},
+	"publishTargets": [
+		"npmjs",
+		"github-packages"
+	],
+	"scripts": {
+		"build": "tsc && pnpm build:modal-bundle",
+		"build:modal-bundle": "pnpm dlx esbuild@0.27.7 src/modal/certrev-cert.entry.ts --bundle --minify --target=es2020 --format=iife --legal-comments=none --tsconfig-raw='{\"compilerOptions\":{\"target\":\"ES2017\",\"module\":\"esnext\",\"strict\":true}}' --banner:js='/* biome-ignore-all format: generated cert-badge bundle, see @certrev/cert-block src/modal/ */ /* biome-ignore-all lint: generated cert-badge bundle, see @certrev/cert-block src/modal/ */' --outfile=dist/modal/certrev-cert.js",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@certrev/cert-contract": "^0.5.0"
+	},
+	"peerDependencies": {
+		"react": ">=18.0.0"
+	},
+	"peerDependenciesMeta": {
+		"react": {
+			"optional": false
+		}
+	},
+	"devDependencies": {
+		"@testing-library/react": "^16.1.0",
+		"@types/node": "^20.0.0",
+		"@types/react": "^18.3.0",
+		"@types/react-dom": "^18.3.0",
+		"jsdom": "^25.0.0",
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.5"
+	},
+	"keywords": [
+		"certrev",
+		"certification",
+		"react",
+		"server-components",
+		"hydrogen",
+		"shopify",
+		"json-ld",
+		"schema-org",
+		"web-component",
+		"ed25519",
+		"ssr"
+	],
+	"license": "MIT"
+}
