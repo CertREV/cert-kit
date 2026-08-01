@@ -67,9 +67,9 @@ describe('token validators (mirror portal src/lib/design-guide/tokens.ts)', () =
 		for (const bad of ['12', '12 px', 'calc(1px)', '1px 2px', '', 'px', '-4px']) expect(isCornerRadius(bad)).toBe(false)
 	})
 
-	it('isFontSlot admits only the three enum members', () => {
-		for (const ok of ['sans', 'serif', 'system']) expect(isFontSlot(ok)).toBe(true)
-		for (const bad of ['mono', 'Arial', '', 'SANS']) expect(isFontSlot(bad)).toBe(false)
+	it('isFontSlot admits the five enum members', () => {
+		for (const ok of ['sans', 'serif', 'system', 'grotesk', 'mono']) expect(isFontSlot(ok)).toBe(true)
+		for (const bad of ['Arial', '', 'SANS', 'wingdings']) expect(isFontSlot(bad)).toBe(false)
 	})
 })
 
@@ -78,6 +78,10 @@ describe('FONT_STACKS — byte-identical to the Shopify Liquid engine literals',
 		expect(FONT_STACKS.sans).toBe("'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif")
 		expect(FONT_STACKS.serif).toBe("'Playfair Display', Georgia, 'Times New Roman', serif")
 		expect(FONT_STACKS.system).toBe("system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif")
+		// grotesk/mono added at the shared guide values — byte-identical to RENDER_BLOCK_FONT_STACKS
+		// and the portal FONT_SLOT_STACKS, so the modal + Liquid card paint the same typography.
+		expect(FONT_STACKS.grotesk).toBe("'Plus Jakarta Sans', system-ui, Helvetica, Arial, sans-serif")
+		expect(FONT_STACKS.mono).toBe("'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace")
 	})
 })
 
@@ -96,13 +100,18 @@ describe('resolveRenderTheme — validates + drops (fail-safe)', () => {
 		})
 	})
 
+	it('resolves the ADDED grotesk/mono slots to their FONT_STACKS families (the modal themes all five)', () => {
+		expect(resolveRenderTheme({ tokens: { fontSlot: 'grotesk' } }).fontStack).toBe(FONT_STACKS.grotesk)
+		expect(resolveRenderTheme({ tokens: { fontSlot: 'mono' } }).fontStack).toBe(FONT_STACKS.mono)
+	})
+
 	it('DROPS every invalid token (alpha surface, function accent, calc radius, unknown slot)', () => {
 		const resolved = resolveRenderTheme({
 			tokens: {
 				accentColor: 'rgb(0,0,0)',
 				surface: '#ffffffaa',
 				cornerRadius: 'calc(1px)',
-				fontSlot: 'mono' as FontSlot,
+				fontSlot: 'wingdings' as FontSlot,
 			},
 			version: 2,
 		})
@@ -251,7 +260,7 @@ describe('renderBadgeHtml themed (the crawlable string path)', () => {
 					accentColor: 'rgb(0,0,0)',
 					surface: '#ffffffaa',
 					cornerRadius: 'calc(1px)',
-					fontSlot: 'mono' as FontSlot,
+					fontSlot: 'wingdings' as FontSlot,
 				},
 			},
 		})

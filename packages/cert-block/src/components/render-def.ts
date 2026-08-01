@@ -46,21 +46,27 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** The font ENUM. Resolves to a FIXED slot stack — never a free-form family. */
-export const FONT_SLOTS = ['sans', 'serif', 'system'] as const
+export const FONT_SLOTS = ['sans', 'serif', 'system', 'grotesk', 'mono'] as const
 export type FontSlot = (typeof FONT_SLOTS)[number]
 
 /**
- * The `fontSlot` → fixed font-stack literal. BYTE-IDENTICAL to the Shopify Liquid
- * engine's stacks (`shopify/extensions/certrev-schema/snippets/certrev-badge.liquid`
- * — the only font families the twins use), so a themed brand's Builder projection
- * paints the same typography as its Shopify face. A raw family string in a
- * `font-family` CSS var is a CSS-injection surface AND breaks the "CertREV hosts no
- * fonts" invariant, so the enum → stack indirection is the security boundary.
+ * The `fontSlot` → fixed font-stack literal — the render-def theme map the webcomponent MODAL
+ * (`resolveRenderTheme` → `renderBadgeHtml`) and the legacy `<CertBadge>` resolve. The three original
+ * slots (sans/serif/system) stay BYTE-IDENTICAL to the Shopify Liquid engine's stacks
+ * (`shopify/extensions/certrev-schema/snippets/certrev-badge.liquid`), so a themed brand's popup modal
+ * and its inline Liquid card paint the same typography — the load-bearing card==modal invariant.
+ * grotesk (Plus Jakarta Sans) + mono (JetBrains Mono) are ADDED at the shared guide values —
+ * byte-identical to portal `FONT_SLOT_STACKS`, this package's `RENDER_BLOCK_FONT_STACKS`, and the
+ * Liquid twin's added branches — so card == modal holds for them too. A raw family string in a
+ * `font-family` CSS var is a CSS-injection surface AND breaks the "CertREV hosts no fonts" invariant,
+ * so the enum → stack indirection is the security boundary.
  */
 export const FONT_STACKS: Readonly<Record<FontSlot, string>> = {
 	sans: "'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
 	serif: "'Playfair Display', Georgia, 'Times New Roman', serif",
 	system: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+	grotesk: "'Plus Jakarta Sans', system-ui, Helvetica, Arial, sans-serif",
+	mono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
 }
 
 /** A fully-resolved themeable token set (a brand overrides a subset of these). */
@@ -191,8 +197,10 @@ export function isFieldHidden(def: CertRenderDef | undefined, id: BadgeVisibilit
 // above (which the legacy `<CertBadge>` uses): it mirrors the portal's FULL
 // five-member `FontSlot` enum + the pre-computed `accentFg` ink, so the block can
 // reproduce the guide's four-font design (DM Sans body, Playfair memo, JetBrains
-// mono labels, Plus Jakarta wordmark). It is kept DISTINCT from `FONT_SLOTS` /
-// `FONT_STACKS` above so the legacy badge's three-slot contract stays byte-frozen.
+// mono labels, Plus Jakarta wordmark). Its STACKS stay DISTINCT from `FONT_STACKS`
+// above: both maps now span the same five `FontSlot`s, but `FONT_STACKS` pins
+// sans/serif/system to the legacy Liquid table (the card==modal invariant) while this
+// map pins them to the guide table; grotesk/mono are byte-identical across both.
 
 /**
  * The full portal font-slot enum (mirrors portal `src/lib/design-guide/tokens.ts`
