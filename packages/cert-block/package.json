@@ -1,7 +1,16 @@
 {
 	"name": "@certrev/cert-block",
-	"version": "0.5.4",
+	"version": "0.5.5",
 	"description": "Headless / crypto_verify render edge for the CertREV CertDeliveryEnvelope. SSR-safe React components (<CertBadge>/<ExpertBio>/<CertRevBacklink>), a deterministic schema.org JSON-LD projector, a fail-closed verify layer over the shared VerdictKernel, and a framework-agnostic <certrev-badge> Web Component. Sign once (portal), render everywhere (Hydrogen / Next / Builder / universal embed).",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/CertREV/cert-kit.git",
+		"directory": "packages/cert-block"
+	},
+	"homepage": "https://github.com/CertREV/cert-kit/tree/HEAD/packages/cert-block#readme",
+	"bugs": {
+		"url": "https://github.com/CertREV/cert-kit/issues"
+	},
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",

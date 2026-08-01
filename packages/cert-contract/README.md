@@ -170,7 +170,7 @@ gcloud kms asymmetric-sign --version 1 --key cert-envelope-issuer \
 
 ## Version
 
-Current: `0.5.1` — see [CHANGELOG.md](./CHANGELOG.md).
+Current: `0.5.2` — see [CHANGELOG.md](./CHANGELOG.md).
 
 - `0.5.1` — docs-only (this README + changelog brought current). Code identical to 0.5.0.
 - `0.5.0` — POR-10481: `articleTitle` / `displayCertId` threaded onto the **signed** envelope

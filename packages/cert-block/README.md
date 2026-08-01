@@ -226,6 +226,12 @@ RFC-8785 JCS implementation used for signature verification). To be clear about 
 **nothing cryptographic runs at card render** — the cert card draws purely from block options;
 verification enters only with the modal / the `getVerifiedEnvelope` verify layer.
 
+React is the one **peer** dependency left — **`react >=18.0.0`**, declared non-optional, so a
+peer-enforcing resolver (npm 7+) fails the install on React 17 with `ERESOLVE` rather than
+warning. Only the React entries need it: `./webcomponent` and `./modal` build React-free (no
+`react/jsx-runtime`) and there is no `react-dom` peer. CI builds and runs the SSR tests on
+React 18.3; the range admits 19.
+
 ## Known issues (upstream)
 
 - `@builder.io/sdk-react@5.2.4` ships types that fail to compile under
@@ -251,7 +257,12 @@ Facts are mocked via `makeMockPayload` / `makeSignedEnvelope` (`src/contract/fix
 
 ## Version
 
-`0.5.3` — see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`0.5.5` — see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.
+
+Source is public at [`CertREV/cert-kit`](https://github.com/CertREV/cert-kit) (MIT) — this
+package is `packages/cert-block/`; report a vulnerability privately through that repo's
+`SECURITY.md`. The tarball also ships `src/` alongside `dist/`, so a security review reads the
+exact code for the version it installed.
