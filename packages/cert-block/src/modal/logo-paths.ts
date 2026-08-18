@@ -1,5 +1,5 @@
-// ⚠ VENDORED, BYTE-FAITHFUL copy of portal `src/lib/design-guide/logo.ts` `LOGO_PATHS`
-// (POR-10721 W2). Byte-identical to `../components/render-cert-block.ts`'s private copy;
+// ⚠ VENDORED, BYTE-FAITHFUL copy of the portal design-guide's `LOGO_PATHS`.
+// Byte-identical to `../components/render-cert-block.ts`'s private copy;
 // kept modal-local so the browser bundle never pulls in the SSR renderer. Unifying the
 // package's two copies onto one shared leaf module is a post-publish follow-up.
 /**

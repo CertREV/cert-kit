@@ -3,14 +3,14 @@
  * `BuilderCertChromeData` — the CANONICAL headless cert-chrome wire type
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * The brand-render projection of the cert envelope (portal POR-10091) — the OPTIONS
+ * The brand-render projection of the cert envelope — the OPTIONS
  * of a brand's native cert component (the registered `CertReviewCard`) on
  * a headless blocks-mode entry (Builder.io). CertREV serves the data + the ready-made
  * strings; the brand renders it within the design-guide ladder (enforced live by the
  * crawl monitor + the MSA anti-stripping teeth).
  *
- * SINGLE SOURCE (POR-10721 W1): this type is HOMED HERE so the portal exporter
- * (`src/lib/builder/cert-chrome.ts`) and the kit component (`CertReviewCard`) +
+ * SINGLE SOURCE: this type is HOMED HERE so the portal's cert-chrome exporter,
+ * the kit component (`CertReviewCard`) and
  * `BUILDER_REGISTRATION.inputs` all reference ONE definition — killing the drift the
  * hand-rolled Hydrogen-replica component suffered (it carried a stale separate
  * `credential`/`credentialVerifiedAt` shape from before the fused-pair projection).
@@ -49,7 +49,12 @@ export interface CertChromeRenderDef {
 	readonly barInkFg?: '#141414' | '#ffffff'
 	/** The subtractive field-visibility hide-set. */
 	readonly hidden: readonly string[]
-	/** v2 layout axis. Omitted ⇒ 'banner'. */
+	/**
+	 * v2 layout axis. This is the DEF's own axis (what the brand baked), NOT the placement the
+	 * component renders — the entry/editor picks that via `mode`, and its default lives in
+	 * `renderCertBlock` alone (`sidebar`). This comment used to claim the default was 'banner',
+	 * which made it the third place a placement default was written down and the second one wrong.
+	 */
 	readonly layout?: string
 	/** Custom-face composition — present only when layout === 'custom'. */
 	readonly customFace?: { readonly placedFields: readonly string[] }
@@ -86,9 +91,22 @@ export interface BuilderCertChromeData {
 	background: string | null
 	/** The QA-SCREENED `verifiedExpertMemo` (never the raw in-flight `expertMemo`), or null. */
 	memo: string | null
-	/** The compensation cue (`Compensated expert`). Null for a pro-bono reviewer. */
+	/**
+	 * The compensation cue (`Compensated expert`). Null for a pro-bono reviewer.
+	 *
+	 * COPY IS NOT CARRIED BY THIS FIELD — only the BOOLEAN it implies is. The face renders the
+	 * locked `COMPENSATED_EXPERT_CUE` constant when the cue is present and NOTHING when it is
+	 * null; a rewritten string here changes no pixel. Kept on the wire type because the
+	 * pro-bono `null` is real signal, and because a brand's exporter payload already carries it.
+	 */
 	compensationCue: string | null
-	/** The verbatim FTC scope disclaimer. Always present. */
+	/**
+	 * The verbatim FTC scope disclaimer. Always present.
+	 *
+	 * Delivered for the brand's own records / non-CertREV surfaces. The face does NOT read it:
+	 * it renders the locked `CERT_SCOPE_LINE` constant, whose curly apostrophe is pinned to
+	 * MSA §3, so an edited copy here can never reach a rendered disclosure.
+	 */
 	scopeLine: string
 	/** Reviewer photo URL (cert-frozen override ?? live), or null. */
 	reviewerPhoto: string | null
@@ -117,8 +135,8 @@ export interface BuilderCertChromeData {
 
 /**
  * The ordered keys of `BuilderCertChromeData` — the SINGLE SOURCE the Builder
- * `inputs` array and the W3 exporter⇄inputs⇄wire-type parity lock derive from, so
- * the three can never silently drift again (POR-10721 W3). Adding a field to the
+ * `inputs` array and the exporter⇄inputs⇄wire-type parity lock derive from, so
+ * the three can never silently drift again. Adding a field to the
  * interface without adding it here (or vice-versa) fails the `keyof` exhaustiveness
  * check in `assertChromeKeysExhaustive` below.
  */

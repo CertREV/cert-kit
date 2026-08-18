@@ -1,6 +1,6 @@
 /**
  * `@certrev/cert-block/modal` — the browser cert MODAL + badge-revalidation Web Component
- * (POR-10721 W2). A BYTE-FAITHFUL relocation of portal `src/lib/cert-delivery/wc/`; the IIFE
+ * — a BYTE-FAITHFUL relocation of the portal's cert-delivery web-component sources. The IIFE
  * built from `certrev-cert.entry.ts` (`build:modal-bundle`) is structurally byte-identical to the
  * Shopify-deployed `certrev-cert.js`, so a headless brand can drop the SAME verified modal onto its
  * storefront (`<script src=".../dist/modal/certrev-cert.js">`) instead of vendoring a copy.

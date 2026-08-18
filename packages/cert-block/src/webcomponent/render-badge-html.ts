@@ -13,7 +13,14 @@
  */
 
 import { escapeAttribute, escapeHtml, safeCssColor, safeHttpUrl } from '../components/escape.js'
-import { credentialSuffix, formatDate, resolveDisplay } from '../components/format.js'
+import {
+	credentialSuffix,
+	dedupeCredential,
+	expertNameWithCredentials,
+	formatDate,
+	resolveDisplay,
+} from '../components/format.js'
+import { CERTREV_LINK_REL } from '../components/rel.js'
 import {
 	CERT_SCOPE_LINE,
 	CERT_STRINGS_VERSION,
@@ -21,13 +28,13 @@ import {
 	resolveRenderTheme,
 	themeCssVarDeclarations,
 } from '../components/render-def.js'
-import type { CertPayload } from '../contract/kernel.js'
+import type { CertContent, CertPayload } from '../contract/kernel.js'
 
 export interface RenderBadgeOptions {
 	readonly accentColor?: string
 	readonly badgeStyle?: 'full' | 'compact'
 	/**
-	 * The brand render-def (WS6). ABSENT → the badge renders the CertREV preset
+	 * The brand render-def. ABSENT → the badge renders the CertREV preset
 	 * default (theme output byte-identical to un-themed). PRESENT → validated
 	 * themeable tokens are emitted as `--certrev-*` CSS vars + subtractive
 	 * visibility applies. Mirrors `<CertBadge>`'s `renderDef` prop exactly.
@@ -36,6 +43,37 @@ export interface RenderBadgeOptions {
 }
 
 const C = 'certrev-badge'
+
+/**
+ * The payload as it ACTUALLY arrives, not as the contract types promise it.
+ *
+ * `getVerifiedEnvelope` casts raw JSON (`JSON.parse(value) as CertDeliveryEnvelope`) and
+ * `verifyEnvelope` checks the signature, subject, lifecycle and drift — it never asserts the
+ * SHAPE of `content`. `renderBadgeHtml` is public API on top of that (the README shows a
+ * consumer calling it with a payload of their own), so every field is read as absent-able.
+ * The escape/format helpers already coerce a non-string VALUE (`asText`); what no helper can
+ * absorb is a missing PARENT object, which is what this view exists for. `cert-modal-view.ts`
+ * has read the same data this way since the unified modal landed — two renderers in one package
+ * disagreeing
+ * about whether the same payload is trusted is itself the defect.
+ *
+ * The `format.ts` helpers still take the CONTRACT type (`payload?.content`): they are
+ * shape-guarded on their own side, so widening them here would only hide that.
+ */
+type Loose<T> = { readonly [K in keyof T]?: T[K] | null }
+type LooseContent = Omit<Loose<CertContent>, 'expert' | 'author'> & {
+	readonly expert?: Loose<CertContent['expert']> | null
+	readonly author?: Loose<CertContent['author']> | null
+}
+
+/**
+ * The badge has exactly two faces, and this is the ONE place that decides which. Anything
+ * that is not the compact face renders the full face — so an unvalidated `badgeStyle` (a
+ * malformed envelope's number, an untyped caller's typo) can never reach the class name.
+ */
+function badgeFace(style: unknown): 'full' | 'compact' {
+	return style === 'compact' ? 'compact' : 'full'
+}
 
 function attr(name: string, value: string | null | undefined): string {
 	if (value == null || value === '') return ''
@@ -48,23 +86,26 @@ function attr(name: string, value: string | null | undefined): string {
  * already decided to render by the time this is called).
  */
 export function renderBadgeHtml(payload: CertPayload, opts: RenderBadgeOptions = {}): string {
-	const content = payload.content
-	const display = resolveDisplay(content.display, opts.accentColor, opts.renderDef)
+	const content: LooseContent = payload?.content ?? {}
+	const expert = content.expert ?? null
+	const display = resolveDisplay(content.display ?? undefined, opts.accentColor, opts.renderDef)
 	const theme = resolveRenderTheme(opts.renderDef)
-	const style = opts.badgeStyle ?? display.badgeStyle
+	const style = badgeFace(opts.badgeStyle ?? display.badgeStyle)
 	const accent = safeCssColor(display.accentColor) ?? '#0f766e'
 	const verifyUrl = safeHttpUrl(content.verifyUrl)
-	const profileUrl = safeHttpUrl(content.expert.profileUrl)
-	const photoUrl = style === 'full' && display.showExpertPhoto ? safeHttpUrl(content.expert.photoUrl) : null
-	const suffix = credentialSuffix(content)
+	const profileUrl = safeHttpUrl(expert?.profileUrl)
+	const photoUrl = style === 'full' && display.showExpertPhoto ? safeHttpUrl(expert?.photoUrl) : null
+	// Same composition rule as <CertBadge>: the suffix drops a credential the display name
+	// already carries, so the two renderers never disagree about one payload.
+	const suffix = dedupeCredential(expert?.displayName, credentialSuffix(payload?.content))
 	const certified = formatDate(content.certifiedAt)
 	const updated = formatDate(content.contentModifiedAt)
 
-	const name = `${escapeHtml(content.expert.displayName)}${
+	const name = `${escapeHtml(expert?.displayName)}${
 		suffix ? `<span class="${C}__credentials">, ${escapeHtml(suffix)}</span>` : ''
 	}`
 	const nameNode = profileUrl
-		? `<a class="${C}__expert-link" href="${escapeAttribute(profileUrl)}" rel="noopener">${name}</a>`
+		? `<a class="${C}__expert-link" href="${escapeAttribute(profileUrl)}" rel="${CERTREV_LINK_REL}">${name}</a>`
 		: name
 
 	const mark =
@@ -72,8 +113,10 @@ export function renderBadgeHtml(payload: CertPayload, opts: RenderBadgeOptions =
 		`<circle cx="12" cy="12" r="11" fill="${escapeAttribute(accent)}"></circle>` +
 		`<path d="M7 12.5l3.2 3.2L17 9" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>`
 
+	// alt="" is deliberate: the byline below renders the same name as text, so alt text would make a
+	// screen reader announce it twice. Kept in lockstep with <CertBadge> and the modal avatar.
 	const photo = photoUrl
-		? `<img class="${C}__photo" src="${escapeAttribute(photoUrl)}" alt="Photo of ${escapeAttribute(content.expert.displayName)}" width="40" height="40" loading="lazy" decoding="async" />`
+		? `<img class="${C}__photo" src="${escapeAttribute(photoUrl)}" alt="" width="40" height="40" loading="lazy" decoding="async" />`
 		: ''
 
 	const header =
@@ -88,7 +131,7 @@ export function renderBadgeHtml(payload: CertPayload, opts: RenderBadgeOptions =
 		if (display.showMemo && content.memo) {
 			body += `<p class="${C}__memo">${escapeHtml(content.memo)}</p>`
 		}
-		if (display.showAuthor && content.author.name && content.author.name !== content.expert.displayName) {
+		if (display.showAuthor && content.author?.name && content.author.name !== expert?.displayName) {
 			const title = content.author.title ? `, ${escapeHtml(content.author.title)}` : ''
 			body += `<p class="${C}__author">Written by ${escapeHtml(content.author.name)}${title}</p>`
 		}
@@ -114,7 +157,7 @@ export function renderBadgeHtml(payload: CertPayload, opts: RenderBadgeOptions =
 	// byte-verbatim COMPENSATED_EXPERT_CUE. The scope line is byte-verbatim
 	// CERT_SCOPE_LINE (its curly apostrophe U+2019 survives escapeHtml untouched).
 	const cueInner = profileUrl
-		? `Compensated <a class="${C}__cue-link" href="${escapeAttribute(profileUrl)}" rel="noopener">expert</a>`
+		? `Compensated <a class="${C}__cue-link" href="${escapeAttribute(profileUrl)}" rel="${CERTREV_LINK_REL}">expert</a>`
 		: 'Compensated expert'
 	const disclosure =
 		`<div class="${C}__disclosure">` +
@@ -123,11 +166,13 @@ export function renderBadgeHtml(payload: CertPayload, opts: RenderBadgeOptions =
 		`</div>`
 
 	const verify = verifyUrl
-		? `<a class="${C}__verify" href="${escapeAttribute(verifyUrl)}" rel="noopener" aria-label="Verify this certification on CertREV">Verify on CertREV</a>`
+		? `<a class="${C}__verify" href="${escapeAttribute(verifyUrl)}" rel="${CERTREV_LINK_REL}" aria-label="Verify this certification on CertREV">Verify on CertREV</a>`
 		: ''
 
-	const ariaLabel = `Content reviewed by ${content.expert.displayName}${suffix ? `, ${suffix}` : ''}`
-	// Accent LEADS so the un-themed output is byte-identical to the pre-WS6 single-var
+	// Same derivation <CertBadge> labels with, so the two renderers cannot drift on the one
+	// string a screen reader actually announces.
+	const ariaLabel = `Content reviewed by ${expertNameWithCredentials(payload?.content)}`
+	// Accent LEADS so the un-themed output is byte-identical to the older single-var
 	// form. A THEMED brand appends surface/radius/font: the data-bearing tokens ride
 	// escaped (a no-op for validated hex/length — defense in depth), the font is a
 	// controlled literal stack emitted raw. The whole string is NOT re-escaped
@@ -139,8 +184,10 @@ export function renderBadgeHtml(payload: CertPayload, opts: RenderBadgeOptions =
 	}
 
 	return (
-		`<section class="${C} ${C}--${escapeAttribute(style)}" style="${rootStyle}"` +
-		attr('data-certrev-cert-id', payload.certId) +
+		// `style` is one of two literals by construction (`badgeFace`), so the class name needs
+		// no escaping — there is no path by which caller data reaches it.
+		`<section class="${C} ${C}--${style}" style="${rootStyle}"` +
+		attr('data-certrev-cert-id', payload?.certId) +
 		` data-certrev-strings-version="${CERT_STRINGS_VERSION}"` +
 		attr('data-certrev-def-version', theme.version != null ? String(theme.version) : null) +
 		` aria-label="${escapeAttribute(ariaLabel)}">${header}${body}${disclosure}${verify}</section>`

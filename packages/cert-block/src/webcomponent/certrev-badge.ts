@@ -41,6 +41,17 @@ export function setCertRevKidResolver(resolver: ResolvePublicKeyByKid): void {
 	globalResolveKid = resolver
 }
 
+/**
+ * `badge-style` is AUTHOR-typed markup, not signed data — a hand-written attribute on a page
+ * we don't control. Only the two real faces are honored; anything else (`"Full"`, a stray
+ * value, an empty attribute) reads as ABSENT, so the signed display config decides. The
+ * attribute was previously CAST (`as 'full' | 'compact' | null`), which let a typo travel
+ * into the renderer as if it were a face.
+ */
+function badgeStyleAttribute(value: string | null): 'full' | 'compact' | undefined {
+	return value === 'full' || value === 'compact' ? value : undefined
+}
+
 export class CertRevBadgeElement extends HTMLElement {
 	static get observedAttributes(): string[] {
 		return ['delivery-api', 'platform', 'external-id', 'accent-color', 'badge-style', 'content-hash']
@@ -86,8 +97,19 @@ export class CertRevBadgeElement extends HTMLElement {
 		}
 		if (verdict.decision !== 'render') return
 		const accentColor = this.getAttribute('accent-color') ?? undefined
-		const badgeStyle = (this.getAttribute('badge-style') as 'full' | 'compact' | null) ?? undefined
-		this.innerHTML = renderBadgeHtml(verdict.payload, { accentColor, badgeStyle })
+		const badgeStyle = badgeStyleAttribute(this.getAttribute('badge-style'))
+		// The render is INSIDE the fail-closed boundary too. `connectedCallback` `void`s this
+		// promise, so a throw from the renderer (a payload shape nothing runtime-validates —
+		// the kernel checks the signature, never `content`) would escape as an unhandled
+		// rejection instead of rendering nothing, which is the one behaviour this element
+		// documents. Compute first, assign after, so a failure leaves the element untouched.
+		let html: string
+		try {
+			html = renderBadgeHtml(verdict.payload, { accentColor, badgeStyle })
+		} catch {
+			return // fail closed
+		}
+		this.innerHTML = html
 	}
 }
 

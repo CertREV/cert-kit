@@ -87,7 +87,7 @@ describe('canonicalization invariants', () => {
 	})
 })
 
-describe('canonicalTombstoneBytes (POR-10481)', () => {
+describe('canonicalTombstoneBytes', () => {
 	const { vectors } = vectorsFile as {
 		vectors: Array<{ name: string; value: unknown; canonicalHex: string }>
 	}

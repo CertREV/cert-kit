@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Unit tests for the cert-card interactions layer — accordion contributor bios (POR-9827 chevron
+ * Unit tests for the cert-card interactions layer — accordion contributor bios (the chevron
  * model) + the in-page certificate/profile modals. Pure DOM, delegated handlers.
  */
 
@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 
 /** A contributors card with an accordion reviewer row (name/credentials split + hidden acc-bio)
- *  and the footer "Compensated expert" modal trigger — the POR-9827 chevron-model markup. */
+ *  and the footer "Compensated expert" modal trigger — the chevron-model markup. */
 function mountCard(): {
 	card: HTMLElement;
 	row: HTMLElement;
@@ -93,7 +93,7 @@ describe("openCertModal", () => {
 	});
 });
 
-describe("modal routing (POR-10102 — unified element)", () => {
+describe("modal routing (the unified element)", () => {
 	it('modalTargetKind routes "expert" to the reviewer and everything else to the certificate', () => {
 		expect(modalTargetKind("expert")).toBe("expert");
 		expect(modalTargetKind("cert")).toBe("cert");

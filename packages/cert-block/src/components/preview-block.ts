@@ -1,6 +1,6 @@
 /**
  * `renderPreviewBlock` — a STATIC, NON-DELIVERY preview of the cert block for pre-sales
- * look-demos (POR-10743, from the Builder demo).
+ * look-demos (lifted from the Builder demo).
  *
  * The visual is BYTE-FOR-BYTE `renderCertBlock` (pixel-parity — "see it on your own site
  * today"), wrapped in a `[data-certrev-preview]` container carrying a REQUIRED expiry.
@@ -37,7 +37,7 @@ export interface PreviewBlockOptions {
 	readonly labelText?: string
 }
 
-const DEFAULT_LABEL = 'Preview — not a verified certification'
+const DEFAULT_LABEL = 'Preview · Not a verified certification'
 
 /** Extract a preview block's baked expiry (ISO), or null if the HTML isn't a preview block. */
 export function previewExpiry(html: string): string | null {
@@ -65,7 +65,7 @@ export function renderPreviewBlock(input: RenderCertBlockInput, options: Preview
 		? `<div data-certrev-preview-label style="font:500 11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#9a9a9a;margin-bottom:8px;">${escapeHtml(options.labelText ?? DEFAULT_LABEL)}</div>`
 		: ''
 	return (
-		`<!-- CertREV PREVIEW — static, non-revocable, NOT a verified certification. Expires ${escapeHtml(expires)}. Never use as delivery. -->` +
+		`<!-- CertREV PREVIEW: static, non-revocable, NOT a verified certification. Expires ${escapeHtml(expires)}. Never use as delivery. -->` +
 		`<div data-certrev-preview="1" data-certrev-preview-expires="${escapeAttribute(expires)}">` +
 		label +
 		renderCertBlock(input) +

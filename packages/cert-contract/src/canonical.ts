@@ -95,7 +95,7 @@ export function canonicalPayloadBytes(payload: CertPayload): Uint8Array {
 }
 
 /**
- * POR-10481 — the signing input for a `CertTombstone`: the RFC-8785 canonical bytes of the
+ * The signing input for a `CertTombstone`: the RFC-8785 canonical bytes of the
  * SIGNABLE fields (`kind`, `contractVersion`, `subject`, `revokedAt`, `revocationReason`).
  * The detached Ed25519 signature is computed over exactly these bytes and NEVER covers
  * itself, so the signable subset excludes `signature` — the issuer passes the

@@ -1,5 +1,5 @@
 /**
- * renderPreviewBlock (POR-10743) — a static, non-delivery, hard-bounded pre-sales preview.
+ * renderPreviewBlock — a static, non-delivery, hard-bounded pre-sales preview.
  * Asserts: pixel-parity with renderCertBlock, the required expiry bound, the machine markers,
  * and the safe-by-default visible label.
  */
@@ -53,7 +53,7 @@ describe('renderPreviewBlock', () => {
 	it('shows the safe-default visible label; suppressible for a pixel-parity look-demo', () => {
 		const labeled = renderPreviewBlock(input, { expiresAt: EXPIRES })
 		expect(labeled).toContain('data-certrev-preview-label')
-		expect(labeled).toContain('Preview — not a verified certification')
+		expect(labeled).toContain('Preview · Not a verified certification')
 
 		const bare = renderPreviewBlock(input, { expiresAt: EXPIRES, showLabel: false })
 		expect(bare).not.toContain('data-certrev-preview-label')

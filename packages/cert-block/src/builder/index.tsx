@@ -1,25 +1,42 @@
 /**
  * @certrev/cert-block/builder — Builder.io adapter, "ambient-URL anchor" model.
  *
- * Validated by an independent architecture panel (Codex gpt-5.5 + Gemini, blind): a visual
- * page builder must NOT choose WHICH credential renders — that invites cross-article misuse and
- * re-opens the wrong-subject surface. Instead:
+ * A visual page builder must NOT choose WHICH credential renders — that invites cross-article
+ * misuse and re-opens the wrong-subject surface. The ANCHOR path splits the two concerns:
  *   • the CMS controls LAYOUT — an editor drags a ZERO-INPUT <CertRevAnchor/> to position the
  *     badge on the page;
  *   • the SYSTEM controls TRUTH — the headless loader resolves THIS page's credential from its
- *     own URL (Track-1 delivery), crypto-verifies it (fail-closed VerdictKernel), and supplies
- *     the verdict via context.
+ *     own URL, crypto-verifies it (fail-closed VerdictKernel), and supplies the verdict via
+ *     context.
  * The anchor renders the current page's verified badge or NOTHING. It cannot be pointed at
  * another article, and there is no `placementId` input to forge or mis-select.
  *
- * JSON-LD is DECOUPLED (panel finding): the anchor renders the BADGE only (`omitJsonLd`). The
- * article template emits the schema.org JSON-LD server-side from the same verified verdict, so a
- * page builder can't duplicate, move, or omit structured data. (See the route example.)
+ * THE PUSH KIT DOES NOT INHERIT THAT PROPERTY, and this module exports it too. `CertReviewCard` /
+ * `certRevCertComponent` register the 19 wire-type fields — `reviewerName`,
+ * `credentialVerification`, `verifyUrl`, `memo` — as Builder INPUTS, and the card renders what
+ * those inputs hold; it runs no signature check and consults no verdict. `advanced: true` folds
+ * them out of the editor's default view, which is a UI reveal and not a lock, and `safeHttpUrl`
+ * bounds `verifyUrl` to the http(s) SCHEME rather than to a CertREV origin. So to the card a
+ * hand-typed option and an exporter-written one are the same string: the trust boundary on the
+ * PUSH path is WRITE ACCESS TO THE CMS SPACE, not a signature, and nothing in this package
+ * narrows it. See "PUSH trust model" in the package README for the full statement — including
+ * what a revocation upstream does and does not reach.
  *
- * EDGE-CACHE DISCIPLINE (panel finding): the consumer's loader MUST verify per request as a
- * dynamic edge subrequest and must NOT long-cache the rendered badge HTML — a revoked/expired
- * credential sitting in a stale edge cache would defeat fail-closed. Bound any positive-verdict
- * cache by min(expiry, revocation-TTL, content-version).
+ * Three things the card DOES enforce, and they are the limit of it: no chrome at all without a
+ * `reviewerName` and a `verifyUrl`; a credential renders only welded to its dated verification
+ * (the fused pair); and the FTC disclosures render from locked constants, so rewriting the
+ * `compensationCue` / `scopeLine` options changes no pixel. Use the anchor when the page itself
+ * must not be able to state a credential.
+ *
+ * JSON-LD is DECOUPLED: the anchor renders the BADGE only (`omitJsonLd`). The article template
+ * emits the schema.org JSON-LD server-side from the same verified verdict, so a page builder
+ * can't duplicate, move, or omit structured data. See "The article route example" in the package
+ * README for the route both halves meet in.
+ *
+ * EDGE-CACHE DISCIPLINE: the consumer's loader MUST verify per request as a dynamic edge
+ * subrequest and must NOT long-cache the rendered badge HTML — a revoked/expired credential
+ * sitting in a stale edge cache would defeat fail-closed. Bound any positive-verdict cache by
+ * min(expiry, revocation-TTL, content-version).
  *
  * cert-block carries no Builder dependency: the registration shape is declared structurally, and
  * `isEditing` is a passed-in flag (the consumer supplies Builder's `isPreviewing()`).
@@ -28,7 +45,7 @@ import { createContext, type ReactNode, useContext } from 'react'
 import { CertReview } from '../components/CertReview.js'
 import type { CertVerdict } from '../contract/kernel.js'
 
-/** The current page's credential, resolved + verified by the loader (Track-1 delivery). */
+/** The current page's credential, resolved + verified by the consumer's loader. */
 export interface CurrentCredential {
 	readonly verdict: CertVerdict
 	/** Canonical page URL for JSON-LD @id alignment (used by the server-side JSON-LD, not the anchor). */
@@ -87,8 +104,8 @@ export function CertRevEditorPlaceholder() {
 /**
  * The Builder block. ZERO inputs — a layout anchor only. Renders the current page's VERIFIED
  * badge (badge only; JSON-LD is emitted server-side), the editor placeholder in design mode, or
- * NOTHING in production (fail-closed). The credential is whatever Track-1 delivered + verified for
- * THIS page; the editor can neither choose nor forge it.
+ * NOTHING in production (fail-closed). The credential is whatever the loader delivered + verified
+ * for THIS page; the editor can neither choose nor forge it.
  */
 export function CertRevAnchor() {
 	const { current, isEditing } = useContext(CertRevContext)
@@ -121,7 +138,7 @@ export const certRevAnchorComponent: CertRevBuilderRegistration = {
 	inputs: [],
 }
 
-// ── POR-10721 W1/W3: the Builder.io PUSH kit (CertReviewCard) + single-sourced wire type ──
+// ── The Builder.io PUSH kit (CertReviewCard) + the single-sourced wire type ──
 export {
 	BUILDER_CERT_CHROME_KEYS,
 	type BuilderCertChromeData,
@@ -133,10 +150,10 @@ export {
 	type BuilderInput,
 	CERT_COMPONENT_NAME,
 	type CertBlockBuilderRegistration,
-	certRevCertComponent,
 	CertReviewCard,
 	type CertReviewCardProps,
 	type CertReviewCardRegisteredComponent,
+	certRevCertComponent,
 	PLACEMENT_INPUTS,
 	WIRE_INPUTS,
 } from './cert-review-card.js'

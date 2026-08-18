@@ -1,7 +1,8 @@
-/** Unit tests for the pure cert-modal view (POR-10102): envelope → dialog HTML. */
+/** Unit tests for the pure cert-modal view: envelope → dialog HTML. */
 
 import { describe, expect, it } from "vitest";
 import {
+	CERTREV_MODAL_LINK_REL,
 	type CertModalContent,
 	deriveInitials,
 	renderCertDialogInner,
@@ -11,6 +12,7 @@ import {
 	stripProtocol,
 } from "./cert-modal-view.js";
 import { CERT_SCOPE_LINE, COMPENSATED_EXPERT_CUE } from "./display-strings.js";
+import { escapeHtml } from "./escape.js";
 
 const FULL: CertModalContent = {
 	expert: {
@@ -145,7 +147,7 @@ describe("renderExpertDialogInner (4b)", () => {
 	});
 });
 
-describe("FTC disclosure footer (POR-10496)", () => {
+describe("FTC disclosure footer", () => {
 	const COMPENSATED: CertModalContent = {
 		...FULL,
 		expert: { ...FULL.expert, compensationCue: COMPENSATED_EXPERT_CUE },
@@ -172,4 +174,123 @@ describe("FTC disclosure footer (POR-10496)", () => {
 			expect(html).not.toContain(COMPENSATED_EXPERT_CUE);
 		});
 	}
+});
+
+/** Feed the renderers a payload the TYPES forbid — exactly what a signed-but-unshaped envelope does. */
+const hostile = (content: unknown) => content as CertModalContent;
+/** Same, one level down: `escapeHtml`'s declared input is text, its real input is whatever parsed. */
+const escapeAnything = (input: unknown) => escapeHtml(input as string);
+
+describe("modal escapeHtml", () => {
+	// The BYTES are frozen: this module is a relocation of portal's `html.ts`, which encodes the
+	// apostrophe as `&#039;` where `../components/escape.ts` encodes it as `&#39;`. A guard may not
+	// move a single character of a well-formed string's output — that is the file's whole purpose.
+	it("is byte-identical for a well-formed string, apostrophe as &#039;", () => {
+		expect(escapeHtml(`Tom & Jerry's <b>"big"</b> day`)).toBe(
+			"Tom &amp; Jerry&#039;s &lt;b&gt;&quot;big&quot;&lt;/b&gt; day",
+		);
+		expect(escapeHtml("'")).toBe("&#039;"); // NOT the components copy's `&#39;`
+		expect(escapeHtml("'")).not.toContain("&#39;s"); // guards against a stray shortening
+		expect(escapeHtml("")).toBe("");
+		expect(escapeHtml("plain text")).toBe("plain text");
+		// `&` runs first, so an entity the later passes introduce is never double-escaped.
+		expect(escapeHtml("&amp;")).toBe("&amp;amp;");
+	});
+
+	// The TYPES are hostile: the modal escapes values off a JSON.parse'd envelope whose signature
+	// was checked, never its shape. A TypeError here takes the whole dialog down in the browser.
+	it("never throws on a value that is not text", () => {
+		expect(escapeAnything(undefined)).toBe("");
+		expect(escapeAnything(null)).toBe("");
+		expect(escapeAnything({ toString: () => "<script>" })).toBe("");
+		expect(escapeAnything(["<a>", "<b>"])).toBe("");
+		expect(escapeAnything(true)).toBe("");
+		expect(escapeAnything(Object.create(null))).toBe("");
+	});
+
+	it("renders a finite number as its digits (a stray count is at least legible copy)", () => {
+		expect(escapeAnything(42)).toBe("42");
+		expect(escapeAnything(0)).toBe("0");
+		expect(escapeAnything(Number.NaN)).toBe("");
+		expect(escapeAnything(Number.POSITIVE_INFINITY)).toBe("");
+	});
+});
+
+describe("CertREV link qualification (E11)", () => {
+	// Both modal CTAs point at a CertREV property from a customer's page — a vendor-placed link,
+	// which Google's link-spam policy requires be qualified. `noreferrer` stays: these are
+	// `target="_blank"`, where it still earns its place.
+	it("the constant carries nofollow + sponsored alongside the window hardening", () => {
+		expect(CERTREV_MODAL_LINK_REL.split(" ").sort()).toEqual([
+			"nofollow",
+			"noopener",
+			"noreferrer",
+			"sponsored",
+		]);
+	});
+
+	for (const [label, render] of [
+		["certificate (3a) → verifyUrl", renderCertDialogInner],
+		["reviewer (4b) → profileUrl", renderExpertDialogInner],
+	] as const) {
+		it(`${label} is qualified nofollow + sponsored`, () => {
+			const html = render(FULL) ?? "";
+			expect(html).toContain(`rel="${CERTREV_MODAL_LINK_REL}"`);
+			expect(html).not.toContain('rel="noopener noreferrer"'); // the unqualified shape is gone
+			expect(html).toContain('target="_blank"');
+		});
+	}
+});
+
+describe("shape + type tolerance (signed ≠ shaped)", () => {
+	for (const [label, render] of [
+		["certificate (3a)", renderCertDialogInner],
+		["reviewer (4b)", renderExpertDialogInner],
+	] as const) {
+		it(`${label}: every structural field individually missing`, () => {
+			// The renderers fail CLOSED without a name (null), but must never THROW.
+			expect(() => render(hostile({}))).not.toThrow();
+			expect(() => render(hostile({ ...FULL, expert: undefined }))).not.toThrow();
+			expect(() => render(hostile({ ...FULL, display: undefined }))).not.toThrow();
+			expect(() =>
+				render(hostile({ ...FULL, expert: { ...FULL.expert, credentials: undefined } })),
+			).not.toThrow();
+			// `author` is the envelope's OTHER person block; the modal never reads it, and an
+			// absent one must not change a byte of the dialog.
+			expect(render(hostile({ ...FULL, author: undefined }))).toBe(render(FULL));
+		});
+
+		it(`${label}: a non-string where the contract promised a string`, () => {
+			expect(() =>
+				render(hostile({ ...FULL, expert: { ...FULL.expert, displayName: 42 } })),
+			).not.toThrow();
+			expect(() => render(hostile({ ...FULL, articleTitle: { t: 1 } }))).not.toThrow();
+			expect(() => render(hostile({ ...FULL, displayCertId: ["CR"] }))).not.toThrow();
+			expect(() => render(hostile({ ...FULL, verifyUrl: 7 }))).not.toThrow();
+			expect(() =>
+				render(hostile({ ...FULL, expert: { ...FULL.expert, photoUrl: 3, bio: 1, background: {} } })),
+			).not.toThrow();
+			expect(() =>
+				render(hostile({ ...FULL, expert: { ...FULL.expert, compensationCue: 5 } })),
+			).not.toThrow();
+			// A credentials array carrying holes, and a `credentials` that is not an array at all —
+			// `for…of` over a bare object is itself a TypeError.
+			expect(() =>
+				render(hostile({ ...FULL, expert: { ...FULL.expert, credentials: [null, { cardLabel: 9 }] } })),
+			).not.toThrow();
+			expect(() =>
+				render(hostile({ ...FULL, expert: { ...FULL.expert, credentials: { a: 1 } } })),
+			).not.toThrow();
+			// The expert block itself replaced by a scalar — `expert?.x` is fine, the reads below it are not.
+			expect(() => render(hostile({ ...FULL, expert: "Dr. Erik" }))).not.toThrow();
+		});
+	}
+
+	it("a non-string url does not throw through safeHref / stripProtocol", () => {
+		expect(safeHref(7 as unknown as string)).toBe("#");
+		expect(safeHref({} as unknown as string)).toBe("#");
+		expect(stripProtocol(7 as unknown as string)).toBe("7");
+		expect(deriveInitials(7 as unknown as string)).toBe("7");
+		expect(signatureName(null as unknown as string)).toBe("");
+	});
 });

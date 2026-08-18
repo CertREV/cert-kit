@@ -11,10 +11,9 @@
  *   • verdict `render`  → leave the SSR badge (verified live);
  *   • verdict `suppress` (invalid-sig / subject-mismatch / revoked / expired) → HIDE it
  *     (fail-closed), stamping `data-certrev-suppressed` with the verdict's reason. A revoked
- *     placement now serves the SLIM `CertTombstone` (POR-10481), which `verifyArtifact`
+ *     placement now serves the SLIM `CertTombstone`, which `verifyArtifact`
  *     resolves to `suppress:'revoked'` — so the badge hides AND the suppressed-reason telemetry
- *     is right (`verifyEnvelope` used to mis-report it as `unsupported_contract_version`;
- *     POR-10684);
+ *     is right (`verifyEnvelope` used to mis-report it as `unsupported_contract_version`);
  *   • the Delivery API 404s (no servable artifact) or the network errors → LEAVE the SSR badge.
  *     The SSR copy already passed the Liquid lifecycle gate against the app-owned metafield
  *     (the authoritative revoke/expire surface — the binding retracts it on revoke), so the WC

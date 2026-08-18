@@ -15,7 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { makeMockPayload } from '../../contract/fixtures.js'
 import type { CertVerdict } from '../../contract/kernel.js'
-import { CertRevAnchor, CertRevProvider, certRevAnchorComponent, type CurrentCredential } from '../index.js'
+import { CertRevAnchor, CertRevProvider, type CurrentCredential, certRevAnchorComponent } from '../index.js'
 
 const renderVerdict: CertVerdict = { decision: 'render', payload: makeMockPayload() }
 const suppressVerdict: CertVerdict = { decision: 'suppress', reason: 'revoked' }
@@ -67,18 +67,18 @@ describe('Builder adapter — CertRevAnchor render', () => {
 	})
 })
 
-// ── POR-10721 W1/W3: the PUSH kit (CertReviewCard) + contract lock ──
+// ── The PUSH kit (CertReviewCard) + contract lock ──
 import {
 	BUILDER_CERT_CHROME_KEYS,
 	BUILDER_REGISTRATION,
 	type BuilderCertChromeData,
 	CERT_COMPONENT_NAME,
-	certRevCertComponent,
 	CertReviewCard,
+	certRevCertComponent,
 	WIRE_INPUTS,
 } from '../index.js'
 
-describe('POR-10721 W3 — Builder kit contract lock (inputs ⇄ wire-type parity)', () => {
+describe('Builder kit contract lock (inputs ⇄ wire-type parity)', () => {
 	it('WIRE_INPUTS names are EXACTLY the wire-type keys, in order (no silent drift)', () => {
 		expect(WIRE_INPUTS.map((i) => i.name)).toEqual([...BUILDER_CERT_CHROME_KEYS])
 	})
@@ -90,7 +90,7 @@ describe('POR-10721 W3 — Builder kit contract lock (inputs ⇄ wire-type parit
 	})
 })
 
-describe('POR-10721 — certRevCertComponent (the drop-in gen2 registration)', () => {
+describe('certRevCertComponent (the drop-in gen2 registration)', () => {
 	it('carries the identical W3-locked registration as BUILDER_REGISTRATION (name/component/inputs)', () => {
 		expect(certRevCertComponent.name).toBe(CERT_COMPONENT_NAME)
 		expect(certRevCertComponent.component).toBe(CertReviewCard)
@@ -108,7 +108,7 @@ describe('POR-10721 — certRevCertComponent (the drop-in gen2 registration)', (
 	})
 })
 
-describe('POR-10721 W1 — CertReviewCard render + the fused-credential R1 gate', () => {
+describe('CertReviewCard render + the fused-credential R1 gate', () => {
 	const base: Partial<BuilderCertChromeData> = {
 		reviewerName: 'Dr. Jane Doe',
 		verifyUrl: 'https://certrev.com/verify/abc',
@@ -123,9 +123,7 @@ describe('POR-10721 W1 — CertReviewCard render + the fused-credential R1 gate'
 		expect(renderToStaticMarkup(<CertReviewCard {...base} />)).toContain('Dr. Jane Doe')
 	})
 	it('name-only when credentialVerification is null — a credential never leaks without its date', () => {
-		expect(renderToStaticMarkup(<CertReviewCard {...base} credentialVerification={null} />)).not.toContain(
-			'FAAAAI',
-		)
+		expect(renderToStaticMarkup(<CertReviewCard {...base} credentialVerification={null} />)).not.toContain('FAAAAI')
 	})
 	it('renders the credential ONLY as the fused (credential + verifiedAt) pair', () => {
 		const html = renderToStaticMarkup(
@@ -146,13 +144,133 @@ describe('POR-10721 W1 — CertReviewCard render + the fused-credential R1 gate'
 	it('returns nothing pre-cert (no reviewerName / verifyUrl)', () => {
 		expect(renderToStaticMarkup(<CertReviewCard />)).toBe('')
 	})
-	it('passes `part` through to renderCertBlock (POR-10741 — header excludes the memo, memo excludes the header)', () => {
+	it('passes `part` through to renderCertBlock (header excludes the memo, memo excludes the header)', () => {
 		const withMemo = { ...base, memo: 'Checked the claims against current guidance; accurate.' }
-		const header = renderToStaticMarkup(<CertReviewCard {...withMemo} part="header" />)
-		const memo = renderToStaticMarkup(<CertReviewCard {...withMemo} part="memo" />)
+		const header = renderToStaticMarkup(<CertReviewCard {...withMemo} mode="banner" part="header" />)
+		const memo = renderToStaticMarkup(<CertReviewCard {...withMemo} mode="banner" part="memo" />)
 		expect(header).toContain('Expert reviewed')
 		expect(header).not.toContain('Checked the claims against current guidance; accurate.')
 		expect(memo).toContain('Checked the claims against current guidance; accurate.')
 		expect(memo).not.toContain('Expert reviewed')
+	})
+})
+
+// ── Hardening wave: one placement default, untyped-CMS input, locked compliance copy ──
+import { COMPENSATED_EXPERT_CUE } from '../../components/render-def.js'
+import { type CertReviewCardProps, PLACEMENT_INPUTS } from '../index.js'
+
+/** A minimally-certified delivery — every test below varies exactly one field off this. */
+const cardBase: Partial<BuilderCertChromeData> = {
+	reviewerName: 'Dr. Jane Doe',
+	verifyUrl: 'https://certrev.com/verify/abc',
+	bylinePlain: 'Reviewed on 2026-03-08 by Dr. Jane Doe.',
+	certifiedAt: '2026-03-08',
+	scopeLine: 'Independent editorial review.',
+	compensationCue: 'Compensated expert',
+	display: { showExpertPhoto: true, showCredentials: true },
+	renderDef: null,
+	stringsVersion: '2026-07',
+}
+
+describe('S2 — one placement default, owned by renderCertBlock alone', () => {
+	it('an unset mode renders the SIDEBAR face — the card names no fallback of its own', () => {
+		const html = renderToStaticMarkup(<CertReviewCard {...cardBase} />)
+		expect(html).toContain('data-certrev-mode="sidebar"')
+		expect(html).toContain('certrev-cert--sidebar')
+	})
+	it('an explicit mode still wins (the default is a fallback, not an override)', () => {
+		const html = renderToStaticMarkup(<CertReviewCard {...cardBase} mode="floating" />)
+		expect(html).toContain('data-certrev-mode="floating"')
+	})
+	it('the registered `mode` input declares the sidebar default + the three faces as a dropdown', () => {
+		const mode = PLACEMENT_INPUTS.find((i) => i.name === 'mode')
+		expect(mode?.defaultValue).toBe('sidebar')
+		expect(mode?.enum).toEqual([
+			{ label: 'Sidebar', value: 'sidebar' },
+			{ label: 'Banner', value: 'banner' },
+			{ label: 'Floating', value: 'floating' },
+		])
+		expect(mode?.helperText).toBe('sidebar (default) · banner · floating')
+	})
+	it('the registered `part` input declares the full default + the three cards as a dropdown', () => {
+		const part = PLACEMENT_INPUTS.find((i) => i.name === 'part')
+		expect(part?.defaultValue).toBe('full')
+		expect(part?.enum).toEqual([
+			{ label: 'Full (header + memo)', value: 'full' },
+			{ label: 'Header only', value: 'header' },
+			{ label: 'Memo only', value: 'memo' },
+		])
+	})
+})
+
+describe('C4 — untyped CMS JSON can never take SSR down (the editor is not type-checked)', () => {
+	// Everything below is what a visual editor can actually put in the option — the props type
+	// is ERASED at runtime, so each of these reaches the renderer as-is.
+	const malformed: ReadonlyArray<readonly [string, unknown]> = [
+		['a credential with no verification date', { credential: 'FAAAAI' }],
+		['a verification date with no credential', { verifiedAt: '2026-03-01' }],
+		['an empty object', {}],
+		['a bare string', 'FAAAAI'],
+		['an array', ['FAAAAI']],
+		['a number where verifiedAt belongs', { credential: 'FAAAAI', verifiedAt: 20260301 }],
+		['an object where credential belongs', { credential: { abbr: 'FAAAAI' }, verifiedAt: '2026-03-01' }],
+	]
+	for (const [label, value] of malformed) {
+		it(`credentialVerification as ${label} degrades to the name-only face instead of throwing`, () => {
+			const props = { ...cardBase, credentialVerification: value } as CertReviewCardProps
+			let html = ''
+			expect(() => {
+				html = renderToStaticMarkup(<CertReviewCard {...props} />)
+			}).not.toThrow()
+			expect(html).toContain('Dr. Jane Doe')
+			expect(html).not.toContain('FAAAAI')
+		})
+	}
+
+	it('a wrong-TYPE value in every other forwarded option renders instead of throwing', () => {
+		const junk = {
+			...cardBase,
+			authorName: 42,
+			authorTitle: {},
+			memo: 42,
+			bio: ['a bio'],
+			certifiedAt: {},
+			reviewerProfileUrl: 5,
+			stringsVersion: { v: 1 },
+			display: 'yes',
+			renderDef: 'nope',
+		} as unknown as CertReviewCardProps
+		expect(() => renderToStaticMarkup(<CertReviewCard {...junk} />)).not.toThrow()
+	})
+
+	it('a wrong-TYPE reviewerName / verifyUrl fails CLOSED (no chrome) rather than throwing', () => {
+		const junk = { ...cardBase, reviewerName: 42, verifyUrl: {} } as unknown as CertReviewCardProps
+		expect(renderToStaticMarkup(<CertReviewCard {...junk} />)).toBe('')
+	})
+})
+
+describe('D7 — the compliance disclosures are constants, not editor copy', () => {
+	it('a pro-bono delivery (compensationCue: null) renders NO compensation claim', () => {
+		const html = renderToStaticMarkup(<CertReviewCard {...cardBase} compensationCue={null} />)
+		expect(html).not.toContain(COMPENSATED_EXPERT_CUE)
+	})
+	it('a REWRITTEN cue is ignored — the locked constant is what renders', () => {
+		const html = renderToStaticMarkup(<CertReviewCard {...cardBase} compensationCue="Independent expert" />)
+		expect(html).toContain(COMPENSATED_EXPERT_CUE)
+		expect(html).not.toContain('Independent expert')
+	})
+	it('a REWRITTEN scope line never reaches the face — the card forwards no scopeLine at all', () => {
+		const html = renderToStaticMarkup(
+			<CertReviewCard {...cardBase} scopeLine="We checked every claim and guarantee it." />,
+		)
+		expect(html).not.toContain('We checked every claim and guarantee it.')
+		expect(html).toContain('Not a product endorsement')
+	})
+	it('both stay REGISTERED inputs — the wire type and its parity lock are unchanged — but say so', () => {
+		const byName = new Map(certRevCertComponent.inputs.map((i) => [i.name, i]))
+		for (const k of ['compensationCue', 'scopeLine'] as const) {
+			expect(byName.has(k)).toBe(true)
+			expect(byName.get(k)?.helperText).toMatch(/system-populated/i)
+		}
 	})
 })

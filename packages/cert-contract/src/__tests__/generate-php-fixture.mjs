@@ -60,7 +60,7 @@ const payload = {
 		contentModifiedAt: null,
 		verifyUrl: 'https://certrev.com/verify/cert_php_crossverify_001',
 		display: { accentColor: '#0a0', showExpertPhoto: true, badgeStyle: 'full' },
-		// v0.5 (POR-10481): the top-level content extensions, exercised cross-language. `articleTitle`
+		// v0.5: the top-level content extensions, exercised cross-language. `articleTitle`
 		// sorts before `author`; `displayCertId` after `display`. The curly apostrophe (U+2019) + CJK pin
 		// that the PHP/Go JCS twin emits non-ASCII as RAW UTF-8 (RFC 8785 minimal escaping — only control
 		// chars, '"' and '\' escaped), NOT \uXXXX, and sorts keys by UTF-16 code unit.

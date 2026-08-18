@@ -200,7 +200,7 @@ describe("placeCert — skips hidden drawer/popup anchors (IntelliPure cart-draw
 	});
 });
 
-describe("placeCert — skips VISIBLE site-chrome anchors (IntelliPure announcement-bar regression, POR-9809)", () => {
+describe("placeCert — skips VISIBLE site-chrome anchors (the IntelliPure announcement-bar regression)", () => {
 	it("does NOT land the card in a VISIBLE .rte announcement bar — anchors to the article that owns #references", () => {
 		// IntelliPure's announcement bar is `<div class="announcement__content … rte">` — VISIBLE (so the
 		// isRenderable guard can't reject it) and FIRST in document order. Before the fix the contributors

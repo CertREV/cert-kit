@@ -263,7 +263,7 @@ export async function verifyEnvelope(
 	return renderVerdict(envelope.payload, ctx)
 }
 
-// ── Tombstone: the slim revocation artifact (POR-10481) ───────────────────────────
+// ── Tombstone: the slim revocation artifact ──────────────────────────────────────
 
 /** Is this Delivery artifact the slim revocation tombstone (vs a full envelope)? Keys off
  *  the `kind: 'tombstone'` discriminator — an envelope carries no top-level `kind`. */
@@ -347,7 +347,7 @@ export async function verifyTombstone(
 
 /**
  * THE kernel entry point for a Delivery ARTIFACT — either a full `CertDeliveryEnvelope` or the
- * slim `CertTombstone` (POR-10481). Dispatches on the `kind: 'tombstone'` discriminator: a
+ * slim `CertTombstone`. Dispatches on the `kind: 'tombstone'` discriminator: a
  * tombstone verifies its own signature + subject match and always suppresses ('revoked'); an
  * envelope runs the full crypto + policy pipeline (identical to `verifyEnvelope`). Fail-closed,
  * never throws. New edges call THIS; `verifyEnvelope` stays for envelope-only callers — a

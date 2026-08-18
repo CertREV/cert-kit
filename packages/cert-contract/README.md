@@ -1,10 +1,10 @@
 # @certrev/cert-contract
 
-The signed, platform-agnostic **CertDeliveryEnvelope** — CertREV's portable "this content was reviewed by a credentialed expert" credential. Sign once, deliver everywhere; every render edge (WordPress plugin, Shopify theme app extension, headless-React SDK, Web Component) verifies it and renders the badge + JSON-LD from the verified facts.
+The signed, platform-agnostic **CertDeliveryEnvelope**: CertREV's portable "this content was reviewed by a credentialed expert" credential. Sign once, deliver everywhere; every render edge (WordPress plugin, Shopify theme app extension, headless-React SDK, Web Component) verifies it and renders the badge + JSON-LD from the verified facts.
 
 ## What this is
 
-CertREV's durable asset isn't the WordPress block or the Shopify block — it's a forgery-proof credential. The issuer mints + **signs** one `CertDeliveryEnvelope` per certified placement. Each delivery edge reproduces the canonical bytes, verifies the detached Ed25519 signature, runs the fail-closed **VerdictKernel** (subject / lifecycle / drift), and only then renders.
+CertREV's durable asset isn't the WordPress block or the Shopify block; it's a forgery-proof credential. The issuer mints + **signs** one `CertDeliveryEnvelope` per certified placement. Each delivery edge reproduces the canonical bytes, verifies the detached Ed25519 signature, runs the fail-closed **VerdictKernel** (subject / lifecycle / drift), and only then renders.
 
 This package is the **shared seam** both render layers (and the issuer) build against, so they can't silently diverge.
 
@@ -12,7 +12,7 @@ This package is the **shared seam** both render layers (and the issuer) build ag
 
 ### 1. Sign FACTS, not rendered JSON-LD
 
-`payload.content` holds **structured facts** — expert (`displayName`, `credentials[]`, `profileUrl`, `photoUrl`), author, memo, `certifiedAt`, `contentModifiedAt`, `verifyUrl`, `display`. The schema.org JSON-LD is **projected from these facts at the edge** — it is NOT in the signed payload. A schema.org change (new property, vocabulary tweak) therefore never forces re-signing every live credential; only the edge's projection changes.
+`payload.content` holds **structured facts**: expert (`displayName`, `credentials[]`, `profileUrl`, `photoUrl`), author, memo, `certifiedAt`, `contentModifiedAt`, `verifyUrl`, plus the optional `articleTitle` / `displayCertId` (v0.5, signed). `display` is deprecated from v0.2: evicted to `brand_render_defs`, accepted on read from v0.1.x envelopes and never written by a current issuer. The schema.org JSON-LD is **projected from these facts at the edge**; it is NOT in the signed payload. A schema.org change (new property, vocabulary tweak) therefore never forces re-signing every live credential; only the edge's projection changes.
 
 ### 2. Detached Ed25519 over RFC-8785 (JCS) canonicalization of `payload`
 
@@ -20,7 +20,7 @@ This package is the **shared seam** both render layers (and the issuer) build ag
 signature.sig = base64url( Ed25519_sign( privKey, RFC8785_canonicalize(payload) ) )
 ```
 
-Any language that implements RFC 8785 (JSON Canonicalization Scheme) reproduces **byte-identical** signing input, so a PHP libsodium verifier and a Node WebCrypto verifier check the same signature over the same bytes. The signature is **detached** — it does NOT cover `signature` itself. The cross-language byte contract is pinned by [`src/__tests__/vectors.json`](src/__tests__/vectors.json).
+Any language that implements RFC 8785 (JSON Canonicalization Scheme) reproduces **byte-identical** signing input, so a PHP libsodium verifier and a Node WebCrypto verifier check the same signature over the same bytes. The signature is **detached**; it does NOT cover `signature` itself. The cross-language byte contract is pinned by [`src/__tests__/vectors.json`](src/__tests__/vectors.json).
 
 ## Shape
 
@@ -29,15 +29,19 @@ CertDeliveryEnvelope = {
   payload: {
     contractVersion: 1,
     certId: string,
-    subject: {                       // richer identity — binds the credential to a STABLE identity
+    subject: {                       // richer identity: binds the credential to a STABLE identity
       platform: string,             //   'shopify' | 'wordpress' | 'headless' | …
       externalId: string,           //   stable per-placement id (Shopify Article GID, WP post id)
       logicalArticleId: string,     //   CertREV's platform-independent article identity
       canonicalUrls: string[],      //   every URL this credential may render on (primary + locale/slug variants)
       installationId: string | null,//   which app install placed it
-      contentDigest: string | null, //   hex SHA-256 of the reviewed body — the anti-drift hash (null = unbound)
+      contentDigest: string | null, //   hex SHA-256 of the reviewed body: the anti-drift hash (null = unbound)
     },
-    content: { expert, author, memo, certifiedAt, contentModifiedAt, verifyUrl, display },  // FACTS, no JSON-LD
+    content: {                       // FACTS, no JSON-LD
+      expert, author, memo, certifiedAt, contentModifiedAt, verifyUrl,
+      articleTitle?, displayCertId?, //   v0.4 typed, v0.5 on the SIGNED bytes; omitted when unset
+      display?,                      //   deprecated v0.2: evicted to brand_render_defs, accept-on-read only
+    },
     lifecycle: { issuedAt, expiresAt, revokedAt: string | null, revision: number },
   },
   signature: {
@@ -51,7 +55,7 @@ CertDeliveryEnvelope = {
 
 JSON Schema (draft 2020-12, versioned `$id`): [`schema/cert-delivery-envelope.v1.schema.json`](schema/cert-delivery-envelope.v1.schema.json).
 
-## The VerdictKernel — the one algorithm every edge runs (fail-closed)
+## The VerdictKernel: the one algorithm every edge runs (fail-closed)
 
 ```
 1. parse + shape-check the envelope; unknown contractVersion → suppress
@@ -65,7 +69,7 @@ JSON Schema (draft 2020-12, versioned `$id`): [`schema/cert-delivery-envelope.v1
 otherwise → render (carrying the verified payload)
 ```
 
-Steps 1–4 are cryptographic; 5–8 are policy. `verifyEnvelope()` runs the whole pipeline. A malformed envelope or a throwing resolver **fails closed to `suppress`** — it never throws into the caller (which might swallow it into a render).
+Steps 1–4 are cryptographic; 5–8 are policy. `verifyEnvelope()` runs the whole pipeline. A malformed envelope or a throwing resolver **fails closed to `suppress`**; it never throws into the caller (which might swallow it into a render).
 
 ```ts
 import { verifyEnvelope, type CertDeliveryEnvelope } from '@certrev/cert-contract'
@@ -78,7 +82,7 @@ const verdict = await verifyEnvelope(envelope, resolveKid, {
 })
 
 if (verdict.decision === 'render') {
-  // verdict.payload is cryptographically verified — project JSON-LD + render the badge from it
+  // verdict.payload is cryptographically verified; project JSON-LD + render the badge from it
 } else {
   // verdict.reason ∈ unsupported_contract_version | unsupported_alg | unknown_key |
   //                  invalid_signature | platform_mismatch | subject_mismatch |
@@ -86,54 +90,62 @@ if (verdict.decision === 'render') {
 }
 ```
 
-`resolveKid(kid)` returns the issuer public key for a `kid` (or `null` → `unknown_key`). It can return a Node `KeyObject` or an `Ed25519PublicKeyInput` (`pem` | `spki-base64` | `spki-der` | `raw` 32-byte). It may be async so an edge can fetch + cache a published key set.
+`resolveKid(kid)` returns the issuer public key for a `kid` (or `null` → `unknown_key`). It can return an `Ed25519PublicKeyInput` (`pem` | `spki-base64` | `spki-der` | `raw` 32-byte) or, if the edge already imported the key, a WebCrypto `CryptoKey`. A Node `KeyObject` is **not** accepted: the kernel is WebCrypto-only so it runs on edge runtimes. Handing it one fails closed to a blank badge, reported as `invalid_signature` (the key never imports, so nothing verifies against it). It may be async so an edge can fetch + cache a published key set.
 
 ## Signing
 
-The **live signing root** is GCP KMS (`EC_SIGN_ED25519`, PureEdDSA — no digest flag), so private key material never leaves KMS. KMS returns a raw 64-byte Ed25519 signature over the canonical bytes; the issuer base64url-encodes it into `signature.sig` and sets `kid` to the KMS cryptoKeyVersion resource name. For tests and any signer holding a local key, `signPayloadEd25519(payload, privateKey)` produces the identical signature over the same bytes.
+The **live signing root** is GCP KMS (`EC_SIGN_ED25519`, PureEdDSA with no digest flag), so private key material never leaves KMS. KMS returns a raw 64-byte Ed25519 signature over the canonical bytes; the issuer base64url-encodes it into `signature.sig` and sets `kid` to the KMS cryptoKeyVersion resource name. For tests and any signer holding a local key, `signPayloadEd25519(payload, privateKey)` (on the `./signer` subpath) produces the identical signature over the same bytes.
 
 ## Revocation tombstone (v0.3)
 
-A revoked placement should serve proof of revocation, **not** the certified facts — a blanked badge has no business carrying the expert's identity (an avoidable privacy + payload-size leak). So instead of re-minting a full envelope with `lifecycle.revokedAt` set, the issuer mints a slim **`CertTombstone`**: `{ kind: 'tombstone', contractVersion, subject, revokedAt, revocationReason, signature }`. It reuses the envelope's `CertSubject` (so the edge's platform + externalId match is unchanged) and is signed by the **same trust root** — the detached Ed25519 signature covers `canonicalTombstoneBytes` (the signable fields, RFC-8785 JCS). The kernel's `verifyArtifact` dispatches on the `kind` discriminator: a valid, subject-matched tombstone → `suppress: 'revoked'`; an envelope → the full pipeline.
+A revoked placement should serve proof of revocation, **not** the certified facts: a blanked badge has no business carrying the expert's identity (an avoidable privacy + payload-size leak). So instead of re-minting a full envelope with `lifecycle.revokedAt` set, the issuer mints a slim **`CertTombstone`**: `{ kind: 'tombstone', contractVersion, subject, revokedAt, revocationReason, signature }`. It reuses the envelope's `CertSubject` (so the edge's platform + externalId match is unchanged) and is signed by the **same trust root**: the detached Ed25519 signature covers `canonicalTombstoneBytes` (the signable fields, RFC-8785 JCS). The kernel's `verifyArtifact` dispatches on the `kind` discriminator: a valid, subject-matched tombstone → `suppress: 'revoked'`; an envelope → the full pipeline.
 
-**Rollout is fail-safe.** An old (pre-0.3) edge that receives a tombstone fails its envelope shape-check (`!payload`) and suppresses — a blank badge, the correct outcome for a revoked cert. So a tombstone is safe to serve to an un-upgraded edge; new edges call `verifyArtifact` for the precise `'revoked'` verdict. Mint one with `signTombstone(...)` on the `./signer` subpath.
+**Rollout is fail-safe.** An old (pre-0.3) edge that receives a tombstone fails its envelope shape-check (`!payload`) and suppresses: a blank badge, the correct outcome for a revoked cert. So a tombstone is safe to serve to an un-upgraded edge; new edges call `verifyArtifact` for the precise `'revoked'` verdict. Mint one with `signTombstone(...)` on the `./signer` subpath.
 
 ## API
 
-| Export | Purpose |
-|---|---|
-| `canonicalizeJson` / `canonicalBytes` / `canonicalPayloadBytes` | RFC-8785 canonicalization (string / UTF-8 bytes / payload-bytes). The signing + hashing input. |
-| `canonicalTombstoneBytes` | RFC-8785 canonicalization of a tombstone's signable fields (the tombstone signing input, v0.3). |
-| `sha256Hex` / `sha256OfCanonical` | SHA-256 helpers (used for `subject.contentDigest` + the golden vectors). |
-| `verifyEnvelope` | The full VerdictKernel — verify + policy, fail-closed. |
-| `verifyArtifact` | Unified kernel entry (v0.3) — dispatches an envelope OR a `CertTombstone`. New edges call this. |
-| `verifyTombstone` / `isTombstone` | Tombstone verdict (verify + subject-match → `suppress:'revoked'`) / the `kind` discriminator. |
-| `signTombstone` | Mint a slim revocation tombstone (`./signer` subpath). |
-| `verifySignatureOnly` | Phase-1-only (parse + kid + Ed25519). For app-proxy edges that split crypto from policy. |
-| `renderVerdict` | Phase-2-only policy over an already-verified payload (pure, sync). |
-| `verifyDetachedSignature` | Low-level: does this base64url sig verify over `canonicalize(payload)`? |
-| `signPayloadEd25519` | Sign with a local Ed25519 key (tests / non-KMS signers). |
-| `toEd25519PublicKey` | Build a Node `KeyObject` from pem / spki-base64 / spki-der / raw. |
-| `base64urlEncode` / `base64urlDecode` | base64url (unpadded) codec for the signature. |
-| Types | `CertDeliveryEnvelope`, `CertDeliveryArtifact`, `CertTombstone`, `CertTombstoneSignable`, `CertPayload`, `CertSubject`, `CertContent`, `CertDisplayConfig`, `CertLifecycle`, `CertSignature`, `CertVerdict`, `CertSuppressReason`, `RenderContext`, `ResolvePublicKeyByKid`, `Ed25519PublicKeyInput` |
-| Constants | `CONTRACT_VERSION` (1), `CANONICALIZATION` (`'RFC8785-JCS'`), `SIGNATURE_ALG` (`'ed25519'`) |
+Two entry points. The **main entry** is edge-runtime safe (WebCrypto, no `node:crypto`, no `Buffer`) and carries the verify path; the Node-only **`./signer`** subpath carries the issuer/sign path.
 
-## Cross-language contract — golden vectors
+```ts
+import { verifyEnvelope } from '@certrev/cert-contract'                 // verify · edge or Node
+import { mintEnvelope, sha256Hex } from '@certrev/cert-contract/signer' // issue + sign · Node only
+```
+
+| Export | Entry | Purpose |
+|---|---|---|
+| `canonicalizeJson` / `canonicalBytes` / `canonicalPayloadBytes` | main | RFC-8785 canonicalization (string / UTF-8 bytes / payload-bytes). The signing + hashing input. |
+| `canonicalTombstoneBytes` | main | RFC-8785 canonicalization of a tombstone's signable fields (the tombstone signing input, v0.3). |
+| `verifyEnvelope` | main | The full VerdictKernel: verify + policy, fail-closed. |
+| `verifyArtifact` | main | Unified kernel entry (v0.3): dispatches an envelope OR a `CertTombstone`. New edges call this. |
+| `verifyTombstone` / `isTombstone` | main | Tombstone verdict (verify + subject-match → `suppress:'revoked'`) / the `kind` discriminator. |
+| `verifySignatureOnly` | main | Phase-1-only (parse + kid + Ed25519). For app-proxy edges that split crypto from policy. |
+| `renderVerdict` | main | Phase-2-only policy over an already-verified payload (pure, sync). |
+| `verifyDetachedSignature` | main | Low-level: does this base64url sig verify over `canonicalize(payload)`? |
+| `importEd25519PublicKey` | main | Import a verify-only WebCrypto `CryptoKey` (async) from pem / spki-base64 / spki-der / raw. |
+| `base64urlEncode` / `base64urlDecode` / `bytesToBase64` / `base64ToBytes` | main | Runtime-agnostic base64 / base64url (unpadded) codecs. No `Buffer`. |
+| `mintEnvelope` / `buildPayload` | `./signer` | Mint a signed envelope / build the payload it signs. |
+| `signTombstone` | `./signer` | Mint a slim revocation tombstone. |
+| `signPayloadEd25519` / `localEd25519Signer` | `./signer` | Sign with a local Ed25519 key (tests / non-KMS signers). |
+| `sha256Hex` / `sha256OfCanonical` / `computeContentDigest` | `./signer` | SHA-256 helpers (used for `subject.contentDigest` + the golden vectors). |
+| Types | main | `CertDeliveryEnvelope`, `CertDeliveryArtifact`, `CertTombstone`, `CertTombstoneSignable`, `CertPayload`, `CertSubject`, `CertContent`, `CertCredential`, `CertDisplayConfig`, `CertLifecycle`, `CertSignature`, `CertVerdict`, `CertSuppressReason`, `ComplianceClass`, `ContractVersion`, `SignatureAlg`, `RenderContext`, `ResolvePublicKeyByKid`, `Ed25519PublicKeyInput` |
+| Constants | main | `CONTRACT_VERSION` (1), `CANONICALIZATION` (`'RFC8785-JCS'`), `SIGNATURE_ALG` (`'ed25519'`) |
+
+## Cross-language contract: golden vectors
 
 [`src/__tests__/vectors.json`](src/__tests__/vectors.json) maps representative + adversarial input values (unicode, key-order, nested objects, arrays, integers/floats, exponent forms, empty/null, control-char escapes, and a full CertPayload shape) → their RFC-8785 canonical UTF-8 bytes (hex) → SHA-256. A foreign (PHP / Go / …) RFC-8785 implementation MUST reproduce `canonicalHex` + `sha256` for every input. The vectors are **generated** from the same `canonicalize()` the runtime uses (`src/__tests__/generate-vectors.mjs`) and **re-asserted** by the test suite, so a vector can never silently drift from the implementation, and an independent SHA-256 of the recorded bytes is checked too.
 
 ## Dependencies + crypto
 
-- **Canonicalization:** [`canonicalize`](https://www.npmjs.com/package/canonicalize) (RFC 8785) — vetted, not hand-rolled.
-- **Ed25519:** Node `crypto` (`crypto.verify(null, …)` / `crypto.sign(null, …)`) — PureEdDSA, GCP-KMS-compatible, no extra dependency. PHP edges use libsodium `sodium_crypto_sign_verify_detached`.
-- **SHA-256:** Node `crypto`.
+- **Canonicalization:** [`canonicalize`](https://www.npmjs.com/package/canonicalize) (RFC 8785), vetted rather than hand-rolled. The package's only runtime dependency.
+- **Ed25519 verify (main entry):** the WebCrypto SubtleCrypto API on the global `crypto` (`crypto.subtle.importKey` / `crypto.subtle.verify`), which needs no dependency and no Node builtin. Ed25519 is PureEdDSA, so the kernel verifies a GCP KMS `EC_SIGN_ED25519` signature unchanged. PHP edges verify the same bytes with libsodium `sodium_crypto_sign_verify_detached`.
+- **Ed25519 sign + SHA-256 (`./signer` subpath):** `node:crypto`. The live issuer signs in GCP KMS (see [Signing](#signing)); `node:crypto` backs the local-key signer used by tests and non-KMS issuers, plus `sha256Hex` / `sha256OfCanonical` for `subject.contentDigest`.
 
-Server-safe (no DOM lib). A browser edge (Web Component) can supply WebCrypto Ed25519 + a JCS lib and run the same kernel logic.
+The main entry imports no `node:crypto` and uses no `Buffer`, so the same kernel runs on Node 20+, Cloudflare Workers, Shopify Oxygen, Vercel Edge and in the browser. It is DOM-lib-free too: the WebCrypto `CryptoKey` type arrives through a type-only import the compiler erases (`src/webcrypto-types.ts`), so a server-only TS project compiles against it without adding `lib: ["DOM"]`. The issuer-only sign path stays quarantined on `./signer`.
 
 ## Tests
 
 ```bash
-pnpm test       # 89 deterministic + 2 live-KMS = 91
+pnpm test       # 137 deterministic + 6 KMS-gated = 143
 pnpm build
 pnpm typecheck
 ```
@@ -142,7 +154,7 @@ pnpm typecheck
 - **Round-trip:** sign with a generated Ed25519 keypair → `verifyEnvelope` renders the verified payload.
 - **Tamper:** a changed payload field (and a re-pointed nested `subject.externalId`, a wrong-key signature, a garbage signature) → `invalid_signature`, fail-closed.
 - **Verdict pipeline:** unknown kid, wrong alg, unknown contract version, platform/subject mismatch, revoked, expired, content drift, drift-check-skipped paths, throwing resolver → fail-closed.
-- **Live GCP KMS real-sign proof** (`real-sign-kms.test.ts`): signs `canonicalize(payload)` with the production KMS Ed25519 key, the kernel renders it against the real SPKI public key, and a tampered payload with the same KMS signature fails closed. Conditional — runs only when `gcloud` can reach the KMS key version; config-gated skip otherwise.
+- **Live GCP KMS real-sign proof** (`real-sign-kms.test.ts`): signs `canonicalize(payload)` with the production KMS Ed25519 key, the kernel renders it against the real SPKI public key, and a tampered payload with the same KMS signature fails closed. Conditional: runs only when `gcloud` can reach the KMS key version; config-gated skip otherwise.
 
 ## Live signing root
 
@@ -157,24 +169,26 @@ pnpm typecheck
 ```bash
 gcloud kms asymmetric-sign --version 1 --key cert-envelope-issuer \
   --keyring certrev-signing --location global --project portal-486217 \
-  --input-file <CANONICAL_BYTES> --signature-file <SIG>   # PureEdDSA — no --digest; output = raw 64-byte sig
+  --input-file <CANONICAL_BYTES> --signature-file <SIG>   # PureEdDSA: no --digest; output = raw 64-byte sig
 ```
 
 ## Current consumers
 
 | Repo | Status |
 |---|---|
-| Portal | Planned — issuer (mint + KMS-sign) + the WordPress/Shopify/headless delivery adapters build against this seam. |
-| AgOS | Planned — any AgOS-side verification of a delivered credential runs the same `verifyEnvelope`. |
-| WordPress plugin (PHP) | Planned — ports the VerdictKernel to libsodium; the golden vectors are its JCS conformance target. |
+| Portal | Planned: issuer (mint + KMS-sign) + the WordPress/Shopify/headless delivery adapters build against this seam. |
+| AgOS | Planned: any AgOS-side verification of a delivered credential runs the same `verifyEnvelope`. |
+| WordPress plugin (PHP) | Planned: ports the VerdictKernel to libsodium; the golden vectors are its JCS conformance target. |
 
 ## Version
 
-Current: `0.5.2` — see [CHANGELOG.md](./CHANGELOG.md).
+Current: `0.5.3`. See [CHANGELOG.md](./CHANGELOG.md).
 
-- `0.5.1` — docs-only (this README + changelog brought current). Code identical to 0.5.0.
-- `0.5.0` — POR-10481: `articleTitle` / `displayCertId` threaded onto the **signed** envelope
-  (covered by the signature). First 0.5-line publish to the public npm registry.
-- `0.4.0` — POR-10481 Part 3: the `articleTitle` / `displayCertId` payload extensions formalized.
-- `0.3.0` — POR-10481: the slim **`CertTombstone`** revocation artifact (`signTombstone` + `verifyArtifact`/`verifyTombstone` + `canonicalTombstoneBytes`), carrying only the subject + revocation facts (no certified content). Additive + fail-closed: old edges suppress an unknown tombstone shape (a blank badge — the correct revoked outcome). Golden tombstone canonicalization vector added.
-- `0.1.0` — initial release. `CertDeliveryEnvelope` facts model (sign facts, not JSON-LD), richer `subject` identity binding, RFC-8785 JCS canonicalizer + SHA-256, golden cross-language vectors, fail-closed VerdictKernel, live GCP KMS real-sign proof.
+- `0.5.3` · docs-only. Corrected the crypto section (the VERIFY path is WebCrypto, not `node:crypto`), the API table (subpaths marked; the non-existent `toEd25519PublicKey` removed), the `resolveKid` contract, and the v0.5 `content` shape. No executable code changed from 0.5.2.
+- `0.5.2` · metadata-only. `repository` / `homepage` / `bugs` added, so the npm page links to the public source mirror and the issue tracker.
+- `0.5.1` · docs-only (this README + changelog brought current). Code identical to 0.5.0.
+- `0.5.0` · `articleTitle` / `displayCertId` threaded onto the **signed** envelope (covered by the signature). First 0.5-line publish to the public npm registry.
+- `0.4.0` · the `articleTitle` / `displayCertId` payload extensions formalized.
+- `0.3.0` · the slim **`CertTombstone`** revocation artifact (`signTombstone` + `verifyArtifact`/`verifyTombstone` + `canonicalTombstoneBytes`), carrying only the subject + revocation facts (no certified content). Additive + fail-closed: old edges suppress an unknown tombstone shape (a blank badge: the correct revoked outcome). Golden tombstone canonicalization vector added.
+- `0.2.0` · facts-only signed envelope (sign facts, not rendered JSON-LD).
+- `0.1.0` · initial release. `CertDeliveryEnvelope` facts model (sign facts, not JSON-LD), richer `subject` identity binding, RFC-8785 JCS canonicalizer + SHA-256, golden cross-language vectors, fail-closed VerdictKernel, live GCP KMS real-sign proof.

@@ -1,8 +1,7 @@
 /**
- * Scoped styles + inline SVGs for the `<certrev-cert-modal>` Shadow-DOM element
- * (POR-10102). The single source of truth for the certificate (3a) + reviewer (4b)
- * modal look, ported byte-faithfully from the Claude Design reference
- * (`docs/claude/design/certificate-modals/`, footer variant 3a + reviewer 4b).
+ * Scoped styles + inline SVGs for the `<certrev-cert-modal>` Shadow-DOM element.
+ * The single source of truth for the certificate + reviewer modal look, ported
+ * byte-faithfully from the approved design reference.
  *
  * Because the element renders inside a shadow root, this CSS is fully scoped: the
  * brand storefront theme cannot bleed in, and these rules never leak out — so the
@@ -16,7 +15,8 @@
 import { LOGO_PATHS } from './logo-paths.js'
 
 /** The four-chevron CertREV mark (viewBox 0 0 375 375), tinted via the passed fill. Path data is
- * single-sourced from src/lib/design-guide/logo.ts (the SOT the codegen mirrors into every twin). */
+ * single-sourced from the portal design-guide's logo module (the SOT the codegen mirrors into
+ * every twin). */
 export function chevronMark(size: number, fill: string): string {
 	const paths = LOGO_PATHS.map((d) => `<path fill="${fill}" d="${d}"/>`).join('')
 	return `<svg width="${size}" height="${size}" viewBox="0 0 375 375" aria-hidden="true" style="display:block;flex-shrink:0">${paths}</svg>`
@@ -52,7 +52,7 @@ export const CERT_MODAL_FONT_FAMILIES = [
 	'Allura',
 ] as const
 
-// The modal's fonts are self-hosted (POR-10657): the standalone loader (certrev-cert-modal.ts)
+// The modal's fonts are self-hosted: the standalone loader (certrev-cert-modal.ts)
 // injects the shared CERT_FONT_FACE_CSS @font-face block (R2 URLs) instead of a render-blocking
 // Google Fonts stylesheet. In the theme-app-extension the host page already declares these via
 // certrev-cert.css, so `data-fonts="host"` suppresses the injection entirely.
@@ -96,7 +96,7 @@ export const CERT_MODAL_CSS = `
 	background: var(--cr-white);
 	color: var(--cr-navy);
 	font-family: var(--cr-sans);
-	/* fixed, NOT relative (POR-10473): a :modal dialog (showModal) renders in the TOP LAYER; a
+	/* fixed, NOT relative: a :modal dialog (showModal) renders in the TOP LAYER; a
 	 * relative dialog anchors to its scrolled document position, so once the page is scrolled the
 	 * panel renders off-screen while the ::backdrop still covers the viewport (measured top -1972 at
 	 * scrollY 2537). fixed is viewport-anchored (the UA inset:0 + margin:auto centers it) and still
@@ -462,7 +462,7 @@ export const CERT_MODAL_CSS = `
 	color: var(--cr-navy-50);
 }
 
-/* FTC disclosure footer (POR-10496) — material-connection cue (compensated only) + scope line
+/* FTC disclosure footer — material-connection cue (compensated only) + scope line
  * (always). Rendered on both the certificate + reviewer dialogs, immediately above the actions. */
 .crm-disclosure {
 	margin-top: 14px;

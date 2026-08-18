@@ -2,14 +2,14 @@
  * Cert-card INTERACTIONS for the native Shopify cert experience.
  *
  * Progressive enhancement, delegated from the document (one listener, survives the placement
- * reposition). Two behaviours (POR-9827 chevron model):
+ * reposition). Two behaviours (the chevron model):
  *
  *   • Accordion bios — a contributor row carrying `[data-certrev-acc]` toggles its `.open` class
  *     (revealing the row's `.acc-bio` in place; the name caret rotates via CSS) and mirrors the
  *     state on `aria-expanded`. A click on a link inside the row (e.g. the "Compensated expert"
  *     cue) is NOT a toggle. Keyboard: Enter/Space on the role=button row.
  *   • In-page modals: a `[data-certrev-modal-open]` control opens the unified
- *     `<certrev-cert-modal>` element (POR-10102) via its `.open('cert'|'expert')` method. Bare /
+ *     `<certrev-cert-modal>` element via its `.open('cert'|'expert')` method. Bare /
  *     `"cert"` opens the certificate dialog; `"expert"` opens the reviewer dialog. With no JS / no
  *     element / no envelope a link control falls back to its href (the certificate or the CertREV
  *     profile page). The element owns its OWN close plumbing (× / Close / backdrop / Esc) inside its

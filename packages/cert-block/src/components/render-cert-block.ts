@@ -4,10 +4,20 @@
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * Paints the owner-approved cert render (decision 2026-07-17) in one of three
- * placement modes — `banner`, `sidebar`, `floating` — from RESOLVED theme tokens +
- * the cert facts. It returns a self-contained HTML string that renders with ZERO
- * JavaScript (the CertREV modal + the reviewer-bio accordion are progressive
- * enhancement, wired by the shared embed script via the `data-certrev-*` hooks).
+ * placement modes — `sidebar` (the DEFAULT), `banner`, `floating` — plus the engine's
+ * free-composition `custom` face, from RESOLVED theme tokens + the cert facts. It
+ * returns a self-contained HTML string that renders with ZERO JavaScript (the CertREV
+ * modal + the reviewer-bio accordion are progressive enhancement, wired by the shared
+ * embed script via the `data-certrev-*` hooks).
+ *
+ * THE DEFAULT PLACEMENT IS `sidebar`, AND IT IS NAMED IN EXACTLY ONE PLACE — the
+ * `case 'sidebar':` that falls into `default:` at the bottom of this file. Nothing
+ * else in the package (this renderer, the Builder card, the preview) may name a
+ * placement fallback of its own: the switch previously had no `default:` at all, so
+ * an untyped `mode` off CMS JSON returned `undefined` from a `: string` function and
+ * landed in `dangerouslySetInnerHTML` as an empty div — a 200 with the card silently
+ * gone. Declared default and runtime fallback are now physically the same line and
+ * cannot drift.
  *
  * WHY A STRING (not a React component): the block is emitted into storefront HTML
  * across every render surface (Shopify Liquid, WordPress PHP, the JS engine, and
@@ -55,7 +65,8 @@
  */
 
 import { escapeAttribute, escapeHtml, safeHttpUrl } from './escape.js'
-import { formatDate } from './format.js'
+import { dedupeCredential, formatDate } from './format.js'
+import { CERTREV_LINK_REL } from './rel.js'
 import {
 	CERT_SCOPE_LINE,
 	CERT_STRINGS_VERSION,
@@ -85,10 +96,15 @@ export interface CertBlockFace {
 }
 
 /**
- * The cert facts + LOCKED display strings a face renders. Facts are escaped; the
- * three locked strings (`compensationCue`, `scopeLine`, `credentialLine`) are
- * byte-verbatim per the CertREV Display Guide and default to the mirrored constants
- * when a caller omits them — so the compliance baseline is exact even if unsupplied.
+ * The cert FACTS a face renders — the per-cert data, all of it escaped.
+ *
+ * The compliance copy is NOT here. The scope line and the credential attribution are
+ * rendered straight from `CERT_SCOPE_LINE` / `CREDENTIAL_VERIFIED_ATTRIBUTION`: they
+ * are locked strings per the CertREV Display Guide (the scope line's curly apostrophe
+ * is pinned to MSA §3 — see render-def.ts), so a caller has no legitimate reason to
+ * supply them and taking them as input made compliance copy rewritable from a CMS
+ * field. `compensationCue` survives as an input for exactly ONE decision — whether the
+ * reviewer was compensated at all — never for the wording.
  */
 export interface CertBlockFacts {
 	/** The content author (the "Written by" column). */
@@ -103,25 +119,34 @@ export interface CertBlockFacts {
 	readonly credentialVerifiedAt: string
 	/** ISO instant the article was certified (the "Certified <date>" footer). */
 	readonly certifiedAt: string
-	/** The expert's memo (rendered as the serif blockquote). */
-	readonly memo: string
+	/**
+	 * The expert's memo (the quote / blockquote). OPTIONAL, exactly like `bio`: a face may
+	 * legally carry no memo, and an empty one must drop the heading + quote rather than paint
+	 * an "Expert memo" label over an empty `<p>`.
+	 */
+	readonly memo?: string
 	/** The expert's bio (banner accordion / sidebar paragraph). Omitted when absent. */
 	readonly bio?: string
 	/** The expert profile URL (the "Profile" link + modal `expert` hook). */
 	readonly profileUrl: string
 	/** The certificate URL (the "Certificate" link + modal hook). */
 	readonly certificateUrl: string
-	/** LOCKED — the compensation cue. Default: `COMPENSATED_EXPERT_CUE`. */
-	readonly compensationCue?: string
-	/** LOCKED — the byte-exact FTC scope line. Default: `CERT_SCOPE_LINE`. */
-	readonly scopeLine?: string
-	/** LOCKED — the verification attribution. Default: `CREDENTIAL_VERIFIED_ATTRIBUTION`. */
-	readonly credentialLine?: string
+	/**
+	 * WHETHER there is a material connection to disclose — never its WORDING.
+	 *
+	 * `null` ⇒ the cue is OMITTED entirely: the pro-bono reviewer, who has no compensation
+	 * to disclose (the same contract `modal/cert-modal-view.ts` already honours). Any other
+	 * value — absent, or a supplied string — renders the LOCKED `COMPENSATED_EXPERT_CUE`
+	 * constant; a supplied string is IGNORED. The scope line still renders for a pro-bono
+	 * reviewer: it makes no compensation claim, so it is true for volunteers too.
+	 */
+	readonly compensationCue?: string | null
 }
 
 /** The full input to `renderCertBlock`. */
 export interface RenderCertBlockInput {
-	readonly mode: CertBlockLayout
+	/** The placement face. ABSENT or UNRECOGNISED ⇒ `sidebar` (see the file header). */
+	readonly mode?: CertBlockLayout
 	/** RESOLVED theme tokens (the portal bakes these). Absent/invalid tokens fall back to navy. */
 	readonly theme?: Partial<ResolvedBlockTheme>
 	readonly facts: CertBlockFacts
@@ -131,8 +156,8 @@ export interface RenderCertBlockInput {
 	 */
 	readonly face?: CertBlockFace
 	/**
-	 * BANNER memo placement (POR-10741 — first-class split, retires the CertReviewCard
-	 * string-hack). Default `'full'` = header card + memo card in ONE root, BYTE-IDENTICAL
+	 * BANNER memo placement — the first-class split that retires the CertReviewCard
+	 * string-hack. Default `'full'` = header card + memo card in ONE root, BYTE-IDENTICAL
 	 * to prior behavior. `'header'` / `'memo'` render ONLY that card in its own themed root,
 	 * so a headless exporter can place the memo as its OWN block under the article body
 	 * (the "banner → body → memo" layout) WITHOUT string-splitting the rendered HTML — and
@@ -206,16 +231,6 @@ function firstNameOf(name: string): string {
 	return clean.split(/\s+/)[0] || clean
 }
 
-/**
- * A LOCKED display string: use the caller's value ONLY when it is a non-blank
- * string, else the byte-verbatim constant. The three compliance strings
- * (compensation cue, scope line, credential attribution) are undroppable — an
- * omitted OR empty/whitespace override must never blank the disclosure.
- */
-function locked(supplied: string | undefined, constant: string): string {
-	return supplied?.trim() ? supplied : constant
-}
-
 /** Field-placement predicate every renderer consults. */
 type PlacedTest = (fieldId: string) => boolean
 
@@ -230,8 +245,24 @@ function placedTester(face?: CertBlockFace): PlacedTest {
 }
 
 /**
+ * Is there actually a bio to expand? The banner's accordion affordance — role=button,
+ * tabindex, aria-expanded, the caret, the pointer cursor — is gated on THIS, not on the
+ * reviewer row being non-empty. Gating on the row announced "Read more about Dr. X,
+ * button, collapsed" over nothing whenever the reviewer had no bio (WCAG 2.1 4.1.2 name/
+ * role/value, and 2.1.1 keyboard: a focus stop that does nothing).
+ */
+function hasExpandableBio(facts: CertBlockFacts, placed: PlacedTest): boolean {
+	return placed('bio') && !!facts.bio
+}
+
+/** Whether the material-connection cue renders: placed by the engine AND not the pro-bono `null`. */
+function showsCompensationCue(facts: CertBlockFacts, placed: PlacedTest): boolean {
+	return placed('compensationCue') && facts.compensationCue !== null
+}
+
+/**
  * The memo/custom action-link stamp style — the JetBrains-mono uppercase lockup that
- * matches the badge footer (Owen 2026-07-17); navy so it still reads as an action.
+ * matches the badge footer; navy so it still reads as an action.
  */
 const STAMP_LINK_STYLE =
 	'font-family:var(--font-mono);font-size:10.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--navy);text-decoration:none;cursor:pointer;'
@@ -245,22 +276,29 @@ function avatar(text: string, size: number, fontSize: number): string {
 	)
 }
 
-/** "Jane Doe, MD" (or just the name when there is no credential) — escaped. */
+/**
+ * "Jane Doe, MD" (or just the name when there is no credential) — escaped, and never the
+ * same credential twice. A display name that arrives already carrying its own post-nominal
+ * ("Dr. Erik Schraga, MD") used to have the credential appended regardless, which put
+ * "Dr. Erik Schraga, MD, MD, EM" on a live customer page — see `dedupeCredential` in
+ * format.ts for the rule, and for why the stored data is still the real repair.
+ */
 function nameWithCredential(name: string, credential: string): string {
 	const n = escapeHtml(name)
-	return credential ? `${n}, ${escapeHtml(credential)}` : n
+	const tail = dedupeCredential(name, credential)
+	return tail ? `${n}, ${escapeHtml(tail)}` : n
 }
 
 /** The reviewer profile link (carries the modal `expert` hook + a real href fallback). */
 function profileLink(url: string, inner: string, style: string): string {
 	const href = safeHttpUrl(url) ?? '#'
-	return `<a href="${escapeAttribute(href)}" data-certrev-modal-open="expert" rel="noopener" style="${style}">${inner}</a>`
+	return `<a href="${escapeAttribute(href)}" data-certrev-modal-open="expert" rel="${CERTREV_LINK_REL}" style="${style}">${inner}</a>`
 }
 
 /** The certificate link (carries the modal hook + a real href fallback). */
 function certificateLink(url: string, inner: string, style: string): string {
 	const href = safeHttpUrl(url) ?? '#'
-	return `<a href="${escapeAttribute(href)}" data-certrev-modal-open rel="noopener" style="${style}">${inner}</a>`
+	return `<a href="${escapeAttribute(href)}" data-certrev-modal-open rel="${CERTREV_LINK_REL}" style="${style}">${inner}</a>`
 }
 
 /**
@@ -273,14 +311,21 @@ function verificationBlock(facts: CertBlockFacts, withAccordion: boolean, placed
 	const showName = placed('bylinePlain') || showCredentialed
 	// Nothing placed ⇒ empty (the caller drops the wrapping toggle div).
 	if (!showName) return ''
-	const credentialLine = locked(facts.credentialLine, CREDENTIAL_VERIFIED_ATTRIBUTION)
-	const verified = formatDate(facts.credentialVerifiedAt) ?? escapeHtml(facts.credentialVerifiedAt)
-	const showBio = withAccordion && placed('bio') && !!facts.bio
+	// An UNPARSEABLE or blank verification date is dropped, not echoed. The old
+	// `formatDate(x) ?? escapeHtml(x)` asserted "Credential verified by CertREV on
+	// not-a-date", and left "on " dangling when blank — a disclosure that names a date
+	// it cannot stand behind is worse than one that names none. The attribution itself
+	// survives: it is true independently of when the credential was checked.
+	const verified = formatDate(facts.credentialVerifiedAt)
+	const showBio = withAccordion && hasExpandableBio(facts, placed)
 	const caret = showBio ? CARET : ''
 	const nameSize = withAccordion ? '15px' : '16px'
 	const muteSize = withAccordion ? '13px' : '12.5px'
+	// `hidden` alone, NOT an inline `display:none` — the accordion is revealed by an author
+	// rule on the toggled `.open` class (see modal/interactions.ts), and an inline declaration
+	// is the one thing such a rule can never beat.
 	const bio = showBio
-		? `<div class="certrev-cert__bio" hidden style="display:none;margin-top:8px;font-size:12.5px;line-height:1.5;color:var(--cr-ink-soft);">${escapeHtml(facts.bio ?? '')}</div>`
+		? `<div class="acc-bio" hidden style="margin-top:8px;font-size:12.5px;line-height:1.5;color:var(--cr-ink-soft);">${escapeHtml(facts.bio ?? '')}</div>`
 		: ''
 	// The credential suffix + the GROUPED attribution/date lines are all-or-nothing on
 	// `bylineCredentialed`; a plain byline shows the name only.
@@ -288,8 +333,8 @@ function verificationBlock(facts: CertBlockFacts, withAccordion: boolean, placed
 		? nameWithCredential(facts.reviewerName, facts.credential)
 		: escapeHtml(facts.reviewerName)
 	const attribution = showCredentialed
-		? `<div style="font-size:${muteSize};color:var(--navy-55);line-height:1.45;margin-top:3px;">${escapeHtml(credentialLine)}</div>` +
-			`<div style="font-size:${muteSize};color:var(--navy-55);line-height:1.35;">on ${verified}</div>`
+		? `<div style="font-size:${muteSize};color:var(--navy-55);line-height:1.45;margin-top:3px;">${escapeHtml(CREDENTIAL_VERIFIED_ATTRIBUTION)}</div>` +
+			(verified ? `<div style="font-size:${muteSize};color:var(--navy-55);line-height:1.35;">on ${verified}</div>` : '')
 		: ''
 	return (
 		`<div>` +
@@ -313,7 +358,7 @@ function rootStyle(theme: ResolvedBlockTheme): string {
 		`--ba:${theme.accentColor}`,
 		`--ba-fg:${theme.accentFg}`,
 		`--br:${theme.cornerRadius}`,
-		// The body font is a host-overridable HOOK (POR-10742): `--cr-bf` resolves a host-page
+		// The body font is a host-overridable HOOK: `--cr-bf` resolves a host-page
 		// `--bf` (set on any ancestor) with the fontSlot stack as the FALLBACK — so a storefront
 		// can theme the card font via plain CSS, no `!important` (the old inline `--bf:<stack>`
 		// declaration shadowed a host `--bf`). Unset ⇒ resolves to the stack ⇒ byte-identical render.
@@ -360,12 +405,11 @@ function root(mode: CertBlockLayout, theme: ResolvedBlockTheme, inner: string, f
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode 1 — BANNER: a certification header card + a separate expert-memo card
+// Face — BANNER: a certification header card + a separate expert-memo card
 // ─────────────────────────────────────────────────────────────────────────────
 
 function bannerHeaderCard(facts: CertBlockFacts, placed: PlacedTest): string {
-	const compensationCue = locked(facts.compensationCue, COMPENSATED_EXPERT_CUE)
-	const certified = formatDate(facts.certifiedAt) ?? escapeHtml(facts.certifiedAt)
+	const certified = formatDate(facts.certifiedAt)
 	const subtitle =
 		placed('authorTitle') && facts.authorTitle
 			? `<div style="font-size:13px;color:var(--cr-ink-sub);">${escapeHtml(facts.authorTitle)}</div>`
@@ -374,7 +418,7 @@ function bannerHeaderCard(facts: CertBlockFacts, placed: PlacedTest): string {
 	// target (data-certrev-modal-open); this focusable <a> is the keyboard / SR / no-JS control.
 	const certHref = safeHttpUrl(facts.certificateUrl) ?? '#'
 	const headerArrow =
-		`<a href="${escapeAttribute(certHref)}" data-certrev-modal-open rel="noopener" aria-label="View certificate" ` +
+		`<a href="${escapeAttribute(certHref)}" data-certrev-modal-open rel="${CERTREV_LINK_REL}" aria-label="View certificate" ` +
 		`style="display:inline-flex;align-items:center;flex-shrink:0;color:inherit;opacity:.72;text-decoration:none;">` +
 		`<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></a>`
 	// navy header — the trust bar stays fixed navy (accent theming is Phase B); mark + eyebrow + cert arrow
@@ -398,13 +442,33 @@ function bannerHeaderCard(facts: CertBlockFacts, placed: PlacedTest): string {
 	// reviewed by — emphasized label (navy, 700): the certification's authority voice
 	const reviewerAvatar = placed('reviewerPhoto') ? avatar(initials(facts.reviewerName), 42, 12) : ''
 	const reviewerBlock = verificationBlock(facts, true, placed)
-	const revToggle = reviewerBlock
-		? `<div class="certrev-cert__rev" role="button" tabindex="0" aria-expanded="false" data-certrev-bio-toggle aria-label="Read more about ${escapeAttribute(facts.reviewerName)}" style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;border-radius:8px;transition:opacity .15s;">` +
-			`${reviewerAvatar}${reviewerBlock}` +
-			`</div>`
+	// The interactive affordance is gated on there being a bio to expand — NOT on the
+	// reviewer row existing. `data-certrev-acc` is the hook modal/interactions.ts actually
+	// binds (click + Enter/Space); the old `data-certrev-bio-toggle` had zero consumers
+	// repo-wide, so the row was focusable, announced as a collapsed button, and inert.
+	const revRow = reviewerBlock
+		? hasExpandableBio(facts, placed)
+			? `<div class="certrev-cert__rev" data-certrev-acc role="button" tabindex="0" aria-expanded="false" aria-label="Read more about ${escapeAttribute(facts.reviewerName)}" style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;border-radius:8px;transition:opacity .15s;">` +
+				`${reviewerAvatar}${reviewerBlock}` +
+				`</div>`
+			: `<div class="certrev-cert__rev" style="display:flex;align-items:flex-start;gap:12px;">` +
+				`${reviewerAvatar}${reviewerBlock}` +
+				`</div>`
 		: ''
-	// "Certified <date>" is card chrome (renders with the card); the cue is engine-placed
-	const cueSpan = placed('compensationCue') ? `<span>${escapeHtml(compensationCue)}</span>` : ''
+	// The mono footer row: "Certified <date>" is card chrome, but an unusable `certifiedAt`
+	// used to emit the bare word "Certified" followed by nothing — so it is gated on the date
+	// PARSING, the same family as the memo/verification-date gates. The cue is engine-placed
+	// AND dropped for the pro-bono (`null`) reviewer. Neither ⇒ the hairline + row go too.
+	const certifiedSpan = certified ? `<span>Certified <span style="margin-left:8px;">${certified}</span></span>` : ''
+	const cueSpan = showsCompensationCue(facts, placed) ? `<span>${escapeHtml(COMPENSATED_EXPERT_CUE)}</span>` : ''
+	const footer =
+		certifiedSpan || cueSpan
+			? `<div style="height:1px;background:var(--navy-10);margin:16px 0 14px;"></div>` +
+				`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-family:var(--font-mono);font-size:10.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--navy-55);">` +
+				certifiedSpan +
+				cueSpan +
+				`</div>`
+			: ''
 	return (
 		`<div style="border:1px solid var(--navy-10);border-radius:calc(var(--br,14px) * 0.7);overflow:hidden;font-family:var(--cr-bf);">` +
 		header +
@@ -413,43 +477,43 @@ function bannerHeaderCard(facts: CertBlockFacts, placed: PlacedTest): string {
 		authorColumn +
 		`<div>` +
 		`<div style="font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--navy);margin-bottom:11px;">Reviewed by</div>` +
-		revToggle +
+		revRow +
 		`</div>` +
 		`</div>` +
 		// hairline + mono footer — "Certified <date>" + "Compensated expert", UNIFORM navy-55
-		`<div style="height:1px;background:var(--navy-10);margin:16px 0 14px;"></div>` +
-		`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-family:var(--font-mono);font-size:10.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--navy-55);">` +
-		`<span>Certified <span style="margin-left:8px;">${certified}</span></span>` +
-		cueSpan +
-		`</div>` +
+		footer +
 		`</div>` +
 		`</div>`
 	)
 }
 
 function bannerMemoCard(facts: CertBlockFacts, placed: PlacedTest): string {
-	const scopeLine = locked(facts.scopeLine, CERT_SCOPE_LINE)
-	const credTail =
-		placed('bylineCredentialed') && facts.credential
-			? `<span style="color:var(--cr-ink-sub);">, ${escapeHtml(facts.credential)}</span>`
-			: ''
+	// The memo card composes `<name><, credential>` as two spans rather than through
+	// `nameWithCredential`, so it needs the SAME duplicate guard — the doubled "MD, MD" was
+	// visible on this card too. Gated on what SURVIVES the dedupe, not on the raw field: a
+	// credential the name already carries must drop the tail span whole, comma and all.
+	const credential = placed('bylineCredentialed') ? dedupeCredential(facts.reviewerName, facts.credential) : ''
+	const credTail = credential ? `<span style="color:var(--cr-ink-sub);">, ${escapeHtml(credential)}</span>` : ''
 	const first = firstNameOf(facts.reviewerName)
 	// The eyebrow + reviewer name row + memo quote are grouped under `memo`; the avatar
-	// inside it is gated on `reviewerPhoto`.
+	// inside it is gated on `reviewerPhoto`. Gated on the memo's CONTENT as well as its
+	// placement (the pattern `bio` already follows): placement alone painted an "Expert
+	// memo" heading over an empty `<p>` for a contract-legal empty memo.
 	const memoAvatar = placed('reviewerPhoto') ? avatar(initials(facts.reviewerName), 46, 13) : ''
-	const memoSection = placed('memo')
-		? `<div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--navy-55);margin-bottom:14px;">Expert memo</div>` +
-			`<div style="display:flex;gap:15px;">${memoAvatar}` +
-			`<div style="flex:1;min-width:0;">` +
-			`<div style="font-size:16px;line-height:1.2;color:var(--cr-ink);"><span style="font-weight:700;">${escapeHtml(facts.reviewerName)}</span>${credTail}</div>` +
-			// Readable, UPRIGHT DM Sans quote (Owen 2026-07-17: the display-serif italic hurt legibility);
-			// pre-line preserves the reviewer's paragraph breaks. No left accent bar (matches the guide).
-			`<p style="margin:11px 0 14px;font-size:15.5px;line-height:1.6;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</p>` +
-			`</div>` +
-			`</div>`
-		: ''
+	const memoSection =
+		placed('memo') && facts.memo
+			? `<div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--navy-55);margin-bottom:14px;">Expert memo</div>` +
+				`<div style="display:flex;gap:15px;">${memoAvatar}` +
+				`<div style="flex:1;min-width:0;">` +
+				`<div style="font-size:16px;line-height:1.2;color:var(--cr-ink);"><span style="font-weight:700;">${escapeHtml(facts.reviewerName)}</span>${credTail}</div>` +
+				// Readable, UPRIGHT DM Sans quote (the display-serif italic hurt legibility);
+				// pre-line preserves the reviewer's paragraph breaks. No left accent bar (matches the guide).
+				`<p style="margin:11px 0 14px;font-size:15.5px;line-height:1.6;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</p>` +
+				`</div>` +
+				`</div>`
+			: ''
 	// The memo footer's profile/certificate actions read as the JetBrains-mono uppercase stamp
-	// that matches the badge footer lockup (Owen 2026-07-17) — navy, so they still read as actions.
+	// that matches the badge footer lockup — navy, so they still read as actions.
 	const profile = placed('profileLink')
 		? profileLink(facts.profileUrl, `${escapeHtml(first)}'s Profile`, STAMP_LINK_STYLE)
 		: ''
@@ -457,7 +521,7 @@ function bannerMemoCard(facts: CertBlockFacts, placed: PlacedTest): string {
 		? certificateLink(facts.certificateUrl, 'Certificate', STAMP_LINK_STYLE)
 		: ''
 	const scope = placed('scopeLine')
-		? `<div style="font-size:13px;color:var(--navy-55);margin-top:8px;line-height:1.5;">${escapeHtml(scopeLine)}</div>`
+		? `<div style="font-size:13px;color:var(--navy-55);margin-top:8px;line-height:1.5;">${escapeHtml(CERT_SCOPE_LINE)}</div>`
 		: ''
 	return (
 		`<div style="border:1px solid var(--navy-10);border-radius:calc(var(--br,14px) * 0.7);padding:24px;font-family:var(--cr-bf);">` +
@@ -480,12 +544,10 @@ function bannerMemoCard(facts: CertBlockFacts, placed: PlacedTest): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode 2 — SIDEBAR: a reviewer card pinned beside the article body
+// Face — SIDEBAR (the DEFAULT): a reviewer card pinned beside the article body
 // ─────────────────────────────────────────────────────────────────────────────
 
 function sidebarCard(facts: CertBlockFacts, placed: PlacedTest): string {
-	const compensationCue = locked(facts.compensationCue, COMPENSATED_EXPERT_CUE)
-	const scopeLine = locked(facts.scopeLine, CERT_SCOPE_LINE)
 	const header = placed('label')
 		? `<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;background:var(--certrev-bar-bg,#0a1b3f);color:var(--certrev-bar-fg,#fff);font-family:var(--font-mono);font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;">${logo(18)} Expert reviewed</div>`
 		: ''
@@ -494,14 +556,17 @@ function sidebarCard(facts: CertBlockFacts, placed: PlacedTest): string {
 		placed('bio') && facts.bio
 			? `<p style="font-size:14px;line-height:1.55;color:var(--cr-ink-soft);margin:16px 0 0;">${escapeHtml(facts.bio)}</p>`
 			: ''
-	const blockquote = placed('memo')
-		? `<blockquote style="margin:16px 0 0;padding-left:16px;border-left:3px solid var(--ba,#0a1b3f);font-size:15px;line-height:1.5;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</blockquote>`
-		: ''
+	// Gated on CONTENT as well as placement (like `bioPara` above) — placement alone rendered
+	// an empty accent-bordered blockquote for a contract-legal empty memo.
+	const blockquote =
+		placed('memo') && facts.memo
+			? `<blockquote style="margin:16px 0 0;padding-left:16px;border-left:3px solid var(--ba,#0a1b3f);font-size:15px;line-height:1.5;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</blockquote>`
+			: ''
 	// Disclosure row: cue + ` · ` + scope; the separator only when BOTH land, the row only when either does.
-	const cueEl = placed('compensationCue')
-		? `<span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(compensationCue)}</span>`
+	const cueEl = showsCompensationCue(facts, placed)
+		? `<span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(COMPENSATED_EXPERT_CUE)}</span>`
 		: ''
-	const scopeEl = placed('scopeLine') ? escapeHtml(scopeLine) : ''
+	const scopeEl = placed('scopeLine') ? escapeHtml(CERT_SCOPE_LINE) : ''
 	const disclosure =
 		cueEl || scopeEl
 			? `<div style="font-size:12.5px;line-height:1.5;color:var(--navy-55);margin-top:16px;">${cueEl}${cueEl && scopeEl ? ' · ' : ''}${scopeEl}</div>`
@@ -546,7 +611,7 @@ function sidebarCard(facts: CertBlockFacts, placed: PlacedTest): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode 3 — FLOATING: a compact pinned pill (a modal pointer, NOT a claim face)
+// Face — FLOATING: a compact pinned pill (a modal pointer, NOT a claim face)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function floatingPill(facts: CertBlockFacts, placed: PlacedTest): string {
@@ -584,10 +649,17 @@ function floatingPill(facts: CertBlockFacts, placed: PlacedTest): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode 4 — CUSTOM: the engine's free-composition face — ONE vertical stack of
-// EXACTLY the placed fields, in canonical order, from the SAME escaped / locked() /
-// data-certrev-* building blocks the locked layouts use (so the ftc-guard + crawl
-// monitor see identical markers). Never consults `rung`.
+// Face — CUSTOM: the engine's free-composition face — ONE vertical stack of
+// EXACTLY the placed fields, in canonical order, from the SAME escaped, constant-fed,
+// `data-certrev-*`-hooked building blocks the locked layouts use, so the custom face
+// carries the same markers as banner/sidebar and the crawl monitor reads them alike.
+//
+// NOT the ftc-guard, though — and the comment here claimed otherwise for as long as the
+// face has existed. `modal/ftc-guard.ts` looks for `data-ftc-line` / `data-ftc-disclosure`
+// hooks, which `CertBadge.tsx` and `render-badge-html.ts` emit and this renderer emits at
+// NONE of its three scope-line sites. The kill switch therefore cannot see anything
+// renderCertBlock produces, on ANY face. Whether it should is a live design question
+// (which surfaces the switch covers) — not something to settle by quietly adding hooks.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function renderCustomFace(facts: CertBlockFacts, placed: PlacedTest): string {
@@ -629,18 +701,18 @@ function renderCustomFace(facts: CertBlockFacts, placed: PlacedTest): string {
 		)
 	}
 
-	// 5. memo (sidebar's blockquote)
-	if (placed('memo')) {
+	// 5. memo (sidebar's blockquote) — placement AND content, like `bio` directly above
+	if (placed('memo') && facts.memo) {
 		parts.push(
 			`<blockquote style="margin:16px 0 0;padding-left:16px;border-left:3px solid var(--ba,#0a1b3f);font-size:15px;line-height:1.5;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</blockquote>`,
 		)
 	}
 
 	// 6. disclosures (sidebar's cue · scope row; separator only when BOTH land)
-	const cueEl = placed('compensationCue')
-		? `<span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(locked(facts.compensationCue, COMPENSATED_EXPERT_CUE))}</span>`
+	const cueEl = showsCompensationCue(facts, placed)
+		? `<span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(COMPENSATED_EXPERT_CUE)}</span>`
 		: ''
-	const scopeEl = placed('scopeLine') ? escapeHtml(locked(facts.scopeLine, CERT_SCOPE_LINE)) : ''
+	const scopeEl = placed('scopeLine') ? escapeHtml(CERT_SCOPE_LINE) : ''
 	if (cueEl || scopeEl) {
 		parts.push(
 			`<div style="font-size:12.5px;line-height:1.5;color:var(--navy-55);margin-top:16px;">${cueEl}${cueEl && scopeEl ? ' · ' : ''}${scopeEl}</div>`,
@@ -671,15 +743,19 @@ function renderCustomFace(facts: CertBlockFacts, placed: PlacedTest): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Render the LOCKED CertREV cert design as an SSR-safe HTML string for one of the
- * three placement modes. Returns a self-contained `<div class="certrev-cert …">`
- * that needs no JS to render (the modal + bio accordion progressively enhance).
+ * Render the LOCKED CertREV cert design as an SSR-safe HTML string for one placement
+ * face. Returns a self-contained `<div class="certrev-cert …">` that needs no JS to
+ * render (the modal + bio accordion progressively enhance).
+ *
+ * `mode` absent or unrecognised ⇒ `sidebar`. Each arm passes its own LITERAL to
+ * `root()` — never `input.mode` — so an untyped `mode` can reach neither the root class
+ * name nor the `data-certrev-mode` attribute.
  */
 export function renderCertBlock(input: RenderCertBlockInput): string {
 	const theme = resolveBlockTheme(input.theme)
-	const { facts, mode, face } = input
+	const { facts, face } = input
 	const placed = placedTester(face)
-	switch (mode) {
+	switch (input.mode) {
 		case 'banner': {
 			// Suppress the memo card entirely when the engine placed none of its fields
 			// (avoids an empty bordered shell). Grandfather: all placed ⇒ card renders.
@@ -687,23 +763,30 @@ export function renderCertBlock(input: RenderCertBlockInput): string {
 				placed('memo') || placed('profileLink') || placed('certificateLink') || placed('scopeLine')
 					? bannerMemoCard(facts, placed)
 					: ''
-			// First-class memo split (POR-10741): default 'full' is byte-identical to the prior
+			// First-class memo split: default 'full' is byte-identical to the prior
 			// header+memo render; 'header'/'memo' emit only that card so the exporter can place
-			// the memo as its own block (retires the CertReviewCard string-split shim).
-			const part = input.part ?? 'full'
+			// the memo as its own block (retires the CertReviewCard string-split shim). An
+			// unknown `part` falls back to 'full' by this written rule, not by a catch-all arm.
+			const part = input.part === 'header' || input.part === 'memo' ? input.part : 'full'
 			const inner =
 				part === 'header'
 					? bannerHeaderCard(facts, placed)
 					: part === 'memo'
 						? memoCard
 						: bannerHeaderCard(facts, placed) + memoCard
-			return root(mode, theme, inner, face)
+			return root('banner', theme, inner, face)
 		}
-		case 'sidebar':
-			return root(mode, theme, sidebarCard(facts, placed), face)
 		case 'floating':
-			return root(mode, theme, floatingPill(facts, placed), face)
+			return root('floating', theme, floatingPill(facts, placed), face)
 		case 'custom':
-			return root(mode, theme, renderCustomFace(facts, placed), face)
+			return root('custom', theme, renderCustomFace(facts, placed), face)
+		// THE default placement, named here and nowhere else: the declared default and the
+		// runtime fallback are the same line, so they cannot drift apart. Naming `sidebar` as a
+		// real case also keeps the exhaustiveness read over CertBlockLayout honest — a reader
+		// sees all four faces handled — while the shared `default:` catches untyped input.
+		// biome-ignore lint/complexity/noUselessSwitchCase: the redundancy IS the mechanism (see above)
+		case 'sidebar':
+		default:
+			return root('sidebar', theme, sidebarCard(facts, placed), face)
 	}
 }

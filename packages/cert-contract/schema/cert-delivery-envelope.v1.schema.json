@@ -91,7 +91,7 @@
 									"fullName": { "type": "string" },
 									"cardLabel": {
 										"type": ["string", "null"],
-										"description": "v0.2 (POR-9738): optional DISPLAY-only byline override; abbreviation stays the stable key."
+										"description": "v0.2: optional DISPLAY-only byline override; abbreviation stays the stable key."
 									},
 									"complianceClass": {
 										"enum": ["free", "gated", "fused", "locked"],
@@ -108,15 +108,15 @@
 						"photoUrl": { "type": ["string", "null"], "format": "uri" },
 						"bio": {
 							"type": ["string", "null"],
-							"description": "v0.2 (POR-9731): the reviewer's QA-VERIFIED short bio (contributors card)."
+							"description": "v0.2: the reviewer's QA-VERIFIED short bio (contributors card)."
 						},
 						"background": {
 							"type": ["string", "null"],
-							"description": "v0.2 (POR-9731): the reviewer's QA-VERIFIED long background (profile modal body)."
+							"description": "v0.2: the reviewer's QA-VERIFIED long background (profile modal body)."
 						},
 						"compensationCue": {
 							"type": ["string", "null"],
-							"description": "v0.2 (POR-10496 / POR-9731): first-class, pre-composed material-connection cue ('Compensated expert'); null for a pro-bono reviewer."
+							"description": "v0.2: first-class, pre-composed material-connection cue ('Compensated expert'); null for a pro-bono reviewer."
 						}
 					}
 				},
@@ -130,11 +130,11 @@
 						"photoUrl": {
 							"type": ["string", "null"],
 							"format": "uri",
-							"description": "v0.2 (POR-9731): author headshot URL."
+							"description": "v0.2: author headshot URL."
 						},
 						"bio": {
 							"type": ["string", "null"],
-							"description": "v0.2 (POR-9731): author short bio (verified-only, contributors card)."
+							"description": "v0.2: author short bio (verified-only, contributors card)."
 						}
 					}
 				},
@@ -160,11 +160,11 @@
 				"display": { "$ref": "#/$defs/CertDisplayConfig" },
 				"articleTitle": {
 					"type": ["string", "null"],
-					"description": "v0.5 (POR-10481): the certified article's title (certificate modal 'Certifies the article' block). Optional + omit-when-undefined; wired onto the signed bytes in v0.5."
+					"description": "v0.5: the certified article's title (certificate modal 'Certifies the article' block). Optional + omit-when-undefined; wired onto the signed bytes in v0.5."
 				},
 				"displayCertId": {
 					"type": ["string", "null"],
-					"description": "v0.5 (POR-10481): display-only pretty cert id (CR-YYYY-NNNN) for the modal meta row; a deterministic derivation of certId+year, not a second identity (verifyUrl is the real link)."
+					"description": "v0.5: display-only pretty cert id (CR-YYYY-NNNN) for the modal meta row; a deterministic derivation of certId+year, not a second identity (verifyUrl is the real link)."
 				}
 			}
 		},

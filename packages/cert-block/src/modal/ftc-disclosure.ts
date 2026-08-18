@@ -1,7 +1,7 @@
 /**
  * The verbatim FTC material-connection + scope disclosure line — a BYTE-FAITHFUL relocation of
- * the (tree-shaken) `FTC_DISCLOSURE_LINE` from portal `src/lib/embed/ftc-disclosure.ts`
- * (POR-9317 / POR-10721 W2). Legally load-bearing: the curly apostrophe (U+2019) in "article’s"
+ * the (tree-shaken) `FTC_DISCLOSURE_LINE` from the portal's embed disclosure
+ * module. Legally load-bearing: the curly apostrophe (U+2019) in "article’s"
  * is byte-exact; a reword is a contract divergence.
  *
  * Kept as its OWN module (imported by both ftc-guard + display-strings, exactly as in portal) so

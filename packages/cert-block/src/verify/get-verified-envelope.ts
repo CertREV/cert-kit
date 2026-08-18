@@ -16,11 +16,23 @@
  * JSON-LD; `{ decision: 'suppress', reason }` → render NOTHING. Any error (network,
  * malformed JSON, throwing resolver) collapses to a `suppress` verdict — never throws
  * into the render path, never renders an unverified credential.
+ *
+ * `verdict.reason` is the ONLY signal a consumer gets when a badge does not appear (this
+ * package logs nothing), so every failure path here reports what ACTUALLY failed rather than
+ * a convenient catch-all. Every fetch also carries a deadline: a hung origin fails closed at
+ * `timeoutMs` instead of holding the render open (see ./fetch-with-deadline).
  */
 
-import type { CertDeliveryEnvelope, CertVerdict, RenderContext, ResolvePublicKeyByKid } from '../contract/kernel.js'
-import { verifyEnvelope } from '../contract/kernel.js'
+import type {
+	CertDeliveryArtifact,
+	CertSuppressReason,
+	CertVerdict,
+	RenderContext,
+	ResolvePublicKeyByKid,
+} from '../contract/kernel.js'
+import { verifyArtifact } from '../contract/kernel.js'
 import { TtlCache } from './cache.js'
+import { DEFAULT_FETCH_TIMEOUT_MS, fetchWithDeadline } from './fetch-with-deadline.js'
 
 /** Where the signed envelope comes from. Exactly one of the two source shapes. */
 export type EnvelopeSource =
@@ -32,12 +44,13 @@ export type EnvelopeSource =
 			readonly platform: string
 			readonly externalId: string
 	  }
-	/** PUSH/native: an envelope already read from a Shopify app-owned metafield (or any
+	/** PUSH/native: an artifact already read from a Shopify app-owned metafield (or any
 	 *  native store). The caller fetched it via the Storefront API; we just verify it. The
-	 *  value may be the parsed envelope or its JSON string (metafields store strings). */
+	 *  value may be the parsed artifact — a full envelope OR the slim revocation tombstone —
+	 *  or its JSON string (metafields store strings). */
 	| {
 			readonly kind: 'metafield'
-			readonly value: CertDeliveryEnvelope | string | null | undefined
+			readonly value: CertDeliveryArtifact | string | null | undefined
 	  }
 
 export interface GetVerifiedEnvelopeOptions {
@@ -45,33 +58,58 @@ export interface GetVerifiedEnvelopeOptions {
 	/** kid → public-key resolver (see ./resolve-kid). Required: no verify without keys. */
 	readonly resolveKid: ResolvePublicKeyByKid
 	/** Render context: the platform + externalId this edge IS, plus optional live hash. */
-	readonly context: Omit<RenderContext, 'now'> & { readonly now?: Date }
+	readonly context: RenderContext
 	/** Injectable fetch for tests / non-global-fetch runtimes. */
 	readonly fetchImpl?: typeof fetch
 	/** Cache override (per-instance). Defaults to the module-level shared cache. */
 	readonly cache?: TtlCache<CertVerdict>
-	/** Positive verdict TTL ms (default 60_000). */
+	/** TTL in ms for a RENDER verdict written by this call (default: the cache's own positive
+	 *  TTL — 60_000 on the shared cache). A suppress verdict keeps the cache's short negative
+	 *  TTL regardless, so a longer `ttlMs` can never make a transient failure sticky. */
 	readonly ttlMs?: number
+	/** Deadline in ms for the Delivery API fetch (default `DEFAULT_FETCH_TIMEOUT_MS`, 3s).
+	 *  Ignored by the metafield source, which does no I/O. */
+	readonly timeoutMs?: number
 }
 
 /** Module-level shared cache so all calls in a process coordinate by default. */
 const sharedVerdictCache = new TtlCache<CertVerdict>({ ttlMs: 60_000, negativeTtlMs: 5_000 })
 
-function suppress(
-	reason: CertVerdict extends { decision: 'suppress' }
-		? never
-		: Extract<CertVerdict, { decision: 'suppress' }>['reason'],
-): CertVerdict {
+function suppress(reason: CertSuppressReason): CertVerdict {
 	return { decision: 'suppress', reason }
 }
 
-function parseEnvelope(value: CertDeliveryEnvelope | string | null | undefined): CertDeliveryEnvelope | null {
-	if (value == null) return null
-	if (typeof value !== 'string') return value
+/**
+ * What sourcing produced: an artifact to verify, or the TRUTHFUL reason it produced none.
+ *
+ * WHY a reason per failure, and why these reasons: the verdict's `reason` is the only thing a
+ * consumer sees when a badge silently doesn't render. Every sourcing failure used to collapse
+ * to 'unsupported_contract_version', which is FALSE for a 404 and for an unreachable origin —
+ * it sends whoever is debugging to inspect a contractVersion that was never in play.
+ *
+ * `CertSuppressReason` (owned by @certrev/cert-contract) has no member for a TRANSPORT
+ * failure, and inventing one here would be a cross-package contract change. So the mapping
+ * is: nothing is published for this subject → 'subject_mismatch'; a body arrived that could
+ * not be parsed → 'unsupported_contract_version' (true as written); the origin could not be
+ * read at all → 'unsupported_contract_version' as the least-wrong member — it asserts nothing
+ * about the credential itself, which every other member would.
+ */
+type SourceOutcome =
+	| { readonly ok: true; readonly artifact: CertDeliveryArtifact }
+	| { readonly ok: false; readonly reason: CertSuppressReason }
+
+/** Read the artifact out of a metafield value. Never throws. */
+function parseMetafieldValue(value: CertDeliveryArtifact | string | null | undefined): SourceOutcome {
+	// Absent — never certified, or the app cleared the metafield (Shopify writes an empty
+	// string rather than deleting it). Nothing is published for this subject.
+	if (value == null || (typeof value === 'string' && value.trim() === '')) {
+		return { ok: false, reason: 'subject_mismatch' }
+	}
+	if (typeof value !== 'string') return { ok: true, artifact: value }
 	try {
-		return JSON.parse(value) as CertDeliveryEnvelope
+		return { ok: true, artifact: JSON.parse(value) as CertDeliveryArtifact }
 	} catch {
-		return null
+		return { ok: false, reason: 'unsupported_contract_version' }
 	}
 }
 
@@ -98,33 +136,76 @@ function fnv1a(s: string): string {
 }
 
 /** A stable string form of the metafield value for hashing (parsed → canonical-ish JSON). */
-function metafieldValueKey(value: CertDeliveryEnvelope | string | null | undefined): string {
+function metafieldValueKey(value: CertDeliveryArtifact | string | null | undefined): string {
 	if (value == null) return 'null'
 	const s = typeof value === 'string' ? value : JSON.stringify(value)
 	return fnv1a(s)
 }
 
-/** Stable cache key per (source identity × render externalId × envelope value). */
-function cacheKey(source: EnvelopeSource, ctx: RenderContext): string {
-	if (source.kind === 'delivery_api') {
-		return `api:${source.platform}:${source.externalId}`
-	}
-	// Metafield: key on the rendering identity AND a short hash of the envelope value, so a
-	// push update (new envelope at the same placement) busts the entry, and verifying
-	// different envelopes against one render context never collides on a stale verdict.
-	return `mf:${ctx.platform}:${ctx.externalId}:${metafieldValueKey(source.value)}`
+/** WHICH artifact is being verified. For the delivery source that is the full URL — the base
+ *  URL is part of the identity (a staging portal and production serve DIFFERENT envelopes for
+ *  the same platform/externalId); for a metafield it's a hash of the value the caller passed. */
+function sourceKey(source: EnvelopeSource): string {
+	return source.kind === 'delivery_api' ? `api:${deliveryApiUrl(source)}` : `mf:${metafieldValueKey(source.value)}`
 }
 
+/** WHERE it is being rendered. `now` is deliberately NOT part of the key: elapsed time is what
+ *  the TTL already bounds, and keying on an injected clock would turn the cache into a
+ *  permanent miss for every caller that passes one. */
+function placementKey(ctx: RenderContext): string {
+	return `${encodeURIComponent(ctx.platform)}:${encodeURIComponent(ctx.externalId)}`
+}
+
+/** Everything in the key ABOVE the live content hash — one placement, all of its hashes. */
+function placementPrefix(source: EnvelopeSource, ctx: RenderContext): string {
+	return `${sourceKey(source)}|${placementKey(ctx)}|`
+}
+
+/**
+ * Stable cache key per (artifact identity × placement × live content hash) — i.e. every input
+ * the verdict actually depends on. Both source branches now key on the same three things: the
+ * old delivery key (`api:<platform>:<externalId>`) named neither the base URL nor the render
+ * context, so one entry was shared by a staging and a production portal, and — the dangerous
+ * one — a verdict computed while the article matched its `contentDigest` was served for a
+ * later render whose body had DRIFTED, rendering a credential the drift check would have
+ * suppressed. The live hash goes LAST so `invalidateVerdict` can drop a placement by prefix.
+ */
+function cacheKey(source: EnvelopeSource, ctx: RenderContext): string {
+	return `${placementPrefix(source, ctx)}${ctx.liveContentHash ?? '-'}`
+}
+
+/** Fetch the artifact from the Delivery API. Never throws: every failure comes back as the
+ *  truthful suppress reason (see `SourceOutcome`). */
 async function fetchFromDeliveryApi(
 	s: Extract<EnvelopeSource, { kind: 'delivery_api' }>,
 	fetchImpl: typeof fetch,
-): Promise<CertDeliveryEnvelope | null> {
-	const res = await fetchImpl(deliveryApiUrl(s), { headers: { accept: 'application/json' } })
-	if (!res.ok) return null // 404 / 410 (revoked, no longer served) → no envelope → suppress
+	timeoutMs: number,
+): Promise<SourceOutcome> {
+	let res: Response
 	try {
-		return (await res.json()) as CertDeliveryEnvelope
+		res = await fetchWithDeadline(fetchImpl, deliveryApiUrl(s), { headers: { accept: 'application/json' } }, timeoutMs)
 	} catch {
-		return null
+		// Unreachable origin, DNS/TLS failure, or the deadline above. No transport member
+		// exists in the contract enum; this is the least-wrong one.
+		return { ok: false, reason: 'unsupported_contract_version' }
+	}
+	if (res.status === 404 || res.status === 410) {
+		// The API serves nothing for this (platform, externalId): never certified, or the
+		// placement was withdrawn. Revocation of a LIVE cert comes back 200 with a tombstone
+		// so a 4xx here is genuinely "no credential for this subject" — which is
+		// also the question the consumer needs to ask (is this the externalId I think it is?).
+		return { ok: false, reason: 'subject_mismatch' }
+	}
+	if (!res.ok) {
+		// 5xx / 429 / anything else: the origin is failing, not the credential. Transport gap
+		// again — same least-wrong member, and the short negative TTL keeps it recoverable.
+		return { ok: false, reason: 'unsupported_contract_version' }
+	}
+	try {
+		return { ok: true, artifact: (await res.json()) as CertDeliveryArtifact }
+	} catch {
+		// A body arrived and could not be parsed — here the reason is literally true.
+		return { ok: false, reason: 'unsupported_contract_version' }
 	}
 }
 
@@ -144,38 +225,40 @@ export async function getVerifiedEnvelope(opts: GetVerifiedEnvelopeOptions): Pro
 	return cache.getOrLoad(
 		key,
 		async () => {
-			let envelope: CertDeliveryEnvelope | null
-			try {
-				envelope =
-					opts.source.kind === 'delivery_api'
-						? await fetchFromDeliveryApi(opts.source, fetchImpl)
-						: parseEnvelope(opts.source.value)
-			} catch {
-				// Network/JSON failure → fail closed (do NOT render an unverified credential).
-				return suppress('unsupported_contract_version')
-			}
-			if (!envelope) {
-				// No envelope present (never certified / revoked + cleared / 404) → suppress.
-				return suppress('unsupported_contract_version')
-			}
+			const sourced =
+				opts.source.kind === 'delivery_api'
+					? await fetchFromDeliveryApi(opts.source, fetchImpl, opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS)
+					: parseMetafieldValue(opts.source.value)
+			if (!sourced.ok) return suppress(sourced.reason)
+			// `verifyArtifact` — not `verifyEnvelope` — because the Delivery API answers a
+			// revoked cert with the slim signed TOMBSTONE. The envelope-only kernel
+			// still fails closed on one, but it reports it as an unparseable envelope; the
+			// artifact kernel verifies the tombstone's own signature + subject and says
+			// 'revoked', which is both true and the thing a consumer needs to hear.
 			// The kernel itself never throws (it fails closed), but guard the resolver too.
 			try {
-				return await verifyEnvelope(envelope, opts.resolveKid, ctx)
+				return await verifyArtifact(sourced.artifact, opts.resolveKid, ctx)
 			} catch {
 				return suppress('unknown_key')
 			}
 		},
 		isSuppress,
+		opts.ttlMs,
 	)
 }
 
-/** Expose the shared cache so a revocation webhook handler can invalidate proactively. */
+/**
+ * Expose the shared cache so a revocation webhook handler can invalidate proactively. Drops
+ * EVERY entry for this source at this placement, whatever live content hash each was cached
+ * under — the webhook knows the article, never the body hash a given render observed, and an
+ * invalidation that misses because of a hash mismatch is a revoked cert that keeps rendering.
+ */
 export function invalidateVerdict(
 	source: EnvelopeSource,
 	context: RenderContext,
 	cache: TtlCache<CertVerdict> = sharedVerdictCache,
 ): void {
-	cache.delete(cacheKey(source, context))
+	cache.deletePrefix(placementPrefix(source, context))
 }
 
 export { sharedVerdictCache }

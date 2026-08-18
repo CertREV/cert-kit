@@ -163,7 +163,7 @@ const cases = [
 		},
 	},
 	{
-		// POR-10481 — the SLIM tombstone SIGNABLE shape: exactly the fields the detached signature
+		// The SLIM tombstone SIGNABLE shape: exactly the fields the detached signature
 		// covers (kind, contractVersion, subject, revokedAt, revocationReason) — NO certified content.
 		// Proves the tombstone canonicalizes deterministically and gives the render twins an exact
 		// byte target for a revocation artifact. `kind` sorts between `contractVersion` and

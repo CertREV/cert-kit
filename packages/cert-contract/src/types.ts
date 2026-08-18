@@ -132,7 +132,7 @@ export interface CertDisplayConfig {
 /**
  * PER-FIELD COMPLIANCE VOCABULARY (v0.2) — the "one deliberate crossing" between the
  * signed envelope (facts) and the design guide (law). Its VOCABULARY lives here (the
- * contract is the canonical source that the portal `design-guide/` field-catalog aligns
+ * contract is the canonical source that the portal's design-guide field catalog aligns
  * to); its VALUES are stamped into the envelope AT MINT — a projection of the guide's law
  * so a render edge enforces the mint-time floor OFFLINE, without fetching the guide.
  *
@@ -163,7 +163,7 @@ export type ComplianceClass = 'free' | 'gated' | 'fused' | 'locked'
 export interface CertCredential {
 	readonly abbreviation: string
 	readonly fullName: string
-	/** POR-9738: optional DISPLAY-only byline override; the byline renders
+	/** Optional DISPLAY-only byline override; the byline renders
 	 *  `cardLabel ?? abbreviation`, but the `abbreviation` stays the stable key. Formalized
 	 *  in v0.2 (already stamped on the wire by the portal — additive, byte-neutral). */
 	readonly cardLabel?: string | null
@@ -184,14 +184,14 @@ export interface CertContent {
 		readonly credentials: ReadonlyArray<CertCredential>
 		readonly profileUrl: string | null
 		readonly photoUrl: string | null
-		/** v0.2 (POR-9731): the reviewer's QA-VERIFIED short bio (inline on the contributors
+		/** v0.2: the reviewer's QA-VERIFIED short bio (inline on the contributors
 		 *  card). Formalized from the portal-side extension it already rode as — additive +
 		 *  byte-neutral (`expert` is copied by reference into the signed content). */
 		readonly bio?: string | null
-		/** v0.2 (POR-9731): the reviewer's QA-VERIFIED long background (the profile modal
+		/** v0.2: the reviewer's QA-VERIFIED long background (the profile modal
 		 *  body copy). Same verified-only + wire-safe rules as `bio`. */
 		readonly background?: string | null
-		/** v0.2 (POR-10496 / POR-9731) — THE COMPENSATION FACT, first-class.
+		/** v0.2 — THE COMPENSATION FACT, first-class.
 		 *  A FINISHED, pre-composed material-connection cue (`Compensated expert`), derived
 		 *  from the FROZEN `certifications.compensated` flag; `null` for a pro-bono reviewer
 		 *  (the edge omits the cue). Never re-assembled brand-side. Already stamped untyped by
@@ -201,10 +201,10 @@ export interface CertContent {
 	readonly author: {
 		readonly name: string
 		readonly title: string | null
-		/** v0.2 (POR-9731): author headshot URL — formalized from the portal-side extension
+		/** v0.2: author headshot URL — formalized from the portal-side extension
 		 *  it already rode as (additive, byte-neutral). */
 		readonly photoUrl?: string | null
-		/** v0.2 (POR-9731): author short bio (verified-only, rendered on the contributors card). */
+		/** v0.2: author short bio (verified-only, rendered on the contributors card). */
 		readonly bio?: string | null
 	}
 	/** Expert first-person memo as plain text/markdown (edge sanitizes/escapes).
@@ -218,12 +218,12 @@ export interface CertContent {
 	 *  truth — the local badge is a bounded-stale snapshot; this link is live. */
 	readonly verifyUrl: string
 	/**
-	 * v0.4 (POR-10102 / POR-10481) — the certified article's TITLE (the certificate modal's
+	 * v0.4 — the certified article's TITLE (the certificate modal's
 	 * "Certifies the article" block). A TOP-LEVEL content fact the portal's `assembleCertFacts`
 	 * already targets (`assemble-cert-mint-source.ts`); formalized here so the contract type
 	 * declares it. Optional + byte-neutral: pre-v0.4 envelopes omit it and verify unchanged.
 	 *
-	 * v0.5 (POR-10481) — WIRED onto the signed wire. Unlike the nested `expert.*` / `author.*`
+	 * v0.5 — WIRED onto the signed wire. Unlike the nested `expert.*` / `author.*`
 	 * extensions (which reach the signed bytes for free because `buildPayload` copies those objects
 	 * wholesale), a top-level `content` extension only rides once `buildPayload` (signer.ts) enumerates
 	 * it — which it now does (omit-when-undefined, mirroring `display`). So a mint that supplies
@@ -232,7 +232,7 @@ export interface CertContent {
 	 */
 	readonly articleTitle?: string | null
 	/**
-	 * v0.4 (POR-10102 / POR-10481) — a pretty DISPLAY-ONLY certificate id (`CR-YYYY-NNNN`) for the
+	 * v0.4 — a pretty DISPLAY-ONLY certificate id (`CR-YYYY-NNNN`) for the
 	 * modal meta row: a deterministic derivation of `certId` + the certified year, NOT a second
 	 * identity (the real verifiable link is always `verifyUrl`). Same TOP-LEVEL placement,
 	 * byte-neutrality, and `buildPayload` thread-through caveat as `articleTitle` above.
@@ -298,9 +298,9 @@ export interface CertDeliveryEnvelope {
 	readonly signature: CertSignature
 }
 
-// ── Tombstone — the slim revocation artifact (POR-10481) ─────────────────────────
+// ── Tombstone — the slim revocation artifact ────────────────────────────────────
 /**
- * POR-10481 — the SLIM revocation artifact. A revoked placement's Delivery response
+ * The SLIM revocation artifact. A revoked placement's Delivery response
  * should prove "this subject is revoked" and nothing more — it must NOT ship the certified
  * facts (expert identity, credentials, memo, author) that a blanked badge has no business
  * carrying (an avoidable privacy + payload-size leak). So instead of re-minting a full

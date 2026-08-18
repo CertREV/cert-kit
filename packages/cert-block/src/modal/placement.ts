@@ -18,7 +18,7 @@
  *       When no references exist, each falls back to a chrome-aware semantic-landmark / theme-class
  *       scan, with a STYLED end-of-article fallback when nothing matches.
  *   (c) Records the matched tier on each wrap as `data-certrev-placement` — the observability the
- *       pre-launch theme-matrix sweep + the POR-9578 liveness check read, so a silent misplacement
+ *       pre-launch theme-matrix sweep + the liveness check read, so a silent misplacement
  *       becomes an inspectable signal rather than a surprise on a real brand's store.
  *
  * It runs BEFORE the badge re-verify pass and never moves a wrap twice, so the `<certrev-badge>`
@@ -62,8 +62,9 @@ export const TOP_CONTENT_SELECTOR = TOP_ANCHORS.map((a) => a.selector).join(', '
  *  footer, nav, or cart drawer often carries its own `.rte` that precedes the article in document
  *  order — IntelliPure's announcement bar is literally `<div class="announcement__content … rte">`.
  *  `isRenderable` can't reject those (they're visible), so `querySelector('.rte')` returned the
- *  announcement bar and the contributors card was injected there instead of the article (POR-9809 —
- *  "contributors not showing"). Placement scopes anchors out of chrome STRUCTURALLY via this set. */
+ *  announcement bar and the contributors card was injected there instead of the article (the
+ *  "contributors not showing" regression). Placement scopes anchors out of chrome STRUCTURALLY
+ *  via this set. */
 export const SITE_CHROME_SELECTOR =
 	'header, [role="banner"], [class*="announcement"], footer, [role="contentinfo"], nav, [role="navigation"], cart-drawer, .cart-drawer, .drawer, .mini-cart, .modal, [role="dialog"]'
 
@@ -127,7 +128,7 @@ function isRenderable(el: Element): boolean {
  * Whether `el` sits inside SITE CHROME (announcement bar / header / footer / nav / cart drawer /
  * modal). Complements `isRenderable`: chrome anchors are usually VISIBLE, so the visibility guard
  * can't reject them — but a cert wrap must never anchor there. This is the guard that keeps the
- * contributors card out of IntelliPure's `.rte`-classed announcement bar (POR-9809).
+ * contributors card out of IntelliPure's `.rte`-classed announcement bar.
  */
 function isInSiteChrome(el: Element): boolean {
 	return el.closest(SITE_CHROME_SELECTOR) !== null
@@ -143,7 +144,7 @@ function anchorTier(el: Element, anchors: ReadonlyArray<{ readonly selector: str
 
 /**
  * First anchor that exists, is RENDERABLE (not in a hidden drawer/popup), is NOT site chrome (a
- * visible announcement bar / header / nav — POR-9809), and is safely positionable relative to
+ * visible announcement bar / header / nav), and is safely positionable relative to
  * `wrap`. Iterates ALL matches per selector (not just the first in document order) so an unusable
  * early match (a closed drawer's `.rte`, or the announcement bar's) is skipped for the article copy.
  */
@@ -210,7 +211,7 @@ export function placeWrap(doc: Document, wrap: HTMLElement): PlaceResult {
 		// on a certified article) lives INSIDE the body-content container, so `closest(TOP_CONTENT_SELECTOR)`
 		// resolves the exact article `.rte` / `article` / `main` — never a same-classed site-chrome element
 		// that merely precedes the article in document order (IntelliPure's `.rte` announcement bar, which
-		// is visible so isRenderable can't reject it — POR-9809 "contributors not showing"). This also ties
+		// is visible so isRenderable can't reject it — the "contributors not showing" regression). This ties
 		// the card + memo to the SAME article region by construction.
 		const refs = doc.querySelector(REFERENCES_SELECTOR)
 		const owner = refs?.closest(TOP_CONTENT_SELECTOR) ?? null

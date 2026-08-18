@@ -10,6 +10,7 @@
 import type { CertPayload } from '../contract/kernel.js'
 import { safeHttpUrl } from './escape.js'
 import { resolveDisplay } from './format.js'
+import { CERTREV_LINK_REL } from './rel.js'
 
 export interface CertRevBacklinkProps {
 	readonly payload: CertPayload
@@ -28,14 +29,14 @@ export function CertRevBacklink(props: CertRevBacklinkProps) {
 	const rootClass = `${ROOT_CLASS}${props.className ? ` ${props.className}` : ''}`
 	// Typed as a string record (not inline) so the `--certrev-accent` CSS custom property
 	// is accepted — React's CSSProperties rejects arbitrary custom props on an inline literal.
-	const rootStyle: Record<string, string> = { ['--certrev-accent']: display.accentColor, color: display.accentColor }
+	const rootStyle: Record<string, string> = { '--certrev-accent': display.accentColor, color: display.accentColor }
 
 	return (
 		<a
 			className={rootClass}
 			style={rootStyle}
 			href={verifyUrl}
-			rel="noopener"
+			rel={CERTREV_LINK_REL}
 			aria-label="Verify this certification on CertREV"
 		>
 			<svg
@@ -55,7 +56,13 @@ export function CertRevBacklink(props: CertRevBacklinkProps) {
 					strokeWidth="1.8"
 					strokeLinejoin="round"
 				/>
-				<path d="M8.5 12l2.3 2.3L15.5 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+				<path
+					d="M8.5 12l2.3 2.3L15.5 9"
+					stroke="currentColor"
+					strokeWidth="1.8"
+					strokeLinecap="round"
+					strokeLinejoin="round"
+				/>
 			</svg>
 			<span className={`${ROOT_CLASS}__label`}>{props.label ?? 'Verify on CertREV'}</span>
 		</a>

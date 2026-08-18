@@ -10,7 +10,7 @@ import type { CertVerdict } from "@certrev/cert-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type RevalidateDeps, revalidateBadge } from "./revalidate.js";
 
-// NOTE (POR-10721 W2): the "published key sync" cross-check that lived here — asserting the
+// NOTE: the "published key sync" cross-check that lived here — asserting the
 // browser-bundled `CERT_ISSUER_*` (certrev-cert.entry.ts) equals portal's signer
 // `CERT_ENVELOPE_*` — is a CROSS-REPO guard and cannot run in this package (there is no portal
 // signer to compare against). It stays a PORTAL-side test: once portal re-points at the published

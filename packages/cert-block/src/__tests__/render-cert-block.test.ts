@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { CERTREV_LINK_REL } from '../components/rel.js'
 import {
 	CERT_SCOPE_LINE,
 	type CertBlockFace,
@@ -27,8 +28,12 @@ import {
 	renderCertBlock,
 } from '../index.js'
 
-/** A representative, well-formed cert (mirrors the locked-reference sample facts). */
-const FACTS: CertBlockFacts = {
+/**
+ * A representative, well-formed cert (mirrors the locked-reference sample facts).
+ * `satisfies` (not an annotation) so `FACTS.memo` / `FACTS.bio` stay `string` for the
+ * assertions below even though both are OPTIONAL on `CertBlockFacts`.
+ */
+const FACTS = {
 	authorName: 'The Editorial Team',
 	authorTitle: 'Editorial',
 	reviewerName: 'Jane Doe',
@@ -39,7 +44,7 @@ const FACTS: CertBlockFacts = {
 	bio: 'Board-certified dermatologist in San Francisco specializing in photoprotection, skin-cancer prevention, and evidence-based skincare, with fifteen years of clinical practice.',
 	profileUrl: 'https://certrev.com/expert/sample',
 	certificateUrl: 'https://certrev.com/verify/sample',
-}
+} satisfies CertBlockFacts
 
 /** A themed brand (non-navy accent + dark ink + custom corners/surface/font). */
 const THEMED: ResolvedBlockTheme = {
@@ -73,17 +78,26 @@ function visibleText(html: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOCKED disclosures are undroppable — omitted OR empty/whitespace defaults
+// LOCKED disclosures are CONSTANTS — not caller-supplied strings (D7)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('renderCertBlock — LOCKED disclosure strings are undroppable', () => {
+describe('renderCertBlock — LOCKED disclosure strings are constants, not inputs', () => {
 	for (const mode of CLAIM_FACES) {
-		it(`${mode}: an empty/whitespace override of the locked strings falls back to the byte-exact constants`, () => {
+		it(`${mode}: the scope line + credential attribution render byte-exact with nothing supplied`, () => {
+			const html = renderCertBlock({ mode, facts: FACTS })
+			expect(html).toContain(COMPENSATED_EXPERT_CUE)
+			expect(html).toContain(CERT_SCOPE_LINE)
+			expect(html).toContain(CREDENTIAL_VERIFIED_ATTRIBUTION)
+		})
+
+		it(`${mode}: an untyped scopeLine/credentialLine override is INERT — the constants still render`, () => {
+			// Simulates the pre-D7 caller (or untyped CMS JSON) still passing the removed keys.
 			const html = renderCertBlock({
 				mode,
-				facts: { ...FACTS, compensationCue: '', scopeLine: '', credentialLine: '   ' },
+				facts: { ...FACTS, scopeLine: 'We were paid nothing.', credentialLine: 'Self-attested.' } as CertBlockFacts,
 			})
-			expect(html).toContain(COMPENSATED_EXPERT_CUE)
+			expect(html).not.toContain('We were paid nothing.')
+			expect(html).not.toContain('Self-attested.')
 			expect(html).toContain(CERT_SCOPE_LINE)
 			expect(html).toContain(CREDENTIAL_VERIFIED_ATTRIBUTION)
 		})
@@ -111,7 +125,7 @@ describe('renderCertBlock — locked-design snapshots', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// First-class banner memo split (POR-10741) — retires the CertReviewCard string-hack
+// First-class banner memo split — retires the CertReviewCard string-hack
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('renderCertBlock — banner memo split (part)', () => {
@@ -180,29 +194,13 @@ describe('the three LOCKED disclosures render on every CLAIM face', () => {
 			expect(iDate).toBeGreaterThan(iAttribution)
 		})
 
-		it(`${mode}: the disclosures survive even when the caller omits the locked strings`, () => {
-			// Omit compensationCue / scopeLine / credentialLine — they default to the
-			// byte-verbatim mirrored constants (the compliance baseline is never dropped).
+		it(`${mode}: the disclosures render from the constants, with nothing supplied`, () => {
 			const html = renderCertBlock({ mode, facts: FACTS })
 			expect(html).toContain(CERT_SCOPE_LINE)
 			expect(visibleText(html)).toContain(COMPENSATED_EXPERT_CUE)
 			expect(html).toContain(CREDENTIAL_VERIFIED_ATTRIBUTION)
 		})
 	}
-
-	it('the caller-supplied locked strings are rendered verbatim when provided', () => {
-		const html = renderCertBlock({
-			mode: 'banner',
-			facts: {
-				...FACTS,
-				compensationCue: COMPENSATED_EXPERT_CUE,
-				scopeLine: CERT_SCOPE_LINE,
-				credentialLine: CREDENTIAL_VERIFIED_ATTRIBUTION,
-			},
-		})
-		expect(html).toContain(CERT_SCOPE_LINE)
-		expect(html).toContain(CREDENTIAL_VERIFIED_ATTRIBUTION)
-	})
 
 	it('the floating pill is a modal pointer — it makes no claim (no disclosures)', () => {
 		const html = renderCertBlock({ mode: 'floating', facts: FACTS })
@@ -226,7 +224,7 @@ describe('theming', () => {
 		expect(html).toContain('--ba:#0a1b3f')
 		expect(html).toContain('--ba-fg:#ffffff')
 		expect(html).toContain('--br:14px')
-		// The body font is a host-overridable HOOK (POR-10742): the resolved stack is the FALLBACK
+		// The body font is a host-overridable HOOK: the resolved stack is the FALLBACK
 		// inside `--cr-bf:var(--bf,<stack>)`, and the root must NOT hard-declare a bare `--bf:` (which
 		// would shadow a host page's `--bf` and force `!important`).
 		expect(html).toContain(`--cr-bf:var(--bf,${RENDER_BLOCK_FONT_STACKS.sans})`)
@@ -597,7 +595,7 @@ describe('WS-B: per-field subtraction drops exactly that markup', () => {
 	it('banner: omitting bio removes the hidden bio accordion', () => {
 		const html = renderCertBlock({ mode: 'banner', facts: FACTS, face: faceExcept('bio') })
 		expect(html).not.toContain(FACTS.bio)
-		expect(html).not.toContain('certrev-cert__bio')
+		expect(html).not.toContain('acc-bio')
 	})
 
 	it('sidebar: omitting BOTH links removes the entire footer grid', () => {
@@ -654,4 +652,291 @@ describe('WS-B: `rung` is a stamp, never a branch — it never changes visibilit
 			expect(stripRung(a)).toBe(stripRung(b)) // …but nothing else does
 		})
 	}
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P0 — ONE placement default, in ONE place. `mode` is optional and the declared
+// default IS the runtime fallback (the `case 'sidebar':` → `default:` fallthrough),
+// so an untyped CMS `mode` can never fall off the switch and return `undefined` —
+// which used to land in `dangerouslySetInnerHTML` as an empty div (200 OK, card gone).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One element ONLY that face emits — a fingerprint the mode fallback cannot fake. */
+const FACE_FINGERPRINT: Record<CertBlockLayout, string> = {
+	banner: 'Expert memo',
+	sidebar: '>View Profile</a>',
+	floating: 'certrev-cert__pill',
+	custom: 'flex-direction:column;gap:14px;',
+}
+
+describe('P0: placement default — absent or unrecognised `mode` ⇒ sidebar', () => {
+	it('an ABSENT mode renders the sidebar face', () => {
+		expect(renderCertBlock({ facts: FACTS })).toBe(renderCertBlock({ mode: 'sidebar', facts: FACTS }))
+	})
+
+	// The untyped-CMS-JSON shapes: wrong case, empty, a plausible-but-unknown face, the nullish pair.
+	const UNTYPED: readonly (readonly [string, unknown])[] = [
+		['wrong case (Banner)', 'Banner'],
+		['wrong case (SIDEBAR)', 'SIDEBAR'],
+		['empty string', ''],
+		['unknown face (inline)', 'inline'],
+		['null', null],
+		['undefined', undefined],
+	]
+
+	for (const [label, value] of UNTYPED) {
+		it(`an unrecognised mode — ${label} — falls back to sidebar, never an empty render`, () => {
+			const html = renderCertBlock({ mode: value as CertBlockLayout, facts: FACTS })
+			expect(typeof html).toBe('string')
+			expect(html).not.toBe('')
+			expect(html).toContain('data-certrev-mode="sidebar"')
+			expect(html).toContain('class="certrev-cert certrev-cert--sidebar"')
+			expect(html).toContain(FACE_FINGERPRINT.sidebar)
+			expect(html).toBe(renderCertBlock({ mode: 'sidebar', facts: FACTS }))
+		})
+	}
+
+	it('an unrecognised mode cannot inject into the class name or data-certrev-mode', () => {
+		const html = renderCertBlock({ mode: '"><script>alert(1)</script>' as never, facts: FACTS })
+		expect(html).not.toContain('<script>')
+		expect(html).not.toContain('alert(1)')
+		expect(html).toContain('data-certrev-mode="sidebar"')
+		expect(html).toContain('class="certrev-cert certrev-cert--sidebar"')
+	})
+
+	for (const mode of ['banner', 'sidebar', 'floating', 'custom'] as CertBlockLayout[]) {
+		it(`${mode}: a VALID mode still paints its own layout (root class + mode attr + face element)`, () => {
+			const html = renderCertBlock({ mode, facts: FACTS })
+			expect(html).toContain(`class="certrev-cert certrev-cert--${mode}"`)
+			expect(html).toContain(`data-certrev-mode="${mode}"`)
+			expect(html).toContain(FACE_FINGERPRINT[mode])
+		})
+	}
+
+	it('an unrecognised `part` falls back to full (the whole banner card set)', () => {
+		const full = renderCertBlock({ mode: 'banner', part: 'full', facts: FACTS })
+		expect(renderCertBlock({ mode: 'banner', part: 'footer' as never, facts: FACTS })).toBe(full)
+		expect(renderCertBlock({ mode: 'banner', part: null as never, facts: FACTS })).toBe(full)
+	})
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D7 — the compensation cue is a CONSTANT with exactly one meaningful input:
+// `null` ⇒ omit (the pro-bono reviewer, matching modal/cert-modal-view.ts).
+// Any other value is IGNORED — a caller cannot rewrite compliance copy.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('D7: compensationCue — null omits, anything else renders the LOCKED constant', () => {
+	for (const mode of ['banner', 'sidebar', 'custom'] as CertBlockLayout[]) {
+		it(`${mode}: compensationCue: null omits the cue entirely (pro-bono reviewer)`, () => {
+			const html = renderCertBlock({ mode, facts: { ...FACTS, compensationCue: null } })
+			expect(visibleText(html)).not.toContain(COMPENSATED_EXPERT_CUE)
+			// …but the scope line — which makes no compensation claim — is true for volunteers too
+			expect(html).toContain(CERT_SCOPE_LINE)
+		})
+
+		it(`${mode}: a supplied cue string is IGNORED — the locked constant renders instead`, () => {
+			const html = renderCertBlock({ mode, facts: { ...FACTS, compensationCue: 'Independent expert' } })
+			expect(html).not.toContain('Independent expert')
+			expect(visibleText(html)).toContain(COMPENSATED_EXPERT_CUE)
+		})
+	}
+
+	it('sidebar: a null cue drops the separator, leaving the scope line alone in the row', () => {
+		const html = renderCertBlock({ mode: 'sidebar', facts: { ...FACTS, compensationCue: null } })
+		expect(html).toContain(`color:var(--navy-55);margin-top:16px;">${CERT_SCOPE_LINE}</div>`)
+	})
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2-7 — empty content never renders a heading over nothing. This is the pattern
+// `bio` already got right three times in the same file: gate on CONTENT as well
+// as on placement.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('P2-7: an empty memo renders no heading, no empty <p>, no empty blockquote', () => {
+	for (const memo of ['', undefined] as const) {
+		const label = memo === '' ? 'an empty-string memo' : 'an absent memo'
+
+		it(`banner: ${label} drops the "Expert memo" heading and its paragraph`, () => {
+			const html = renderCertBlock({ mode: 'banner', facts: { ...FACTS, memo } })
+			expect(html).not.toContain('Expert memo')
+			expect(html).not.toContain('white-space:pre-line;"></p>')
+			// the memo CARD survives — the profile/certificate actions + scope line still land there
+			expect(html).toContain(CERT_SCOPE_LINE)
+		})
+
+		it(`sidebar: ${label} drops the accent-bordered blockquote`, () => {
+			expect(renderCertBlock({ mode: 'sidebar', facts: { ...FACTS, memo } })).not.toContain('<blockquote')
+		})
+
+		it(`custom: ${label} drops the accent-bordered blockquote`, () => {
+			const html = renderCertBlock({ mode: 'custom', facts: { ...FACTS, memo }, face: FULL_FACE })
+			expect(html).not.toContain('<blockquote')
+		})
+	}
+})
+
+describe('P2-7: an unusable date never asserts a date', () => {
+	for (const bad of ['not-a-date', '', '   ']) {
+		it(`credentialVerifiedAt ${JSON.stringify(bad)}: the attribution stays, the "on <date>" line goes`, () => {
+			const html = renderCertBlock({ mode: 'sidebar', facts: { ...FACTS, credentialVerifiedAt: bad } })
+			expect(html).toContain(CREDENTIAL_VERIFIED_ATTRIBUTION)
+			if (bad.trim()) expect(html).not.toContain(bad)
+			expect(html).not.toContain('">on ')
+		})
+
+		it(`certifiedAt ${JSON.stringify(bad)}: the banner footer drops the bare "Certified" chrome`, () => {
+			const html = renderCertBlock({ mode: 'banner', facts: { ...FACTS, certifiedAt: bad } })
+			expect(visibleText(html)).not.toContain('Certified')
+			if (bad.trim()) expect(html).not.toContain(bad)
+			// the cue shares that footer row and must survive on its own
+			expect(visibleText(html)).toContain(COMPENSATED_EXPERT_CUE)
+		})
+	}
+
+	it('banner: an unusable certifiedAt AND an unplaced cue drop the whole footer row + its hairline', () => {
+		const html = renderCertBlock({
+			mode: 'banner',
+			facts: { ...FACTS, certifiedAt: '' },
+			face: faceExcept('compensationCue'),
+		})
+		expect(html).not.toContain('height:1px;background:var(--navy-10);margin:16px 0 14px;')
+	})
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C6 — the bio accordion. The affordance is gated on there BEING something to
+// expand (WCAG 2.1 4.1.2 / 2.1.1: a focusable "collapsed button" over nothing),
+// and it carries the attribute the REAL handler binds (`data-certrev-acc`, see
+// modal/interactions.ts), not the orphan `data-certrev-bio-toggle`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('C6: the bio accordion is announced only when there is a bio to expand', () => {
+	for (const bio of [undefined, ''] as const) {
+		it(`banner: bio ${JSON.stringify(bio)} ⇒ no role="button", no tabindex, no aria-expanded, no cursor affordance`, () => {
+			const html = renderCertBlock({ mode: 'banner', facts: { ...FACTS, bio } })
+			expect(html).not.toContain('role="button"')
+			expect(html).not.toContain('tabindex')
+			expect(html).not.toContain('aria-expanded')
+			expect(html).not.toContain('aria-label="Read more about')
+			expect(html).not.toContain('data-certrev-acc')
+			expect(html).not.toContain('certrev-cert__caret')
+			expect(html).not.toContain('gap:12px;cursor:pointer;')
+			// the reviewer row itself still renders — it is just not interactive
+			expect(html).toContain('Jane Doe, MD')
+		})
+	}
+
+	it('banner: an engine face that drops `bio` also drops the affordance (placement, not just content)', () => {
+		const html = renderCertBlock({ mode: 'banner', facts: FACTS, face: faceExcept('bio') })
+		expect(html).not.toContain('role="button"')
+		expect(html).not.toContain('aria-expanded')
+		expect(html).not.toContain('data-certrev-acc')
+	})
+
+	it('banner: a bio placed AND present ⇒ the row carries the attribute interactions.ts actually binds', () => {
+		const html = renderCertBlock({ mode: 'banner', facts: FACTS })
+		expect(html).toContain('data-certrev-acc')
+		expect(html).toContain('role="button"')
+		expect(html).toContain('tabindex="0"')
+		expect(html).toContain('aria-expanded="false"')
+		// the revealed element carries the class that handler's `.open .acc-bio` CSS contract targets
+		expect(html).toContain('class="acc-bio"')
+		expect(html).not.toContain('data-certrev-bio-toggle')
+	})
+
+	it('banner: no INLINE display:none on the bio — a class toggle could never undo it', () => {
+		const html = renderCertBlock({ mode: 'banner', facts: FACTS })
+		expect(html).not.toContain('style="display:none;')
+	})
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// E11 — every anchor this package emits points at a CertREV-owned host, so every
+// one of them is qualified as a placed/commercial link (components/rel.ts).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('E11: every emitted anchor is rel-qualified', () => {
+	for (const mode of ['banner', 'sidebar', 'floating', 'custom'] as CertBlockLayout[]) {
+		it(`${mode}: every <a> carries nofollow AND sponsored`, () => {
+			const html = renderCertBlock({ mode, facts: FACTS })
+			const anchors = html.match(/<a\b[^>]*>/g) ?? []
+			expect(anchors.length).toBeGreaterThan(0)
+			for (const a of anchors) {
+				expect(a).toContain(`rel="${CERTREV_LINK_REL}"`)
+				expect(a).toContain('nofollow')
+				expect(a).toContain('sponsored')
+			}
+		})
+
+		it(`${mode}: the bare rel="noopener" is gone`, () => {
+			expect(renderCertBlock({ mode, facts: FACTS })).not.toContain('rel="noopener"')
+		})
+	}
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2-6 — a display name that already carries its own post-nominal must not have
+// the credential appended a SECOND time. The defect is upstream data (portal's
+// `resolveStampReviewerName` skips `cleanExpertDisplayName`, and
+// `package_drafts.expert_display_name` has no CHECK constraint), which reached a live
+// customer page as "Dr. Erik Schraga, MD, MD, EM". This is the render-boundary guard:
+// it removes only what is provably already printed, and it deliberately removes nothing
+// else — deleting a real credential off a compliance-facing card is the worse failure.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The reported production facts: the name carries `MD`, the credential list repeats it. */
+const CARRIED_FACTS = {
+	...FACTS,
+	reviewerName: 'Dr. Erik Schraga, MD',
+	credential: 'MD, EM',
+} satisfies CertBlockFacts
+
+describe('P2-6: a credential the display name already carries is printed once', () => {
+	for (const mode of ['banner', 'sidebar', 'custom'] as CertBlockLayout[]) {
+		it(`${mode}: renders "Dr. Erik Schraga, MD, EM", never the doubled "MD, MD"`, () => {
+			const html = renderCertBlock({ mode, facts: CARRIED_FACTS })
+			expect(html).toContain('Dr. Erik Schraga, MD, EM')
+			expect(html).not.toContain('MD, MD')
+		})
+	}
+
+	it("banner part:'memo': the credential tail drops the repeat, keeping the rest of the list", () => {
+		const memo = renderCertBlock({ mode: 'banner', part: 'memo', facts: CARRIED_FACTS })
+		expect(memo).toContain('<span style="color:var(--cr-ink-sub);">, EM</span>')
+		expect(memo).not.toContain(', MD, EM')
+	})
+
+	it('a credential fully carried by the name leaves no dangling comma', () => {
+		const html = renderCertBlock({
+			mode: 'sidebar',
+			facts: { ...FACTS, reviewerName: 'Jane Doe, MD', credential: 'MD' },
+		})
+		expect(html).toContain('>Jane Doe, MD</div>')
+		expect(html).not.toContain('Jane Doe, MD,')
+	})
+
+	it('"M.D." in the name is the same token as "MD" in the credential', () => {
+		const html = renderCertBlock({
+			mode: 'sidebar',
+			facts: { ...FACTS, reviewerName: 'Erik Schraga, M.D.', credential: 'MD' },
+		})
+		expect(html).toContain('>Erik Schraga, M.D.</div>')
+		expect(html).not.toContain('M.D., MD')
+	})
+
+	it('a name that merely CONTAINS the letters keeps its credential (the false-positive guard)', () => {
+		for (const reviewerName of ['Dr. MDonald', 'Jane Amdahl', 'Md. Rahman']) {
+			const html = renderCertBlock({ mode: 'sidebar', facts: { ...FACTS, reviewerName, credential: 'MD' } })
+			expect(html, reviewerName).toContain(`${reviewerName}, MD`)
+		}
+	})
+
+	it('a legitimately different credential is untouched on every claim face', () => {
+		for (const mode of CLAIM_FACES) {
+			const html = renderCertBlock({ mode, facts: { ...FACTS, reviewerName: 'Dr. Jane Doe', credential: 'PhD, RD' } })
+			expect(html, mode).toContain('Dr. Jane Doe, PhD, RD')
+		}
+	})
 })

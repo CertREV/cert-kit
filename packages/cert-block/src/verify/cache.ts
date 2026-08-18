@@ -13,9 +13,9 @@
  *      still recovering quickly (short negative TTL).
  *
  * It is deliberately tiny + dependency-free (a Map + timestamps) so it runs in any server
- * runtime (Node, edge, workerd). For multi-instance deployments this is per-instance L1;
- * pair with a shared CDN/KV cache (the Delivery API is CDN-cacheable on
- * `lifecycle.revision`) for L2 — see README.
+ * runtime (Node, edge, workerd). For multi-instance deployments this is per-instance L1 and
+ * nothing more: each instance keeps its own copy, so an L2 (the CDN in front of the Delivery
+ * API, which is cacheable on `lifecycle.revision`, or a shared KV) is the caller's to add.
  */
 
 export interface TtlCacheOptions {
@@ -68,8 +68,19 @@ export class TtlCache<V> {
 	 * TTL; if `isNegative(value)` returns true (e.g. a 'suppress' verdict) it's cached
 	 * with the shorter negative TTL so a transient failure recovers fast. A thrown loader
 	 * is NOT cached (it rejects all current waiters and the next call retries).
+	 *
+	 * `positiveTtlMs` overrides the cache's positive TTL FOR THIS WRITE only, so one caller
+	 * can hold a verdict longer/shorter than the cache's default without owning the cache.
+	 * It deliberately does NOT apply to a negative result: a caller asking for a 10-minute
+	 * positive TTL is asking for fewer origin reads, not for a transient failure to be
+	 * remembered for ten minutes (see the negative-TTL rationale in the module header).
 	 */
-	async getOrLoad(key: string, loader: () => Promise<V>, isNegative?: (v: V) => boolean): Promise<V> {
+	async getOrLoad(
+		key: string,
+		loader: () => Promise<V>,
+		isNegative?: (v: V) => boolean,
+		positiveTtlMs?: number,
+	): Promise<V> {
 		const cached = this.peek(key)
 		if (cached !== undefined) return cached
 
@@ -79,7 +90,7 @@ export class TtlCache<V> {
 		const promise = (async () => {
 			const value = await loader()
 			const negative = isNegative ? isNegative(value) : false
-			this.set(key, value, negative)
+			this.set(key, value, negative, negative ? undefined : positiveTtlMs)
 			return value
 		})().finally(() => {
 			this.inflight.delete(key)
@@ -89,20 +100,35 @@ export class TtlCache<V> {
 		return promise
 	}
 
-	/** Insert/overwrite an entry with the appropriate TTL. */
-	set(key: string, value: V, negative = false): void {
+	/** Insert/overwrite an entry. `ttlMsOverride` replaces the TTL this write would otherwise
+	 *  get (positive or negative); omit it for the cache's configured TTLs. */
+	set(key: string, value: V, negative = false, ttlMsOverride?: number): void {
 		if (this.store.size >= this.maxEntries && !this.store.has(key)) {
 			// Evict the oldest inserted key (Map preserves insertion order).
 			const oldest = this.store.keys().next().value
 			if (oldest !== undefined) this.store.delete(oldest)
 		}
-		const ttl = negative ? this.negativeTtlMs : this.ttlMs
+		const configured = negative ? this.negativeTtlMs : this.ttlMs
+		const ttl = ttlMsOverride !== undefined && Number.isFinite(ttlMsOverride) ? ttlMsOverride : configured
 		this.store.set(key, { value, expiresAt: this.now() + ttl, negative })
 	}
 
 	/** Drop a key (e.g. on a known revocation push). */
 	delete(key: string): void {
 		this.store.delete(key)
+	}
+
+	/**
+	 * Drop every key under a prefix. WHY it exists: a cache key identifies everything the
+	 * cached value depends on, which for a verdict includes the live content hash the render
+	 * observed — a fact a revocation webhook does not know. Invalidating by prefix lets the
+	 * webhook drop a placement without having to reconstruct every render context that ever
+	 * cached it.
+	 */
+	deletePrefix(prefix: string): void {
+		for (const key of this.store.keys()) {
+			if (key.startsWith(prefix)) this.store.delete(key)
+		}
 	}
 
 	clear(): void {

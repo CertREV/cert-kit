@@ -2,7 +2,7 @@
  * End-to-end test of the Web Component's Delivery-API verifier with REAL crypto: mint a signed
  * artifact (local Ed25519), stub `fetch` to serve it, and assert createDeliveryVerifier runs the
  * canonical `verifyArtifact` kernel correctly — render on a good envelope, suppress on a subject
- * mismatch, `suppress:'revoked'` on the SLIM `CertTombstone` (POR-10684 / POR-10481), throw on a
+ * mismatch, `suppress:'revoked'` on the SLIM `CertTombstone`, throw on a
  * 404 (→ the DOM layer keeps the SSR badge). Proves the fetch + URL + verify wiring the
  * unit-mocked revalidate.test.ts stubs out.
  */
@@ -17,7 +17,7 @@ import {
 	signTombstone,
 } from "@certrev/cert-contract/signer";
 import { describe, expect, it, vi } from "vitest";
-// Relocated from portal (POR-10721 W2): mint a valid signed envelope with the package's
+// Relocated from portal: mint a valid signed envelope with the package's
 // own fixture (cert-contract-native) instead of portal's `mintCertEnvelope` — the modal
 // package must not depend on portal for its tests.
 import { makeSignedEnvelope } from "../contract/fixtures.js";
@@ -96,7 +96,7 @@ describe("createDeliveryVerifier", () => {
 		expect(verdict.decision).toBe("suppress");
 	});
 
-	it('resolves the SLIM tombstone the control plane serves to `suppress:"revoked"` (POR-10684)', async () => {
+	it('resolves the SLIM tombstone the control plane serves to `suppress:"revoked"`', async () => {
 		const { resolveKid, sign } = signerFor();
 		// The revoked-placement Delivery response: a slim `CertTombstone` (kind: 'tombstone', NO
 		// payload) — what verifyEnvelope used to mis-suppress as 'unsupported_contract_version'.

@@ -36,12 +36,14 @@ export {
 	type ResolvedDisplay,
 	resolveDisplay,
 } from './components/format.js'
-// ── Pre-sales PREVIEW block — static, non-delivery, hard-bounded (POR-10743) ──
+// ── Pre-sales PREVIEW block — static, non-delivery, hard-bounded ──
 export {
 	type PreviewBlockOptions,
 	previewExpiry,
 	renderPreviewBlock,
 } from './components/preview-block.js'
+// ── Link qualification — the `rel` every anchor this package emits carries (read-only) ──
+export { CERTREV_LINK_REL } from './components/rel.js'
 // ── Cert-render BLOCK — the LOCKED 3-mode cert design as an SSR-safe HTML string ──
 export {
 	type CertBlockFace,
@@ -51,7 +53,7 @@ export {
 	type RenderCertBlockInput,
 	renderCertBlock,
 } from './components/render-cert-block.js'
-// ── Design-guide render-def support (WS6: themeable tokens + subtractive visibility) ──
+// ── Design-guide render-def support (themeable tokens + subtractive visibility) ──
 export {
 	accentFg,
 	type BadgeVisibilityFieldId,

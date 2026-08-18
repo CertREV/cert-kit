@@ -62,11 +62,11 @@ export interface CertFacts {
 	 *  no longer assembles a `display` block; when absent, `buildPayload` omits it so the
 	 *  signed bytes carry no `display` key. Kept optional so old callers still verify. */
 	readonly display?: CertContent['display']
-	/** v0.5 (POR-10481) — the certified article's TITLE (the certificate modal's "Certifies the
+	/** v0.5 — the certified article's TITLE (the certificate modal's "Certifies the
 	 *  article" block). Optional + omit-when-undefined: a mint that doesn't set it stays BYTE-IDENTICAL
 	 *  to a pre-v0.5 envelope; a mint that sets it carries the key on the signed `content`. */
 	readonly articleTitle?: string | null
-	/** v0.5 (POR-10481) — a display-only pretty cert id (`CR-YYYY-NNNN`) for the modal meta row: a
+	/** v0.5 — a display-only pretty cert id (`CR-YYYY-NNNN`) for the modal meta row: a
 	 *  deterministic derivation of `certId`+year, NOT a second identity (verifyUrl is the real link).
 	 *  Same omit-when-undefined byte-neutrality as `articleTitle`. */
 	readonly displayCertId?: string | null
@@ -97,7 +97,7 @@ export function buildPayload(input: MintPayloadInput): CertPayload {
 		// to v0.1.x. Never emit `display: undefined` — that would depend on the canonicalizer
 		// dropping undefined keys; omitting the property is unconditionally correct.
 		...(input.facts.display !== undefined ? { display: input.facts.display } : {}),
-		// v0.5 (POR-10481): thread the two TOP-LEVEL content extensions onto the signed bytes. Like
+		// v0.5: thread the two TOP-LEVEL content extensions onto the signed bytes. Like
 		// `display` above, OMIT-when-undefined so a mint that doesn't populate them stays byte-identical
 		// to a pre-v0.5 envelope; only a mint that supplies them carries the keys. (Nested expert.*/
 		// author.* extensions ride for free via the wholesale object copy above; a top-level key must be
@@ -232,7 +232,7 @@ export async function mintEnvelope(input: MintPayloadInput, signWith: SignWith):
 	return { payload, signature }
 }
 
-// ── Mint: the slim revocation tombstone (POR-10481) ───────────────────────────────
+// ── Mint: the slim revocation tombstone ──────────────────────────────────────────
 
 /** The revocation facts a `signTombstone` call binds (the subject is reused verbatim). */
 export interface MintTombstoneInput {
@@ -244,7 +244,7 @@ export interface MintTombstoneInput {
 }
 
 /**
- * POR-10481 — mint the SLIM revocation tombstone: assemble the signable fields, canonicalize
+ * Mint the SLIM revocation tombstone: assemble the signable fields, canonicalize
  * them (RFC-8785 via `canonicalTombstoneBytes`), sign the canonical bytes with the pluggable
  * signer, and assemble the detached-signature tombstone. Mirrors `mintEnvelope` — same
  * `SignWith`, same raw-signature-length assertion (64 for Ed25519), same signer plug (a local

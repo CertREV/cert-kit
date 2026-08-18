@@ -4,19 +4,18 @@
  * layer) + the two always-on COMPLIANCE strings.
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * WS6 of the unified cert-render / design-guide build
- * (~/.claude-account-m/plans/smooth-meandering-graham.md). This is the Builder /
- * headless projection twin's half of the "law-as-code" contract: cert-block is one
- * of the four render surfaces (Shopify Liquid, WordPress PHP, JS engine, and this)
- * that must paint the SAME compliant, optionally-themed badge from the SAME facts.
+ * This is the Builder / headless projection twin's half of the "law-as-code"
+ * contract: cert-block is one of the four render surfaces (Shopify Liquid,
+ * WordPress PHP, JS engine, and this) that must paint the SAME compliant,
+ * optionally-themed badge from the SAME facts.
  *
  * cert-block is a self-contained npm package — it does NOT import the portal's
- * `@/lib/design-guide` enforcement core. Instead it mirrors, at the RENDER edge,
- * the small subset that shape the projection carries:
+ * design-guide enforcement core. Instead it mirrors, at the RENDER edge, the
+ * small subset that shape the projection carries:
  *
  *   1. The four allowlisted THEMEABLE tokens `{accentColor, surface, cornerRadius,
  *      fontSlot}`, emitted as the exact `--certrev-*` CSS custom properties the
- *      Shopify/WordPress engines emit and the WS11 crawl monitor asserts
+ *      Shopify/WordPress engines emit and the crawl monitor asserts
  *      (`--certrev-accent` / `--certrev-surface` / `--certrev-radius` /
  *      `--certrev-font`). Each is RE-VALIDATED here at render time (defense in
  *      depth over the write-path fail-closed gate) against the SAME strict
@@ -42,7 +41,7 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Themeable token vocabulary (mirrors portal src/lib/design-guide/tokens.ts)
+// Themeable token vocabulary (mirrors the portal's design-guide token module)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** The font ENUM. Resolves to a FIXED slot stack — never a free-form family. */
@@ -52,9 +51,9 @@ export type FontSlot = (typeof FONT_SLOTS)[number]
 /**
  * The `fontSlot` → fixed font-stack literal — the render-def theme map the webcomponent MODAL
  * (`resolveRenderTheme` → `renderBadgeHtml`) and the legacy `<CertBadge>` resolve. The three original
- * slots (sans/serif/system) stay BYTE-IDENTICAL to the Shopify Liquid engine's stacks
- * (`shopify/extensions/certrev-schema/snippets/certrev-badge.liquid`), so a themed brand's popup modal
- * and its inline Liquid card paint the same typography — the load-bearing card==modal invariant.
+ * slots (sans/serif/system) stay BYTE-IDENTICAL to the Shopify Liquid engine's badge-snippet
+ * stacks, so a themed brand's popup modal and its inline Liquid card paint the same
+ * typography — the load-bearing card==modal invariant.
  * grotesk (Plus Jakarta Sans) + mono (JetBrains Mono) are ADDED at the shared guide values —
  * byte-identical to portal `FONT_SLOT_STACKS`, this package's `RENDER_BLOCK_FONT_STACKS`, and the
  * Liquid twin's added branches — so card == modal holds for them too. A raw family string in a
@@ -203,8 +202,8 @@ export function isFieldHidden(def: CertRenderDef | undefined, id: BadgeVisibilit
 // map pins them to the guide table; grotesk/mono are byte-identical across both.
 
 /**
- * The full portal font-slot enum (mirrors portal `src/lib/design-guide/tokens.ts`
- * `FONT_SLOTS`). `grotesk` ⇐ the guide's wordmark slot; `mono` ⇐ the label slot.
+ * The full portal font-slot enum (mirrors the portal design-guide's `FONT_SLOTS`).
+ * `grotesk` ⇐ the guide's wordmark slot; `mono` ⇐ the label slot.
  */
 export const RENDER_BLOCK_FONT_SLOTS = ['sans', 'serif', 'system', 'grotesk', 'mono'] as const
 export type RenderBlockFontSlot = (typeof RENDER_BLOCK_FONT_SLOTS)[number]
@@ -244,7 +243,7 @@ function parseHexColor(hex: string): { r: number; g: number; b: number } | null 
 
 /**
  * AUTO-CONTRAST PICKER — the ink painted over an opaque fill. BYTE-FAITHFUL to the portal's
- * `accentFg` (src/lib/design-guide/tokens.ts): Rec.601 perceptual luma with a strict `> 0.62`
+ * design-guide `accentFg`: Rec.601 perceptual luma with a strict `> 0.62`
  * cutoff, returning EXACTLY `#141414` (near-black) or `#ffffff`; an unparseable value falls back
  * to the dark ink (safe default). Used at the render edge to DERIVE `barInkFg` from a themed
  * `barInk` (v2 Phase 1), so the bar foreground always clears its own fill with no separate stored

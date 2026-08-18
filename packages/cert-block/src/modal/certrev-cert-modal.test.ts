@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 /**
- * Unit tests — the `<certrev-cert-modal>` kill-switch decision (POR-10101 / POR-10684).
+ * Unit tests — the `<certrev-cert-modal>` kill-switch decision.
  *
  * `isArtifactSuppressed` is the modal-side lifecycle gate: a fetched Delivery-API artifact that is
  * REVOKED (the slim `CertTombstone` OR a legacy envelope with `revokedAt` set) or EXPIRED must NOT
  * render "verified" content. The route-integration + control-plane tests prove the tombstone is
  * SERVED and cryptographically verifies to `suppress:'revoked'`; this pins the modal's consumption
  * of it — including the SLIM tombstone (no payload), which a `payload.lifecycle` read alone would
- * miss so `markSuppressed()` would never fire (POR-10684).
+ * miss so `markSuppressed()` would never fire.
  */
 
 import type {
@@ -36,7 +36,7 @@ function envelope(
 	} as unknown as CertDeliveryEnvelope;
 }
 
-/** A SLIM revocation tombstone (POR-10481): `kind: 'tombstone'`, subject + revocation facts, NO payload. */
+/** A SLIM revocation tombstone: `kind: 'tombstone'`, subject + revocation facts, NO payload. */
 function tombstone(): CertTombstone {
 	return {
 		kind: "tombstone",
@@ -53,8 +53,8 @@ describe("isArtifactSuppressed (modal kill-switch)", () => {
 		expect(isArtifactSuppressed(envelope({}))).toBe(false);
 	});
 
-	it('a SLIM tombstone (kind: "tombstone", no payload) → suppressed (POR-10684)', () => {
-		// The whole point of POR-10684: a slim tombstone has NO `payload.lifecycle`, so the old
+	it('a SLIM tombstone (kind: "tombstone", no payload) → suppressed', () => {
+		// The whole point of the tombstone gate: a slim tombstone has NO `payload.lifecycle`, so the old
 		// payload-only read returned false and markSuppressed() never fired. `isTombstone` catches it.
 		expect(isArtifactSuppressed(tombstone())).toBe(true);
 	});
@@ -80,15 +80,15 @@ describe("isArtifactSuppressed (modal kill-switch)", () => {
 	});
 });
 
-describe("<certrev-cert-modal> markSuppressed on a fetched slim tombstone (POR-10684)", () => {
+describe("<certrev-cert-modal> markSuppressed on a fetched slim tombstone", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
 		document.body.innerHTML = "";
 	});
 
 	it("a fetched slim tombstone → marks the host suppressed AND hides the light-DOM triggers", async () => {
-		// The Delivery API serves a slim tombstone (200, kind: 'tombstone', no payload). Before
-		// POR-10684 the modal read `payload.lifecycle`, missed it, and never called markSuppressed().
+		// The Delivery API serves a slim tombstone (200, kind: 'tombstone', no payload). The modal
+		// used to read `payload.lifecycle`, miss it, and never call markSuppressed().
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(

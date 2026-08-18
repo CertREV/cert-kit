@@ -1,7 +1,7 @@
 /**
  * `<certrev-cert-modal>` — the ONE Shadow-DOM element that renders both in-page cert
- * dialogs (certificate 3a + reviewer 4b) across Shopify / WordPress / Builder
- * (POR-10102). Replaces the three drifting per-platform modal implementations.
+ * dialogs (certificate + reviewer) across Shopify / WordPress / Builder.
+ * Replaces the three drifting per-platform modal implementations.
  *
  * Design:
  *  - One element, one OPEN shadow root, two `<dialog>`s (`#cert`, `#expert`). Public
@@ -53,7 +53,7 @@ function getSharedSheet(): CSSStyleSheet | null {
 
 /**
  * Inject the modal font families once, at document level, on first open — SELF-HOSTED from R2
- * (POR-10657). Declares the shared CERT_FONT_FACE_CSS @font-face block inline instead of loading a
+ * Declares the shared CERT_FONT_FACE_CSS @font-face block inline instead of loading a
  * render-blocking `fonts.googleapis.com` stylesheet (which also leaked the visitor's IP to Google).
  * @font-face at document level resolves across the shadow boundary, so the shadow-DOM modal picks
  * these up exactly as it did the old Google <link>. A crossorigin preconnect warms the R2 origin
@@ -164,16 +164,16 @@ export class CertRevCertModal extends HTMLElement {
 					if (!res.ok) return
 					const artifact = (await res.json()) as CertDeliveryArtifact
 					// A 200 may be a REVOCATION — either the SLIM `CertTombstone` the control plane now
-					// serves for a revoked placement (POR-10481, no payload) or a legacy envelope with
+					// serves for a revoked placement (no payload) or a legacy envelope with
 					// `revokedAt` set — plus an EXPIRED envelope. The Delivery API serves those signed so
-					// the edge SUPPRESSES rather than fail-opening on a 404 (POR-10101). Never render
+					// the edge SUPPRESSES rather than fail-opening on a 404. Never render
 					// "verified" content from a revoked/expired artifact.
 					if (isArtifactSuppressed(artifact)) {
 						this.markSuppressed()
 						return
 					}
 					// Not suppressed → a live envelope (a tombstone always suppresses above); `isTombstone`
-					// narrows the union so the payload read is type-safe (POR-10684).
+					// narrows the union so the payload read is type-safe.
 					const content = isTombstone(artifact)
 						? undefined
 						: (artifact.payload?.content as CertModalContent | undefined)
@@ -206,7 +206,7 @@ export class CertRevCertModal extends HTMLElement {
 	}
 
 	/**
-	 * The modal kill-switch (POR-10101): a fetched envelope is REVOKED/EXPIRED. Don't open;
+	 * The modal kill-switch: a fetched envelope is REVOKED/EXPIRED. Don't open;
 	 * mark the host suppressed (mirrors the badge revalidation's `data-certrev-suppressed`) and
 	 * hide the light-DOM triggers so a stale click can't re-open a pulled cert. Best-effort DOM.
 	 */
@@ -244,9 +244,9 @@ function safeParseContent(json: string): CertModalContent | null {
 }
 
 /**
- * The modal-side lifecycle gate (POR-10101 / POR-10684): a fetched Delivery-API artifact that is
+ * The modal-side lifecycle gate: a fetched Delivery-API artifact that is
  * REVOKED or EXPIRED must NOT render "verified" content. Two revocation shapes suppress:
- *   • the SLIM `CertTombstone` the control plane serves for a revoked placement (POR-10481) —
+ *   • the SLIM `CertTombstone` the control plane serves for a revoked placement —
  *     detected by the `kind: 'tombstone'` discriminator via `isTombstone`. It carries NO payload,
  *     so a `payload.lifecycle` read alone would MISS it (and `markSuppressed()` would never fire);
  *   • a legacy envelope with `lifecycle.revokedAt` set, or any envelope whose `expiresAt` passed.

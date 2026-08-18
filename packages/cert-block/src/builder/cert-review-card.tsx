@@ -8,7 +8,7 @@
  * `BuilderCertChromeData` projection — so the visible cert chrome renders itself,
  * design-identical to the Shopify Liquid + WordPress PHP faces (same `renderCertBlock`
  * string renderer). This REPLACES the ~200-line hand-rolled component every headless
- * brand copied from the demo (POR-10721 W1).
+ * brand copied from the demo.
  *
  * Improvements over the canary demo's hand-rolled version:
  *  - consumes the CANONICAL `BuilderCertChromeData` (the fused `credentialVerification`
@@ -31,11 +31,15 @@ import { BUILDER_CERT_CHROME_KEYS } from './cert-chrome-data.js'
 export const CERT_COMPONENT_NAME = 'CertREV Cert'
 
 export interface CertReviewCardProps extends Partial<BuilderCertChromeData> {
-	/** Placement face — the ENTRY/editor chooses this, NOT the exporter (not a wire-type field). */
+	/**
+	 * Placement face — the ENTRY/editor chooses this, NOT the exporter (not a wire-type field).
+	 * Absent ⇒ whatever `renderCertBlock` defaults to (`sidebar`); this component names no
+	 * fallback of its own, so there is exactly ONE place the default is written down.
+	 */
 	mode?: CertBlockMode | null
 	/**
 	 * Banner memo placement (not a wire-type field — the ENTRY/editor chooses it). Passed
-	 * straight through to `renderCertBlock`'s first-class `part` (POR-10741): `'full'`
+	 * straight through to `renderCertBlock`'s first-class `part`: `'full'`
 	 * (default) renders header + memo in one block; `'header'`/`'memo'` render only that
 	 * card so the memo can be placed as its own block under the article body. The old
 	 * string-splitting shim is gone — `renderCertBlock` composes each part directly.
@@ -43,59 +47,106 @@ export interface CertReviewCardProps extends Partial<BuilderCertChromeData> {
 	part?: 'full' | 'header' | 'memo' | null
 }
 
-export function CertReviewCard(props: CertReviewCardProps) {
-	const { reviewerName, verifyUrl } = props
-	if (!reviewerName || !verifyUrl) return null // no chrome pre-cert
+/**
+ * Coerce ONE untyped option to renderable text.
+ *
+ * `CertReviewCardProps` is erased at runtime and these options are authored in a VISUAL
+ * EDITOR — a number, an object or an array can sit in any field, and `??` does nothing about
+ * it (`props.memo ?? ''` forwards the number 42 happily). `renderCertBlock` reads its facts as
+ * strings (`.trim()`, `.split()`), so a mistyped option threw INSIDE the SSR render; under
+ * `renderToReadableStream` that aborts the whole article route with zero HTML. A value that is
+ * not text is not copy, so it renders as nothing.
+ */
+function text(value: unknown): string {
+	return typeof value === 'string' ? value : ''
+}
 
-	// The credential + its verification date arrive ONLY as the fused pair, so we can
-	// never obtain one without the other (name-only face when the pair is null, or when
-	// the brand set showCredentials:false). This IS the R1 gate, enforced by the type.
-	const cv = props.credentialVerification ?? null
+/** The same rule where ABSENT and EMPTY are different renders (`authorTitle`, `bio`). */
+function optionalText(value: unknown): string | undefined {
+	return text(value) || undefined
+}
+
+/**
+ * The fused credential pair — accepted ONLY when both halves are present AND both are strings.
+ *
+ * The R1 gate ("a credential never displays without its dated verification") is THIS FUNCTION,
+ * not the type: the pair arrives as untyped CMS JSON, and the old truthiness check keyed the
+ * whole pair off the OBJECT, so `{credential:'MD'}` forwarded `verifiedAt: undefined` into the
+ * renderer and crashed. Anything malformed — a half pair, a bare string, an array, a number
+ * where a date belongs — degrades to the name-only face, which is the honest render of a
+ * delivery whose verification cannot be read.
+ */
+function fusedCredential(pair: BuilderCertChromeData['credentialVerification'] | undefined) {
+	if (!pair || typeof pair !== 'object') return null
+	const credential = text(pair.credential)
+	const verifiedAt = text(pair.verifiedAt)
+	return credential && verifiedAt ? { credential, verifiedAt } : null
+}
+
+export function CertReviewCard(props: CertReviewCardProps) {
+	const reviewerName = text(props.reviewerName)
+	const verifyUrl = text(props.verifyUrl)
+	if (!reviewerName || !verifyUrl) return null // no chrome pre-cert (or an unreadable delivery)
+
+	// Name-only face when the pair is unreadable, or when the brand set showCredentials:false.
 	const showCred = props.display?.showCredentials !== false
-	const withCred = cv && showCred ? cv : null
+	const withCred = showCred ? fusedCredential(props.credentialVerification) : null
 
 	const tokens = props.renderDef?.tokens
 	const theme: Partial<ResolvedBlockTheme> | undefined = tokens
 		? {
-				accentColor: tokens.accentColor,
-				surface: tokens.surface,
-				cornerRadius: tokens.cornerRadius,
-				fontSlot: tokens.fontSlot as ResolvedBlockTheme['fontSlot'] | undefined,
+				accentColor: optionalText(tokens.accentColor),
+				surface: optionalText(tokens.surface),
+				cornerRadius: optionalText(tokens.cornerRadius),
+				fontSlot: optionalText(tokens.fontSlot) as ResolvedBlockTheme['fontSlot'] | undefined,
 				// v2 brand-ink (post-demo): the bar + free-content ink follow the def.
-				barInk: tokens.barInk,
-				inkColor: tokens.inkColor,
+				barInk: optionalText(tokens.barInk),
+				inkColor: optionalText(tokens.inkColor),
 			}
 		: undefined
 
 	const html = renderCertBlock({
-		mode: (props.mode as CertBlockMode) ?? 'banner',
+		// NO fallback here, deliberately: `renderCertBlock` owns the ONE placement default
+		// (absent or unrecognised ⇒ sidebar). This line used to say `?? 'banner'`, and it was
+		// one of THREE layers each naming a default — here, the registered input's helper text,
+		// and the wire type's own doc comment — while the renderer, the only place that actually
+		// paints a face, named none. Three copies of a default is three chances to disagree.
+		mode: props.mode ?? undefined,
 		theme,
-		// First-class banner memo split (POR-10741) — renderCertBlock composes the requested
-		// part directly; no string-splitting. Ignored outside banner mode.
+		// First-class banner memo split — renderCertBlock composes the requested
+		// part directly; no string-splitting. Ignored outside banner mode, and an unrecognised
+		// value is normalised to 'full' there, same as `mode` — not here.
 		...(props.part ? { part: props.part } : {}),
 		facts: {
-			authorName: props.authorName ?? 'Editorial',
-			authorTitle: props.authorTitle ?? undefined,
+			authorName: optionalText(props.authorName) ?? 'Editorial',
+			authorTitle: optionalText(props.authorTitle),
 			reviewerName,
-			credential: withCred ? withCred.credential : '',
-			credentialVerifiedAt: withCred ? withCred.verifiedAt : '',
-			certifiedAt: props.certifiedAt ?? '',
-			memo: props.memo ?? '',
-			bio: props.bio ?? undefined,
-			profileUrl: props.reviewerProfileUrl ?? '',
+			credential: withCred?.credential ?? '',
+			credentialVerifiedAt: withCred?.verifiedAt ?? '',
+			certifiedAt: text(props.certifiedAt),
+			memo: text(props.memo),
+			bio: optionalText(props.bio),
+			profileUrl: text(props.reviewerProfileUrl),
 			certificateUrl: verifyUrl,
-			// Locked strings default byte-verbatim inside renderCertBlock; pass the
-			// delivered cue/scope through so a pro-bono (null-cue) delivery is honored.
-			...(props.compensationCue ? { compensationCue: props.compensationCue } : {}),
-			...(props.scopeLine ? { scopeLine: props.scopeLine } : {}),
+			// The compliance disclosures are CONSTANTS the renderer owns — a delivered cue is
+			// IGNORED (an editor cannot retype the FTC copy into something friendlier), and the
+			// scope line is not forwarded at all. The ONE thing honored is an explicit `null`:
+			// the pro-bono reviewer has no compensation to disclose, so the cue is omitted
+			// rather than replaced by the compensated constant (the modal already gets this
+			// right — a card claiming "Compensated expert" over a volunteer is an FTC-facing
+			// falsehood, not a cosmetic default).
+			compensationCue: props.compensationCue === null ? null : undefined,
 		},
 	})
 
 	return (
 		<div
 			data-certrev-cert-chrome=""
-			data-certrev-strings-version={props.stringsVersion ?? undefined}
-			data-certrev-def-version={props.renderDef?.v ?? undefined}
+			// The two provenance stamps the crawl monitor reads — emitted ONLY when the delivery
+			// carried the right type, so a mistyped option leaves the attribute off instead of
+			// stamping "[object Object]" as a version.
+			data-certrev-strings-version={optionalText(props.stringsVersion)}
+			data-certrev-def-version={typeof props.renderDef?.v === 'number' ? props.renderDef.v : undefined}
 			// biome-ignore lint/security/noDangerouslySetInnerHtml: renderCertBlock is the escaping-safe SSR string renderer
 			dangerouslySetInnerHTML={{ __html: html }}
 		/>
@@ -106,12 +157,28 @@ export function CertReviewCard(props: CertReviewCardProps) {
 // Builder.io registration — inputs SINGLE-SOURCED from the wire-type keys (W1/W3)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The subset of the Builder.io input schema this kit emits. */
+/**
+ * The subset of the Builder.io input schema this kit emits. Every field below is verified
+ * against `@builder.io/sdk-react`'s own `Input` declaration (`types/types/input.d.ts`, 5.2.7) —
+ * a field the SDK ignores would be worse than none, because it READS as configured.
+ */
 export interface BuilderInput {
 	readonly name: string
 	readonly type: 'string' | 'longText' | 'object' | 'boolean' | 'number'
 	readonly friendlyName?: string
 	readonly helperText?: string
+	/** The value Builder pre-fills a freshly-dropped block with (`Input.defaultValue`). */
+	readonly defaultValue?: string
+	/**
+	 * Turns a `string` input into a DROPDOWN of exactly these choices (`Input.enum`). The SDK
+	 * accepts bare strings or `{label, value}` pairs; the kit uses pairs so the editor reads a
+	 * capitalised label while the component still receives its lowercase mode/part literal.
+	 * The ARRAY is deliberately mutable (the entries are not): the SDK types `Input.enum` as a
+	 * mutable array, and a `readonly` one here makes the whole registration un-assignable to
+	 * `RegisteredComponent` — the same reason `inputs` itself is mutable below (verified by
+	 * compiling this shape against the installed SDK's `RegisteredComponent`).
+	 */
+	readonly enum?: { readonly label: string; readonly value: string }[]
 	/** Tucks the input under the editor's "Advanced" reveal (Builder's `Input.advanced`). */
 	readonly advanced?: boolean
 }
@@ -140,6 +207,23 @@ const WIRE_INPUT_TYPE: Record<(typeof BUILDER_CERT_CHROME_KEYS)[number], Builder
 }
 
 /**
+ * The COMPLIANCE-COPY inputs, called what they are.
+ *
+ * `advanced: true` is only a UI fold, so an editor who opens "Advanced" sees these two beside
+ * the rest and reads them as theirs to type in. They are NOT: the renderer paints the locked
+ * `COMPENSATED_EXPERT_CUE` / `CERT_SCOPE_LINE` constants and ignores whatever is here. They
+ * stay REGISTERED because they are wire-type keys — dropping them would change the contract
+ * the portal exporter writes, and would strand the `null` that signals a pro-bono reviewer.
+ * So the fix is truthful labelling, not removal.
+ */
+const WIRE_INPUT_HELPER_TEXT: Partial<Record<(typeof BUILDER_CERT_CHROME_KEYS)[number], string>> = {
+	compensationCue:
+		'System-populated by CertREV. Only its PRESENCE is read (absent = a pro-bono reviewer, so no cue renders); the cue itself is a locked constant, so editing this text changes nothing on the page — and clearing it does not remove the disclosure.',
+	scopeLine:
+		'System-populated by CertREV. The FTC scope line renders byte-verbatim from a locked constant — editing this text changes nothing on the page.',
+}
+
+/**
  * The wire-type inputs — DERIVED from `BUILDER_CERT_CHROME_KEYS`, so the 19-field
  * option set can never drift from the type (the W3 lock asserts name-parity). This
  * kills the demo's hand-maintained 17-entry array.
@@ -147,20 +231,45 @@ const WIRE_INPUT_TYPE: Record<(typeof BUILDER_CERT_CHROME_KEYS)[number], Builder
 export const WIRE_INPUTS: readonly BuilderInput[] = BUILDER_CERT_CHROME_KEYS.map((name) => ({
 	name,
 	type: WIRE_INPUT_TYPE[name],
+	...(WIRE_INPUT_HELPER_TEXT[name] ? { helperText: WIRE_INPUT_HELPER_TEXT[name] } : {}),
 	// Exporter-populated wire fields: collapsed under the editor's "Advanced" reveal so the
 	// Options tab leads with the two placement choices an editor actually makes (mode/part).
 	advanced: true,
 }))
 
-/** Placement inputs — chosen by the entry/editor, NOT emitted by the exporter (not wire-type keys). */
+/**
+ * Placement inputs — chosen by the entry/editor, NOT emitted by the exporter (not wire-type keys).
+ *
+ * `defaultValue` + `enum` are what make these two REAL choices in the editor: a dropdown of the
+ * faces that exist, pre-filled with the same default the renderer applies. They were free-text
+ * with no default before, so the only description of the default was the helper text — which had
+ * drifted from the code (it advertised `banner`; the renderer's default is `sidebar`).
+ */
 export const PLACEMENT_INPUTS: readonly BuilderInput[] = [
 	{
 		name: 'mode',
 		type: 'string',
 		friendlyName: 'Placement',
-		helperText: 'banner (default) · sidebar · floating',
+		helperText: 'sidebar (default) · banner · floating',
+		defaultValue: 'sidebar',
+		enum: [
+			{ label: 'Sidebar', value: 'sidebar' },
+			{ label: 'Banner', value: 'banner' },
+			{ label: 'Floating', value: 'floating' },
+		],
 	},
-	{ name: 'part', type: 'string', friendlyName: 'Banner part', helperText: 'full (default) · header · memo' },
+	{
+		name: 'part',
+		type: 'string',
+		friendlyName: 'Banner part',
+		helperText: 'full (default) · header · memo — banner placement only',
+		defaultValue: 'full',
+		enum: [
+			{ label: 'Full (header + memo)', value: 'full' },
+			{ label: 'Header only', value: 'header' },
+			{ label: 'Memo only', value: 'memo' },
+		],
+	},
 ]
 
 /** A Builder.io custom-component registration (the general shape; the anchor uses the same). */
@@ -207,6 +316,6 @@ export const certRevCertComponent: CertReviewCardRegisteredComponent = {
 	name: CERT_COMPONENT_NAME,
 	component: CertReviewCard,
 	description:
-		'CertREV expert-review cert card. Options are populated by the CertREV exporter — editors choose placement (mode/part) only.',
+		'CertREV expert-review cert card. Options are populated by the CertREV exporter; editors choose placement (mode/part) only.',
 	inputs: [...PLACEMENT_INPUTS, ...WIRE_INPUTS],
 }

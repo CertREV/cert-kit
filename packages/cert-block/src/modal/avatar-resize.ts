@@ -1,15 +1,15 @@
-// ⚠ VENDORED, BYTE-FAITHFUL relocation of portal `src/lib/cert-delivery/avatar-resize.ts`
-// (POR-10721 W2). The body is byte-identical to the source the deployed `certrev-cert.js`
-// was bundled from — keep it that way. Configurable asset origins for other headless
-// brands are a deliberate post-relocation follow-up (byte-parity takes precedence now).
+// ⚠ VENDORED, BYTE-FAITHFUL relocation of the portal's `avatar-resize` module. The body is
+// byte-identical to the source the deployed `certrev-cert.js` was bundled from — keep it that
+// way. Configurable asset origins for other headless brands are a deliberate post-relocation
+// follow-up (byte-parity takes precedence now).
 /**
- * Avatar right-sizing (POR-10470) — the SINGLE source of truth for how a cert contributor/expert
+ * Avatar right-sizing — the SINGLE source of truth for how a cert contributor/expert
  * headshot URL is rewritten to a display-sized derivative. Referenced by the cert MODAL (TS,
  * cert-modal-view.ts), mirrored by the Liquid snippet (certrev-avatar-url.liquid), and by the
- * Cloudflare size-allowlist WAF rule (infra/terraform/cloudflare). Keep the three in lockstep — the
+ * Cloudflare size-allowlist WAF rule. Keep the three in lockstep — the
  * `avatar-resize.test.ts` `SIZES`/param assertions are the tripwire.
  *
- * Architecture (Fable-reviewed): the signed cert envelope carries ONE canonical full-res photoUrl
+ * Architecture: the signed cert envelope carries ONE canonical full-res photoUrl
  * (also the JSON-LD Person.image — never shrunk). Display sizing is a PRESENTATION concern, applied
  * here via Cloudflare Image Resizing on the same zone as assets.certrev.com:
  *   https://assets.certrev.com/cdn-cgi/image/width=W,height=W,fit=cover,format=auto/<path>
@@ -17,20 +17,20 @@
  * allowlist is needed; format=auto serves webp/avif; the transform is cached + billed per-unique.
  *
  * ENABLEMENT GATE (`AVATAR_RESIZE_ENABLED`): OFF until Cloudflare Image Resizing is enabled on the
- * certrev.com zone AND a real photo is verified to resize (POR-10470 gate). While OFF, avatars use
+ * certrev.com zone AND a real photo is verified to resize. While OFF, avatars use
  * the raw canonical URL — byte-identical to today's behavior — so the extension can deploy for the
  * font de-block with ZERO avatar regression (a cdn-cgi/image URL 404s → initials fallback if the
  * feature isn't live). Going live is a one-line flip here + in certrev-avatar-url.liquid, then the
- * raw branch is removed (flag-debt: tracked as the POR-10470 avatar go-live follow-up).
+ * raw branch is removed (flag-debt: the avatar go-live follow-up).
  */
 
 /**
- * Enablement gate — LIVE as of 2026-07-20 (POR-10656). Cloudflare Image Resizing (Transformations)
- * is enabled on the certrev.com zone (`image_resizing = on`), and the size-allowlist WAF rule
- * (ruleset 7c9df62e88cb4713b18f12853651af08) is verified enforcing on `/cdn-cgi/image/` paths — a real
- * photo resizes (`width=84` → 200 image/jpeg) while a disallowed size (`width=999`) is 403-blocked.
+ * Enablement gate — LIVE as of 2026-07-20. Cloudflare Image Resizing (Transformations)
+ * is enabled on the certrev.com zone (`image_resizing = on`), and the size-allowlist WAF rule is
+ * verified enforcing on `/cdn-cgi/image/` paths — a real photo resizes (`width=84` → 200
+ * image/jpeg) while a disallowed size (`width=999`) is 403-blocked.
  * Kept as a one-line kill-switch: flip back to `false` + redeploy to instantly revert to raw URLs if
- * resizing ever misbehaves (removing the raw branch entirely is the flag-debt follow-up, POR-10680).
+ * resizing ever misbehaves (removing the raw branch entirely is the flag-debt follow-up).
  */
 export const AVATAR_RESIZE_ENABLED = true;
 

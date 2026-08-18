@@ -1,5 +1,5 @@
 /**
- * WS6 — design-guide render-def support (themeable tokens + subtractive visibility)
+ * Design-guide render-def support (themeable tokens + subtractive visibility)
  * + the two always-on compliance strings.
  *
  * Two planes, both exercised through the SSR paths (React `renderToStaticMarkup` +
@@ -22,8 +22,8 @@ import {
 	CERT_STRINGS_VERSION,
 	type CertRenderDef,
 	COMPENSATED_EXPERT_CUE,
-	type FontSlot,
 	FONT_STACKS,
+	type FontSlot,
 	isCornerRadius,
 	isFieldHidden,
 	isFontSlot,
@@ -55,7 +55,7 @@ function visibleText(html: string): string {
 // Pure helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('token validators (mirror portal src/lib/design-guide/tokens.ts)', () => {
+describe("token validators (mirror the portal design-guide's)", () => {
 	it('isOpaqueHexColor accepts 3/6-digit hex, rejects alpha / functions / keywords', () => {
 		for (const ok of ['#fff', '#FFFFFF', '#0a1b3f', '#123']) expect(isOpaqueHexColor(ok)).toBe(true)
 		for (const bad of ['#ffff', '#ffffffaa', '#12', '#1234567', 'transparent', 'rgb(0,0,0)', 'red', '', ' #fff'])
@@ -274,7 +274,7 @@ describe('renderBadgeHtml themed (the crawlable string path)', () => {
 		expect(html).toContain('--certrev-accent:#7c3aed')
 	})
 
-	it('un-themed: theme output is BYTE-IDENTICAL to the pre-WS6 single-accent form', () => {
+	it('un-themed: theme output is BYTE-IDENTICAL to the older single-accent form', () => {
 		const html = renderBadgeHtml(payload)
 		expect(html).toContain('style="--certrev-accent:#7c3aed;border-inline-start-color:#7c3aed"')
 		expect(html).not.toContain('--certrev-surface')
