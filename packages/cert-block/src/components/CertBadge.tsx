@@ -15,7 +15,7 @@
  * `'full'` shows the photo, certified/updated dates, and the memo (per display flags). BOTH
  * styles carry the compensation cue + FTC scope line (the always-on compliance disclosures).
  *
- * THEMING (WS6): presentation defaults come from `payload.content.display`; an optional
+ * THEMING: presentation defaults come from `payload.content.display`; an optional
  * `renderDef` prop layers a brand's validated themeable tokens (emitted as `--certrev-*`
  * CSS custom properties) and its subtractive field-visibility on top. No `renderDef` → the
  * CertREV preset default (theme output byte-identical to un-themed).
@@ -23,7 +23,8 @@
 
 import type { CertContent, CertPayload } from '../contract/kernel.js'
 import { safeHttpUrl } from './escape.js'
-import { credentialSuffix, expertNameWithCredentials, formatDate, resolveDisplay } from './format.js'
+import { credentialSuffix, dedupeCredential, expertNameWithCredentials, formatDate, resolveDisplay } from './format.js'
+import { CERTREV_LINK_REL } from './rel.js'
 import {
 	CERT_SCOPE_LINE,
 	CERT_STRINGS_VERSION,
@@ -42,7 +43,7 @@ export interface CertBadgeProps {
 	/** Override the badge style independent of the signed display config. */
 	readonly badgeStyle?: 'full' | 'compact'
 	/**
-	 * The brand render-def (WS6). ABSENT → the badge renders the CertREV preset
+	 * The brand render-def. ABSENT → the badge renders the CertREV preset
 	 * default (fail-safe; theme output byte-identical to un-themed). PRESENT → its
 	 * validated themeable tokens are emitted as `--certrev-*` CSS custom properties
 	 * and its subtractive hide-set removes brand-toggleable fields. Invalid tokens
@@ -79,7 +80,8 @@ function ExpertPhoto({ content, show }: { content: CertContent; show: boolean })
 		<img
 			className={`${ROOT_CLASS}__photo`}
 			src={src}
-			alt={`Photo of ${content.expert.displayName}`}
+			// Decorative: the byline renders the same name as text right beside it.
+			alt=""
 			width={40}
 			height={40}
 			loading="lazy"
@@ -98,7 +100,10 @@ export function CertBadge(props: CertBadgeProps) {
 	const profileUrl = safeHttpUrl(content.expert.profileUrl)
 	const certifiedLabel = formatDate(content.certifiedAt)
 	const updatedLabel = formatDate(content.contentModifiedAt)
-	const suffix = credentialSuffix(content)
+	// Composed name + suffix, so the suffix drops a credential the stored display name already
+	// carries ("Dr. Erik Schraga, MD" + "MD, EM" → one "MD"). `credentialSuffix` stays whole for
+	// callers that render the list away from the name.
+	const suffix = dedupeCredential(content.expert.displayName, credentialSuffix(content))
 	const accent = display.accentColor
 
 	const rootClass = `${ROOT_CLASS} ${ROOT_CLASS}--${style}${props.className ? ` ${props.className}` : ''}`
@@ -107,7 +112,7 @@ export function CertBadge(props: CertBadgeProps) {
 	// A THEMED brand additionally emits the surface/radius/font vars; with no render-def
 	// `themeCssVarDeclarations` is empty, so the un-themed style is byte-identical.
 	const rootStyle: Record<string, string> = {
-		['--certrev-accent']: accent,
+		'--certrev-accent': accent,
 		borderInlineStartColor: accent,
 	}
 	for (const [name, value] of themeCssVarDeclarations(theme)) rootStyle[name] = value
@@ -136,7 +141,7 @@ export function CertBadge(props: CertBadgeProps) {
 					<span className={`${ROOT_CLASS}__byline`}>
 						Reviewed by{' '}
 						{profileUrl ? (
-							<a className={`${ROOT_CLASS}__expert-link`} href={profileUrl} rel="noopener">
+							<a className={`${ROOT_CLASS}__expert-link`} href={profileUrl} rel={CERTREV_LINK_REL}>
 								{expertName}
 							</a>
 						) : (
@@ -189,7 +194,7 @@ export function CertBadge(props: CertBadgeProps) {
 				<span className={`${ROOT_CLASS}__compensated-cue`}>
 					Compensated{' '}
 					{profileUrl ? (
-						<a className={`${ROOT_CLASS}__cue-link`} href={profileUrl} rel="noopener">
+						<a className={`${ROOT_CLASS}__cue-link`} href={profileUrl} rel={CERTREV_LINK_REL}>
 							expert
 						</a>
 					) : (
@@ -205,7 +210,7 @@ export function CertBadge(props: CertBadgeProps) {
 				<a
 					className={`${ROOT_CLASS}__verify`}
 					href={verifyUrl}
-					rel="noopener"
+					rel={CERTREV_LINK_REL}
 					aria-label="Verify this certification on CertREV"
 				>
 					Verify on CertREV

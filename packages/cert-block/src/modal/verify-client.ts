@@ -5,9 +5,9 @@
  * `@certrev/cert-contract` (WebCrypto Ed25519 over RFC-8785 JCS — the same kernel the server +
  * every other edge run). No crypto is reimplemented here.
  *
- * `verifyArtifact` (an internal ticket, cert-contract 0.3.0) dispatches on the `kind: 'tombstone'`
+ * `verifyArtifact` (cert-contract 0.3.0) dispatches on the `kind: 'tombstone'`
  * discriminator: a full `CertDeliveryEnvelope` runs the whole crypto + lifecycle pipeline, while
- * the SLIM `CertTombstone` the control plane now serves for a revoked placement (an internal ticket) —
+ * the SLIM `CertTombstone` the control plane now serves for a revoked placement —
  * which carries NO payload — verifies its own signature + subject and resolves to
  * `suppress:'revoked'`. The old `verifyEnvelope` fails a tombstone's shape-check and returns
  * `suppress:'unsupported_contract_version'` (still a blank badge, but the wrong suppressed-reason

@@ -18,6 +18,7 @@ import { CertJsonLd } from '../components/CertJsonLd.js'
 import { CertRevBacklink } from '../components/CertRevBacklink.js'
 import { CertReview } from '../components/CertReview.js'
 import { ExpertBio } from '../components/ExpertBio.js'
+import { CERTREV_LINK_REL } from '../components/rel.js'
 import { makeMockPayload } from '../contract/fixtures.js'
 
 const payload = makeMockPayload()
@@ -95,7 +96,6 @@ describe('<CertBadge>', () => {
 		const p = makeMockPayload({
 			content: {
 				...payload.content,
-				// biome-ignore lint/suspicious/noTemplateCurlyInString: literal javascript: scheme string for the XSS-drop assertion
 				expert: { ...payload.content.expert, profileUrl: 'javascript:alert(document.cookie)' },
 			},
 		})
@@ -202,5 +202,63 @@ describe('<CertReview> (composite, fail-closed at the component boundary)', () =
 		const html = renderToStaticMarkup(<CertReview verdict={{ decision: 'render', payload }} omitJsonLd />)
 		expect(html).toContain('certrev-badge')
 		expect(html).not.toContain('application/ld+json')
+	})
+})
+
+/** Every `<a` open tag in a rendered string — a SWEEP, so an anchor added later is covered with no edit here. */
+function anchorTags(html: string): readonly string[] {
+	return html.match(/<a\b[^>]*>/g) ?? []
+}
+
+function relTokens(anchorTag: string): readonly string[] {
+	return (/\brel="([^"]*)"/.exec(anchorTag)?.[1] ?? '').split(/\s+/).filter(Boolean)
+}
+
+describe('link qualification — every anchor these components emit (E11)', () => {
+	// The package renders links the brand did not author and cannot edit, on the brand's own
+	// page. Google's link-spam policy calls that placed/paid unless it is qualified, and the
+	// consumer has no seam to qualify it through (no props type exposes `rel`) — so the
+	// qualification has to be unconditional here. Every case is swept, not spot-checked: the
+	// deliverable is that a NEW unqualified anchor fails this test the day it is added.
+	const rendered: ReadonlyArray<readonly [string, string]> = [
+		['<CertBadge> full', renderToStaticMarkup(<CertBadge payload={payload} />)],
+		['<CertBadge> compact', renderToStaticMarkup(<CertBadge payload={payload} badgeStyle="compact" />)],
+		['<CertRevBacklink>', renderToStaticMarkup(<CertRevBacklink payload={payload} />)],
+		['<ExpertBio>', renderToStaticMarkup(<ExpertBio payload={payload} />)],
+		['<CertReview> composite', renderToStaticMarkup(<CertReview verdict={{ decision: 'render', payload }} />)],
+	]
+
+	for (const [name, html] of rendered) {
+		it(`${name}: EVERY anchor carries nofollow + sponsored`, () => {
+			const tags = anchorTags(html)
+			expect(tags.length).toBeGreaterThan(0) // a case that renders no anchor proves nothing
+			for (const tag of tags) {
+				const tokens = relTokens(tag)
+				expect(tokens, tag).toContain('nofollow')
+				expect(tokens, tag).toContain('sponsored')
+			}
+		})
+
+		it(`${name}: EVERY anchor keeps noopener (window-handle hardening is not traded away)`, () => {
+			for (const tag of anchorTags(html)) expect(relTokens(tag), tag).toContain('noopener')
+		})
+	}
+
+	it('qualification does not touch the hrefs — profile + verify targets are byte-unchanged', () => {
+		const badge = renderToStaticMarkup(<CertBadge payload={payload} />)
+		expect(badge).toContain('href="https://certrev.com/verify/cert_fixture_001"')
+		expect(badge).toContain('href="https://certrev.com/experts/jane-doe"')
+		expect(renderToStaticMarkup(<ExpertBio payload={payload} />)).toContain(
+			'href="https://certrev.com/experts/jane-doe"',
+		)
+		expect(renderToStaticMarkup(<CertRevBacklink payload={payload} />)).toContain(
+			'href="https://certrev.com/verify/cert_fixture_001"',
+		)
+	})
+
+	it('every anchor renders the shared constant verbatim — no per-component rel string to drift', () => {
+		for (const [, html] of rendered) {
+			for (const tag of anchorTags(html)) expect(tag, tag).toContain(`rel="${CERTREV_LINK_REL}"`)
+		}
 	})
 })

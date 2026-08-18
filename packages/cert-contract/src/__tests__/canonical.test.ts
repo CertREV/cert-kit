@@ -87,7 +87,7 @@ describe('canonicalization invariants', () => {
 	})
 })
 
-describe('canonicalTombstoneBytes (an internal ticket)', () => {
+describe('canonicalTombstoneBytes', () => {
 	const { vectors } = vectorsFile as {
 		vectors: Array<{ name: string; value: unknown; canonicalHex: string }>
 	}

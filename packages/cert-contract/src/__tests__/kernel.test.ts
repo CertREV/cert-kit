@@ -314,9 +314,9 @@ describe('public-key input encodings', () => {
 	})
 })
 
-// ── Tombstone: the slim revocation artifact (an internal ticket) ───────────────────────────
+// ── Tombstone: the slim revocation artifact ─────────────────────────────────────
 
-describe('tombstone sign + verify (an internal ticket)', () => {
+describe('tombstone sign + verify', () => {
 	const KID = 'test-key-1'
 	let publicKey: KeyObject
 	let privateKey: KeyObject

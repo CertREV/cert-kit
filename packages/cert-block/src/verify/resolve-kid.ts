@@ -20,6 +20,7 @@
 import { base64urlDecode } from '@certrev/cert-contract'
 import type { Ed25519PublicKeyInput, ResolvePublicKeyByKid } from '../contract/kernel.js'
 import { TtlCache } from './cache.js'
+import { DEFAULT_FETCH_TIMEOUT_MS, fetchWithDeadline } from './fetch-with-deadline.js'
 
 /** A static map of kid → public key (PEM string or an explicit input). */
 export type StaticKeySet = Readonly<Record<string, string | Ed25519PublicKeyInput>>
@@ -72,6 +73,9 @@ export interface FetchingKidResolverOptions {
 	readonly jwksUrl: string
 	/** Key-set cache TTL in ms (default 1h — keys rotate rarely). */
 	readonly ttlMs?: number
+	/** Deadline in ms for the JWKS fetch (default `DEFAULT_FETCH_TIMEOUT_MS`, 3s). This fetch
+	 *  is on the render path too — a hung key endpoint must not hold a page open. */
+	readonly timeoutMs?: number
 	/** Injectable fetch for tests / non-global-fetch runtimes. */
 	readonly fetchImpl?: typeof fetch
 }
@@ -88,12 +92,24 @@ export function fetchingKidResolver(opts: FetchingKidResolverOptions): ResolvePu
 
 	async function loadKeySet(): Promise<Map<string, Ed25519PublicKeyInput>> {
 		const map = new Map<string, Ed25519PublicKeyInput>()
-		const res = await fetchImpl(opts.jwksUrl, { headers: { accept: 'application/json' } })
-		if (!res.ok) return map // empty → every kid resolves null → fail closed
-		const doc = (await res.json()) as PublishedKeySetDoc
-		for (const jwk of doc.keys ?? []) {
-			const input = jwkToInput(jwk)
-			if (input && jwk.kid) map.set(jwk.kid, input)
+		try {
+			const res = await fetchWithDeadline(
+				fetchImpl,
+				opts.jwksUrl,
+				{ headers: { accept: 'application/json' } },
+				opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS,
+			)
+			if (!res.ok) return map // empty → every kid resolves null → fail closed
+			const doc = (await res.json()) as PublishedKeySetDoc
+			for (const jwk of doc.keys ?? []) {
+				const input = jwkToInput(jwk)
+				if (input && jwk.kid) map.set(jwk.kid, input)
+			}
+		} catch {
+			// Unreachable / deadline / unreadable body → the EMPTY key set below, negative-cached
+			// briefly. The resolver itself never throws: a kid that cannot be resolved must come
+			// back as null ('unknown_key' — true) rather than as an exception the caller has to
+			// remember to catch.
 		}
 		return map
 	}

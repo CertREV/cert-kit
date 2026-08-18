@@ -1,8 +1,8 @@
 /**
  * FTC disclosure tamper guard for the NATIVE Shopify cert render (iframe→native parity).
  *
- * In the cross-origin iframe model the expert-memo embed inlined `ftcTamperGuardScript()`
- * (src/lib/embed/ftc-disclosure.ts): a kill switch that blanks the memo if the verbatim FTC
+ * In the cross-origin iframe model the expert-memo embed inlined the portal's
+ * `ftcTamperGuardScript()`: a kill switch that blanks the memo if the verbatim FTC
  * material-connection disclosure is stripped, hidden, or altered — making the MSA §3
  * anti-stripping covenant TECHNICALLY enforced, not just contractual. The native memo renders
  * in the host theme's DOM (no sandbox), so without this it would lose that runtime enforcement.
@@ -17,6 +17,13 @@
  *   - On tamper it neutralizes ONLY the memo (never `document.body` — we're in the host page).
  *   - The contributors card is governed by the badge re-verify (`revalidate.ts`), not this guard;
  *     the card carries only the one-word "Compensated" cue, never the guarded disclosure.
+ *   - COVERAGE, and it is narrower than it reads: `.certrev-memo` / `.certrev-memo-wrap` are portal
+ *     LIQUID markup — NOTHING in this package emits either. So the kill switch covers the Liquid
+ *     memo surface and nothing else. `<CertBadge>` and `render-badge-html.ts` emit the same
+ *     `[data-ftc-line]` hook inside a `.certrev-badge` (no memo), and `renderCertBlock` emits no
+ *     hook at all; on those surfaces a pass verifies nothing and says so (`'unguarded'`) rather
+ *     than reporting success, and no observer is installed at all. Widening enforcement to the
+ *     badge is a live design decision, not an omission — see `FtcEnforcementResult`.
  *
  * Pure DOM, no crypto, no network. The expected text is the single source of truth
  * `FTC_DISCLOSURE_LINE` (imported, not copied — so a reword can never desync this guard).
@@ -29,6 +36,21 @@ export const MEMO_SELECTOR = '.certrev-memo'
 export const MEMO_WRAP_SELECTOR = '.certrev-memo-wrap'
 /** Marker on the neutral notice node that replaces a tampered memo (testable / idempotent). */
 export const FTC_NEUTRALIZED_ATTR = 'data-certrev-ftc-neutralized'
+
+/**
+ * Link qualification for the notice's CertREV anchor — a CertREV link on a brand's page that the
+ * brand did not author, so it carries the same qualification as every other anchor this package
+ * emits. Deliberately a LOCAL literal rather than an import of `CERTREV_LINK_REL`
+ * (`../components/rel.ts`): `src/modal/` imports NOTHING from `src/components/` by design — every
+ * shared string here (`ftc-disclosure.ts`, `logo-paths.ts`, `display-strings.ts`) is a modal-local
+ * copy so the browser IIFE never drags the SSR renderer in. `ftc-guard.test.ts` imports the
+ * components constant and asserts this value stays a superset of it, so the copies cannot drift.
+ *
+ * `noreferrer` rides ON TOP of the shared tokens (which omit it): this is the only anchor the
+ * package opens with `target="_blank"`, and it fires from a page whose operator has just stripped
+ * the disclosure — withholding the referrer there is worth the token.
+ */
+const NOTICE_LINK_REL = 'nofollow sponsored noopener noreferrer'
 
 /** Documents already guarded, so a double script-load can't double-bind. */
 const guardedDocs = new WeakSet<Document>()
@@ -65,32 +87,63 @@ export function neutralizeMemo(memo: Element): void {
 		'font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#555;padding:12px;line-height:1.4'
 	notice.innerHTML =
 		'This CertREV verification cannot be displayed because its required disclosure was not shown. ' +
-		'<a href="https://certrev.com" style="color:#555" target="_blank" rel="noopener noreferrer">Learn more</a>.'
+		`<a href="https://certrev.com" style="color:#555" target="_blank" rel="${NOTICE_LINK_REL}">Learn more</a>.`
 	memo.replaceWith(notice)
 }
 
 /**
- * Enforce the disclosure across every memo in the doc: neutralize any whose disclosure isn't
- * intact. A doc with no `.certrev-memo` (no-memo article) is a no-op. Returns true if all memos
- * present were intact (or none existed).
+ * What ONE enforcement pass actually established:
+ *   - `'intact'`    — at least one memo was checked, and every one carried its verbatim, visible line.
+ *   - `'tampered'`  — at least one memo failed the check and was neutralized.
+ *   - `'unguarded'` — the document holds no `.certrev-memo`, so the pass checked nothing.
+ *
+ * `'unguarded'` used to be reported as `true`, indistinguishable from `'intact'`, and that
+ * conflation was a correctness bug, not a cosmetic one: `.certrev-memo` is portal Liquid markup
+ * this package never emits, so on every React / Web Component / `renderCertBlock` surface the pass
+ * finds nothing and answered "all intact" about a disclosure it had never looked at — the kill
+ * switch silently reporting success on exactly the surfaces it does not protect.
+ *
+ * The legitimate no-memo certified article (card only, no memo, no disclosure owed) lands here too,
+ * and the guard genuinely cannot tell the two apart from the DOM alone. That is the point of a
+ * third state rather than a second boolean: "nothing was verified" is the honest answer to both,
+ * and it is the caller — which knows which surface it rendered — that can tell whether that is
+ * expected or a coverage gap.
  */
-export function enforceFtcDisclosure(doc: Document): boolean {
-	let allIntact = true
-	for (const memo of Array.from(doc.querySelectorAll(MEMO_SELECTOR))) {
+export type FtcEnforcementResult = 'intact' | 'tampered' | 'unguarded'
+
+/**
+ * Enforce the disclosure across every memo in the doc: neutralize any whose disclosure isn't
+ * intact. A doc with no `.certrev-memo` is a no-op — see `FtcEnforcementResult` for why that is
+ * `'unguarded'` and not success.
+ */
+export function enforceFtcDisclosure(doc: Document): FtcEnforcementResult {
+	const memos = Array.from(doc.querySelectorAll(MEMO_SELECTOR))
+	if (!memos.length) return 'unguarded'
+	let result: FtcEnforcementResult = 'intact'
+	for (const memo of memos) {
 		if (!isDisclosureIntact(memo)) {
-			allIntact = false
+			result = 'tampered'
 			neutralizeMemo(memo)
 		}
 	}
-	return allIntact
+	return result
 }
 
 /**
  * Install the guard once per document: enforce now (on DOM ready) and re-enforce on later DOM
- * mutations within the memo wrap(s) — so a host script that strips / hides / edits the disclosure
- * after load still trips the kill switch. Scoping the observer to the small `.certrev-memo-wrap`
- * subtree(s) keeps it cheap on a busy storefront page (cf. the iframe, which observed its whole
- * — tiny — body). Idempotent.
+ * mutations within the guarded subtree(s) — so a host script that strips / hides / edits the
+ * disclosure after load still trips the kill switch. Idempotent.
+ *
+ * The observer scope is the memo wrap(s) — placement.ts relocates a wrap as a node, so the observer
+ * tracks it wherever it moves — plus any memo sitting outside a wrap. When the document has
+ * NEITHER, NO observer is installed at all. That bail-out is the whole storefront case, not an edge
+ * one: this package emits neither selector (both are portal Liquid), so the old `<body>` fallback
+ * was the only branch a React / Web Component / `renderCertBlock` page could take, and it pinned a
+ * subtree + attributes + characterData observer — no `attributeFilter`, no coalescing — on the
+ * host's entire page for the life of the tab, re-running an enforce pass on EVERY mutation a busy
+ * storefront makes, to query a selector that could never match. A guard watching a page it cannot
+ * act on is pure cost; `enforceFtcDisclosure`'s `'unguarded'` result is the correctness half of the
+ * same gap.
  */
 export function installFtcGuard(doc: Document): void {
 	if (guardedDocs.has(doc)) return
@@ -104,11 +157,13 @@ export function installFtcGuard(doc: Document): void {
 		run()
 		const MO = doc.defaultView?.MutationObserver
 		if (!MO) return
-		// Observe the stable memo wrap(s) — placement.js relocates the wrap as a node, so the
-		// observer tracks it wherever it moves. Fall back to <body> only if no wrap exists.
+		// The guarded roots: the stable wrap(s), plus any memo not inside one (in the Liquid shape a
+		// wrap always contains its memo, so this is normally just the wraps). No root ⇒ no observer.
 		const wraps = Array.from(doc.querySelectorAll(MEMO_WRAP_SELECTOR))
-		const scope = wraps.length ? wraps : doc.body ? [doc.body] : []
-		for (const node of scope) {
+		const looseMemos = Array.from(doc.querySelectorAll(MEMO_SELECTOR)).filter(
+			(memo) => !memo.closest(MEMO_WRAP_SELECTOR),
+		)
+		for (const node of [...wraps, ...looseMemos]) {
 			const mo = new MO(run)
 			mo.observe(node, { childList: true, subtree: true, characterData: true, attributes: true })
 		}

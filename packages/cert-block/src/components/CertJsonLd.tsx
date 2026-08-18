@@ -14,7 +14,7 @@
  */
 
 import type { CertPayload } from '../contract/kernel.js'
-import { projectCertJsonLd, type ProjectJsonLdOptions, serializeJsonLdForScript } from '../jsonld/project.js'
+import { type ProjectJsonLdOptions, projectCertJsonLd, serializeJsonLdForScript } from '../jsonld/project.js'
 
 export interface CertJsonLdProps extends ProjectJsonLdOptions {
 	readonly payload: CertPayload

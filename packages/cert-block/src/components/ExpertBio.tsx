@@ -8,7 +8,8 @@
 
 import type { CertPayload } from '../contract/kernel.js'
 import { safeHttpUrl } from './escape.js'
-import { resolveDisplay } from './format.js'
+import { credentialSuffix, dedupeCredential, resolveDisplay } from './format.js'
+import { CERTREV_LINK_REL } from './rel.js'
 
 export interface ExpertBioProps {
 	readonly payload: CertPayload
@@ -28,14 +29,16 @@ export function ExpertBio(props: ExpertBioProps) {
 	const photoUrl = display.showExpertPhoto ? safeHttpUrl(expert.photoUrl) : null
 	const Heading = props.headingLevel ?? 'h3'
 	const rootClass = `${ROOT_CLASS}${props.className ? ` ${props.className}` : ''}`
-	const rootStyle: Record<string, string> = { ['--certrev-accent']: display.accentColor }
+	const rootStyle: Record<string, string> = { '--certrev-accent': display.accentColor }
 
+	// Same composition rule as <CertBadge> / renderBadgeHtml: drop a credential the stored
+	// display name already carries, so one payload never reads "Dr. Erik Schraga, MD, MD, EM".
+	// The full list still renders below, away from the name, where every credential belongs.
+	const nameSuffix = dedupeCredential(expert.displayName, credentialSuffix(payload.content))
 	const nameNode = (
 		<Heading className={`${ROOT_CLASS}__name`}>
 			{expert.displayName}
-			{expert.credentials.length > 0 ? (
-				<span className={`${ROOT_CLASS}__credentials`}>, {expert.credentials.map((c) => c.abbreviation).join(', ')}</span>
-			) : null}
+			{nameSuffix ? <span className={`${ROOT_CLASS}__credentials`}>, {nameSuffix}</span> : null}
 		</Heading>
 	)
 
@@ -45,7 +48,9 @@ export function ExpertBio(props: ExpertBioProps) {
 				<img
 					className={`${ROOT_CLASS}__photo`}
 					src={photoUrl}
-					alt={`Photo of ${expert.displayName}`}
+					// Decorative: the name is announced by this aside's aria-label AND rendered as text
+					// immediately below, so alt text repeats it a third time. Matches the modal's avatar.
+					alt=""
 					width={64}
 					height={64}
 					loading="lazy"
@@ -54,7 +59,7 @@ export function ExpertBio(props: ExpertBioProps) {
 			) : null}
 			<div className={`${ROOT_CLASS}__body`}>
 				{profileUrl ? (
-					<a className={`${ROOT_CLASS}__name-link`} href={profileUrl} rel="noopener">
+					<a className={`${ROOT_CLASS}__name-link`} href={profileUrl} rel={CERTREV_LINK_REL}>
 						{nameNode}
 					</a>
 				) : (

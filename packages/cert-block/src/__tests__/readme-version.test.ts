@@ -10,7 +10,8 @@ import { describe, expect, it } from 'vitest'
  *   - cert-contract 0.5.1 was a docs-only release whose entire purpose was unsticking this
  *     stamp ("README Version section brought current (0.4.0 / 0.5.0 were missing)").
  *   - cert-block 0.5.4 bumped package.json and touched nothing else, so the published 0.5.4
- *     tarball ships a README claiming to be 0.5.3. That is live on npm right now.
+ *     tarball ships a README claiming to be 0.5.3. It was `latest` on npm for weeks, until
+ *     0.5.5 shipped this test alongside the correction.
  *
  * Nothing caught either one, because nothing was looking: the stamp is prose, and prose has
  * no compiler. A release step nobody can forget beats a release step written down somewhere.

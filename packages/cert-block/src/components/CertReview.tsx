@@ -22,7 +22,7 @@ export interface CertReviewProps {
 	readonly className?: string
 	readonly badgeStyle?: 'full' | 'compact'
 	/**
-	 * The brand render-def (WS6). Forwarded to `<CertBadge>` for themeable-token
+	 * The brand render-def. Forwarded to `<CertBadge>` for themeable-token
 	 * emission + subtractive visibility; absent → the CertREV preset default. The
 	 * JSON-LD is presentation-blind, so the def never touches the structured data.
 	 */

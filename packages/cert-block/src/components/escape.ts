@@ -12,7 +12,39 @@
  *
  * Everything here is pure and runtime-agnostic (no DOM, no Node APIs) so it runs in a
  * server component, an edge runtime, and the Web Component identically.
+ *
+ * Every helper here is TYPE-HOSTILE-SAFE, and that is load-bearing rather than defensive
+ * habit: these run downstream of `get-verified-envelope.ts`'s bare
+ * `JSON.parse(...) as CertDeliveryEnvelope` cast, and `verifyEnvelope` checks the SIGNATURE,
+ * never the SHAPE — so a number / object / array arrives where the contract promised a
+ * string. A `TypeError` here is not a missing badge: under `renderToReadableStream` it aborts
+ * the whole article route with zero HTML, and the Builder SDK ships no error boundary on its
+ * node/edge builds. So the family's contract is NEVER THROW — see `asText`.
  */
+
+/**
+ * Coerce an untyped value to renderable text. The rule is deliberately narrow:
+ *   • a string passes through untouched — every helper below preserves its exact string
+ *     semantics, because `escapeHtml` is the ONLY XSS boundary four hand-built-HTML
+ *     renderers have and any change to its string output is a security regression;
+ *   • a finite number renders as its digits (a stray count is at least legible copy);
+ *   • EVERYTHING ELSE — null, undefined, booleans, objects, arrays, functions, symbols,
+ *     NaN/Infinity — renders as empty.
+ *
+ * The last clause is the important one, and it is why this is not `String(input)`. Blind
+ * coercion would splice `[object Object]` (or a hostile `toString`'s payload) into the
+ * article body, and on a null-prototype object it throws the very TypeError this exists to
+ * prevent. A value that is not text is not copy; the correct render of it is nothing.
+ *
+ * Exported for `format.ts` only — so a helper there can't drift back to a bare dereference —
+ * and deliberately NOT re-exported from the package entry: an internal invariant, not a
+ * contract surface consumers should build on.
+ */
+export function asText(input: unknown): string {
+	if (typeof input === 'string') return input
+	if (typeof input === 'number') return Number.isFinite(input) ? String(input) : ''
+	return ''
+}
 
 const HTML_ESCAPES: Record<string, string> = {
 	'&': '&amp;',
@@ -23,8 +55,8 @@ const HTML_ESCAPES: Record<string, string> = {
 }
 
 /** Escape text for safe inclusion in HTML element content or double-quoted attributes. */
-export function escapeHtml(input: string): string {
-	return input.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c] ?? c)
+export function escapeHtml(input: string | null | undefined): string {
+	return asText(input).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c] ?? c)
 }
 
 /** Alias kept explicit at call sites where the value lands in an attribute. */
@@ -37,8 +69,7 @@ export const escapeAttribute = escapeHtml
  * Callers treat null as "omit the link".
  */
 export function safeHttpUrl(input: string | null | undefined): string | null {
-	if (!input) return null
-	const trimmed = input.trim()
+	const trimmed = asText(input).trim()
 	if (trimmed === '') return null
 	// Site-relative or protocol-relative URLs are safe (no scheme to abuse).
 	if (trimmed.startsWith('/') || trimmed.startsWith('#') || trimmed.startsWith('?')) return trimmed
@@ -57,8 +88,7 @@ export function safeHttpUrl(input: string | null | undefined): string | null {
  * `url(...)`, or break out of the style attribute. Returns null on anything suspicious.
  */
 export function safeCssColor(input: string | null | undefined): string | null {
-	if (!input) return null
-	const v = input.trim()
+	const v = asText(input).trim()
 	if (v === '') return null
 	if (/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(v)) return v
 	if (/^(?:rgb|rgba|hsl|hsla)\(\s*[0-9.,%\s/]+\)$/.test(v)) return v
@@ -68,5 +98,5 @@ export function safeCssColor(input: string | null | undefined): string | null {
 
 /** Collapse interior whitespace + trim. Used to normalize display text. */
 export function tidyText(input: string | null | undefined): string {
-	return (input ?? '').replace(/\s+/g, ' ').trim()
+	return asText(input).replace(/\s+/g, ' ').trim()
 }
