@@ -4,6 +4,18 @@ The signed-envelope contract. Semver contract: **the canonical byte contract (RF
 the payload) and the fail-closed `VerdictKernel` semantics never change in a patch or minor**;
 payload extensions are additive (old edges suppress unknown shapes: fail-closed by design).
 
+## 0.5.4 · 2026-08-18
+
+- **One thrown-error string loses an em dash.** `canonicalPayloadBytes`' cross-language number
+  guard set one between the failure and the reason; it is now a full stop, because the second half
+  is a complete sentence, and its first word is capitalized to match. The canonical byte contract,
+  the `VerdictKernel` semantics, and every signature this package produces or verifies are
+  untouched: the string is only ever read by a human debugging a payload that already failed.
+- **Why this package is in a cert-block release at all.** `@certrev/cert-block` bundles
+  `canonical.ts` into its browser IIFE, so that string ships to every page the cert modal loads on,
+  not just to a Node consumer of this package. It was the first of ten em dashes found in that
+  bundle. Fixing cert-block alone would have left it on the wire.
+
 ## 0.5.3 · 2026-08-17
 
 - **No executable code changed.** Every `dist/*.js` file is semantically identical to 0.5.2

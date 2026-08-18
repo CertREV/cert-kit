@@ -33,8 +33,12 @@ export const CERT_COMPONENT_NAME = 'CertREV Cert'
 export interface CertReviewCardProps extends Partial<BuilderCertChromeData> {
 	/**
 	 * Placement face — the ENTRY/editor chooses this, NOT the exporter (not a wire-type field).
-	 * Absent ⇒ whatever `renderCertBlock` defaults to (`sidebar`); this component names no
-	 * fallback of its own, so there is exactly ONE place the default is written down.
+	 *
+	 * Absent ⇒ `banner`, via the compatibility bridge in the render body below. That is NOT the
+	 * package default: a direct `renderCertBlock` caller omitting `mode` gets `sidebar`, and
+	 * `sidebar` is the registered input's `defaultValue`, so blocks created in the editor carry
+	 * an explicit `mode`. The bridge covers only entries exported before the exporter emitted
+	 * `mode` at all, and is deleted once those are backfilled. See the render body for why.
 	 */
 	mode?: CertBlockMode | null
 	/**
@@ -106,12 +110,28 @@ export function CertReviewCard(props: CertReviewCardProps) {
 		: undefined
 
 	const html = renderCertBlock({
-		// NO fallback here, deliberately: `renderCertBlock` owns the ONE placement default
-		// (absent or unrecognised ⇒ sidebar). This line used to say `?? 'banner'`, and it was
-		// one of THREE layers each naming a default — here, the registered input's helper text,
-		// and the wire type's own doc comment — while the renderer, the only place that actually
-		// paints a face, named none. Three copies of a default is three chances to disagree.
-		mode: props.mode ?? undefined,
+		// COMPATIBILITY BRIDGE, NOT THE DESIGN. Delete this fallback once the exporter emits an
+		// explicit `mode` and existing entries have been backfilled; until then it must stay.
+		//
+		// `renderCertBlock` owns the ONE placement default (absent or unrecognised ⇒ sidebar) and
+		// that decision STANDS: it is what a direct caller gets, and `sidebar` is the registered
+		// input's `defaultValue`, so every block created in the editor from now on carries an
+		// explicit `mode` and never reaches this line.
+		//
+		// The problem is the entries that already exist. `mode` is a PLACEMENT input, not one of
+		// the 19 wire keys (`BUILDER_CERT_CHROME_KEYS`), and the exporter emits only the wire
+		// projection (`options: { ...certData }`), so every entry exported to date has NO `mode`
+		// key at all. Through 0.5.5 this line read `?? 'banner'` and those entries rendered the
+		// banner face. Removing it in 1.0.0 did not give them the renderer's default in the
+		// abstract; it silently repainted live pages from banner to sidebar, with no entry edit
+		// and no version pin to protect them, because their install line is unpinned.
+		//
+		// So this is a bridge for pre-existing entries, NOT a reversal of the sidebar default.
+		// The three-copies-of-a-default problem that motivated removing it is still real and is
+		// still fixed: the helper text and the wire type's doc comment no longer name a default,
+		// and this line names one only for input the renderer can no longer distinguish from a
+		// deliberate choice. The exporter writing `mode` is what retires it.
+		mode: props.mode ?? 'banner',
 		theme,
 		// First-class banner memo split — renderCertBlock composes the requested
 		// part directly; no string-splitting. Ignored outside banner mode, and an unrecognised

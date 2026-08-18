@@ -203,7 +203,7 @@ export const CERT_MODAL_CSS = `
 	letter-spacing: 0.02em;
 }
 
-/* Certificate — reviewing-expert row */
+/* Certificate · reviewing-expert row */
 .crm-expert-row {
 	display: flex;
 	align-items: center;
@@ -233,7 +233,7 @@ export const CERT_MODAL_CSS = `
 	margin-top: 1px;
 }
 
-/* Certificate — "Certifies the article" */
+/* Certificate · "Certifies the article" */
 .crm-certifies {
 	margin: 18px 0 0;
 	padding-top: 16px;
@@ -257,7 +257,7 @@ export const CERT_MODAL_CSS = `
 	text-wrap: balance;
 }
 
-/* Certificate — meta row */
+/* Certificate · meta row */
 .crm-meta {
 	display: flex;
 	gap: 10px;
@@ -303,7 +303,7 @@ export const CERT_MODAL_CSS = `
 	text-transform: uppercase;
 }
 
-/* Certificate — signature + stamp footer */
+/* Certificate · signature + stamp footer */
 .crm-sig {
 	display: flex;
 	align-items: flex-end;
@@ -383,7 +383,7 @@ export const CERT_MODAL_CSS = `
 	background: var(--cr-ghost-hover);
 }
 
-/* Reviewer — identity row */
+/* Reviewer · identity row */
 .crm-id {
 	display: flex;
 	align-items: center;
@@ -405,7 +405,7 @@ export const CERT_MODAL_CSS = `
 	margin-top: 2px;
 }
 
-/* Reviewer — credential chips */
+/* Reviewer · credential chips */
 .crm-chips {
 	display: flex;
 	flex-wrap: wrap;
@@ -423,7 +423,7 @@ export const CERT_MODAL_CSS = `
 	font-weight: 600;
 }
 
-/* Reviewer — bio */
+/* Reviewer · bio */
 .crm-bio {
 	margin: 16px 0 0;
 	font-size: 0.9rem;
@@ -431,7 +431,7 @@ export const CERT_MODAL_CSS = `
 	color: var(--cr-navy-85);
 }
 
-/* Reviewer — trust line (the disclosure footer below now owns the spacing to the actions) */
+/* Reviewer · trust line (the disclosure footer below now owns the spacing to the actions) */
 .crm-trust {
 	display: flex;
 	align-items: center;
@@ -462,7 +462,7 @@ export const CERT_MODAL_CSS = `
 	color: var(--cr-navy-50);
 }
 
-/* FTC disclosure footer — material-connection cue (compensated only) + scope line
+/* FTC disclosure footer · material-connection cue (compensated only) + scope line
  * (always). Rendered on both the certificate + reviewer dialogs, immediately above the actions. */
 .crm-disclosure {
 	margin-top: 14px;

@@ -5,6 +5,64 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 1.0.3 · 2026-08-18
+
+Patch: restores the placement a pre-existing Builder entry renders. **If you integrated via
+Builder before 1.0.0, upgrade to this from any 1.0.x.**
+
+- **1.0.0 silently repainted already-exported Builder entries from banner to sidebar.** `mode` is
+  a PLACEMENT input, not one of the 19 wire keys, and the exporter emits only the wire projection,
+  so every entry exported to date carries no `mode` key. Through 0.5.5 `CertReviewCard` read
+  `props.mode ?? 'banner'` and those entries rendered the banner face. 1.0.0 removed that fallback
+  so the renderer would own a single default, which changed what those entries paint. Consumers
+  install unpinned, so it reached live pages with no entry edit and no upgrade on their side.
+- **The fallback is restored, as a bridge and not as a reversal.** The sidebar default stands
+  everywhere it was actually the point: a direct `renderCertBlock` caller omitting `mode` still
+  gets sidebar, and `sidebar` is still the registered `defaultValue`, so every block created in
+  the editor from now on carries an explicit `mode` and never reaches the fallback. The bridge
+  covers only entries that predate the exporter emitting `mode`, and is deleted once the exporter
+  writes it and existing entries are backfilled. The registered enum, `defaultValue`, helper text
+  and `render-cert-block.ts` are untouched by this release.
+- **A third gate, of a kind neither existing one could be.** The rendered-surface sweep checks
+  text that IS on a surface; the string-literal rule checks strings that ARE in the source. This
+  regression was the absence of a value: what an entry paints when an input is missing. That is
+  invisible to both, and it is why 1.0.0 shipped green. `builder.test.tsx` now pins the
+  exported-entry shape (no `mode`, and `mode: null`) to the banner face, pins an explicit `mode`
+  as still winning, and pins the direct renderer as still defaulting to sidebar so the bridge can
+  never quietly widen into a package-wide change. Confirmed to fail with the fallback removed.
+- **One editor-facing em dash**, in the design-time anchor placeholder (`builder/index.tsx`), now
+  a colon. It is JSX text rather than a quoted string, so the 1.0.2 literal rule could not see it
+  either; recorded here because it is the same blind spot, not a separate lesson.
+
+## 1.0.2 · 2026-08-18
+
+Patch: copy only, in strings nobody renders. No API change, no type change, no behaviour change.
+
+- **The 1.0.1 sweep checked the wrong layer, and 1.0.1 shipped an em dash anyway.** It reached a
+  reader through the timeout error in `fetchWithDeadline`, which set one between the deadline and
+  the URL and prints into a consumer's console with our name on it. That is visible copy by every
+  test this changelog has been applying, and the 33-surface rendered sweep could not see it, because
+  a thrown error is not a surface anything renders. Found by auditing the published tarball rather
+  than the render. It now uses a middle dot: the URL it appends is labelled data.
+- **Two more in the same class, found by sweeping every string in shipped code rather than the one
+  that was reported.** `renderPreviewBlock`'s missing-`expiresAt` error takes a full stop, because
+  the second half is a complete sentence stating why. Nine CSS section comments inside
+  `CERT_MODAL_CSS` take middle dots: that template literal is injected verbatim into the modal's
+  shadow root, so its comments ship to every page the modal opens on and are readable in devtools,
+  unlike the TypeScript comments around it, which `tsc` emits but nothing displays.
+- **The gate is now two tests, because one could never have been enough.** The rendered sweep and
+  the new string-literal sweep catch disjoint sets: the rendered one sees assembled output but only
+  for surfaces something renders, and the literal one sees every shipped string but cannot tell
+  which ones reach a human. The literal rule lives in `scripts/check-publish-hygiene.mjs`, strips
+  comments with a real tokenizer rather than a regex (the ~795 in comments stay out of scope, and a
+  regex cannot tell `//` in a URL from a comment), skips test files, and runs in CI. Confirmed to
+  fail on all four 1.0.1 strings and pass with them fixed.
+- **A note on how the first check missed the modal bundle.** Grepping the built
+  `dist/modal/certrev-cert.js` for the character returned 0 on 1.0.1, and that was a false negative:
+  esbuild's default `--charset` is ascii, so it emits non-ASCII as a `\u` escape rather than as the
+  character. Ten occurrences were in there. Any future check of a minified artifact has to decode it
+  first; grepping the raw bytes reads as clean no matter what is in it.
+
 ## 1.0.1 · 2026-08-18
 
 Patch: copy only. No API change, no type change, no behaviour change beyond the five characters

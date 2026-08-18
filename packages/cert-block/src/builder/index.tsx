@@ -95,7 +95,7 @@ export function CertRevEditorPlaceholder() {
 				background: '#fff5fa',
 			}}
 		>
-			CertREV Review — <b>resolves at publish</b> from issuer verification. The expert badge appears here once this
+			CertREV Review: <b>resolves at publish</b> from issuer verification. The expert badge appears here once this
 			page’s article is certified, and only while the credential is valid.
 		</div>
 	)

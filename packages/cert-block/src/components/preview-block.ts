@@ -52,7 +52,7 @@ export function previewExpiry(html: string): string | null {
 export function renderPreviewBlock(input: RenderCertBlockInput, options: PreviewBlockOptions): string {
 	const expires = options.expiresAt.trim()
 	if (!expires) {
-		throw new Error('renderPreviewBlock: `expiresAt` is required — a preview must be time-bounded.')
+		throw new Error('renderPreviewBlock: `expiresAt` is required. A preview must be time-bounded.')
 	}
 	// The bound must be REAL — an unparseable expiry is a toothless bound (downstream can't refuse a
 	// stale preview it can't date). Reject anything Date can't parse, so `previewExpiry()` consumers

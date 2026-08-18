@@ -182,7 +182,7 @@ gcloud kms asymmetric-sign --version 1 --key cert-envelope-issuer \
 
 ## Version
 
-Current: `0.5.3`. See [CHANGELOG.md](./CHANGELOG.md).
+Current: `0.5.4`. See [CHANGELOG.md](./CHANGELOG.md).
 
 - `0.5.3` · docs-only. Corrected the crypto section (the VERIFY path is WebCrypto, not `node:crypto`), the API table (subpaths marked; the non-existent `toEd25519PublicKey` removed), the `resolveKid` contract, and the v0.5 `content` shape. No executable code changed from 0.5.2.
 - `0.5.2` · metadata-only. `repository` / `homepage` / `bugs` added, so the npm page links to the public source mirror and the issue tracker.
