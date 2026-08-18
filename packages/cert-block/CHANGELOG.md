@@ -5,6 +5,32 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 1.0.1 · 2026-08-18
+
+Patch: copy only. No API change, no type change, no behaviour change beyond the five characters
+named below.
+
+- **Five em dashes were rendering to readers in 1.0.0.** Two of them on the customer's own article:
+  the expert credential list set one between each abbreviation and its expansion (`MD`, then
+  `Doctor of Medicine`). That is labelled data, so it now uses a middle dot, matching the preview
+  caption and the modal. The other three sat in the
+  Builder editor's helper text, where an editor reads them: one list qualifier takes a full stop
+  (the middle dots already separate the three values, so a fourth would read as a fourth option),
+  one pair of independent clauses takes a comma before `and`, and one consequence clause takes a
+  colon.
+- **Why 1.0.0 shipped with them.** Every guard in place checked PROSE or SOURCE. The prose guard
+  covers the README and this changelog; a source grep cannot tell a string literal that renders
+  from a comment that does not, and this package has ~795 em dashes in comments that are
+  deliberately in scope for neither. So the one thing nobody checked was the output. They were
+  found by rendering the package and grepping what came out, during the mirror leak sweep, after
+  1.0.0 was already immutable on npm.
+- **`rendered-voice.test.tsx` closes it as a gate**, not as something to remember: it renders all
+  33 surfaces (every `mode` × `part`, both badge styles, the pro-bono and empty-memo shapes, the
+  preview, the JSON-LD, both modal dialogs, all five React components, and the Builder
+  registration) and asserts zero em dashes, plus an en dash only between digits. It carries a
+  coverage floor, because an empty render is indistinguishable from a clean one. Confirmed to fail
+  on the 1.0.0 strings, naming each surface and quoting the sentence.
+
 ## 1.0.0 · 2026-08-17
 
 **A major, and the semver contract at the top of this file is why.** It says patch and minor
@@ -141,7 +167,7 @@ surfaces the kill switch *should* cover is an open design question, documented n
   `description` is rewritten to 236 characters, because npm caps the packument description at 255
   and was serving this one cut off mid-word at "…and a".
 
-502 tests, up from 249.
+541 tests, up from 249.
 
 ## 0.5.5 · 2026-07-31
 

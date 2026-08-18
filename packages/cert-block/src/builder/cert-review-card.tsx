@@ -218,9 +218,9 @@ const WIRE_INPUT_TYPE: Record<(typeof BUILDER_CERT_CHROME_KEYS)[number], Builder
  */
 const WIRE_INPUT_HELPER_TEXT: Partial<Record<(typeof BUILDER_CERT_CHROME_KEYS)[number], string>> = {
 	compensationCue:
-		'System-populated by CertREV. Only its PRESENCE is read (absent = a pro-bono reviewer, so no cue renders); the cue itself is a locked constant, so editing this text changes nothing on the page — and clearing it does not remove the disclosure.',
+		'System-populated by CertREV. Only its PRESENCE is read (absent = a pro-bono reviewer, so no cue renders); the cue itself is a locked constant, so editing this text changes nothing on the page, and clearing it does not remove the disclosure.',
 	scopeLine:
-		'System-populated by CertREV. The FTC scope line renders byte-verbatim from a locked constant — editing this text changes nothing on the page.',
+		'System-populated by CertREV. The FTC scope line renders byte-verbatim from a locked constant: editing this text changes nothing on the page.',
 }
 
 /**
@@ -262,7 +262,9 @@ export const PLACEMENT_INPUTS: readonly BuilderInput[] = [
 		name: 'part',
 		type: 'string',
 		friendlyName: 'Banner part',
-		helperText: 'full (default) · header · memo — banner placement only',
+		// A full stop, not a middle dot: the dots already separate the three values, so a fourth
+		// would read as a fourth option rather than as a qualifier on the list.
+		helperText: 'full (default) · header · memo. Banner placement only.',
 		defaultValue: 'full',
 		enum: [
 			{ label: 'Full (header + memo)', value: 'full' },
