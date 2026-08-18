@@ -70,7 +70,9 @@ export function ExpertBio(props: ExpertBioProps) {
 						{expert.credentials.map((c) => (
 							<li key={`${c.abbreviation}:${c.fullName}`} className={`${ROOT_CLASS}__credential`}>
 								<abbr title={c.fullName}>{c.abbreviation}</abbr>
-								<span className={`${ROOT_CLASS}__credential-full`}> — {c.fullName}</span>
+								{/* Middle dot, not an em dash: this is labelled data (abbreviation, then what it
+								    expands to), and it renders on the customer's own article. */}
+								<span className={`${ROOT_CLASS}__credential-full`}> · {c.fullName}</span>
 							</li>
 						))}
 					</ul>
