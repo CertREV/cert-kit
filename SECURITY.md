@@ -6,7 +6,7 @@ The latest published versions of `@certrev/cert-block` and `@certrev/cert-contra
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities privately — either through GitHub's private
+Please report suspected vulnerabilities privately: either through GitHub's private
 vulnerability reporting on this repository, or by email to owen@certrev.com. We aim to
 acknowledge reports within two business days.
 
