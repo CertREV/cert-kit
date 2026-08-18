@@ -46,7 +46,9 @@ export async function fetchWithDeadline(
 	const deadline = new Promise<never>((_, reject) => {
 		timer = setTimeout(() => {
 			controller.abort()
-			reject(new Error(`cert-block: fetch exceeded its ${timeoutMs}ms deadline — ${url}`))
+			// Middle dot, not an em dash: this prints into a consumer's console with our name on it,
+			// so it is visible copy, and the URL it appends is labelled data.
+			reject(new Error(`cert-block: fetch exceeded its ${timeoutMs}ms deadline · ${url}`))
 		}, timeoutMs)
 	})
 

@@ -66,8 +66,8 @@ function assertCrossLangSafeNumbers(value: unknown, path = '$'): void {
 	if (typeof value === 'number') {
 		if (!Number.isInteger(value) || !Number.isSafeInteger(value)) {
 			throw new Error(
-				`canonicalPayloadBytes: number at ${path} (${value}) is not a safe integer — ` +
-					`signed-payload numbers must be safe integers so PHP/Go/Java verifiers reproduce identical canonical bytes`,
+				`canonicalPayloadBytes: number at ${path} (${value}) is not a safe integer. ` +
+					`Signed-payload numbers must be safe integers so PHP/Go/Java verifiers reproduce identical canonical bytes`,
 			)
 		}
 		return

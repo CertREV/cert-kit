@@ -156,8 +156,24 @@ describe('CertReviewCard render + the fused-credential R1 gate', () => {
 })
 
 // ── Hardening wave: one placement default, untyped-CMS input, locked compliance copy ──
+import { type CertBlockFacts, renderCertBlock } from '../../components/render-cert-block.js'
 import { COMPENSATED_EXPERT_CUE } from '../../components/render-def.js'
 import { type CertReviewCardProps, PLACEMENT_INPUTS } from '../index.js'
+
+/** The same delivery as `cardBase`, in the shape a DIRECT `renderCertBlock` caller passes. */
+const directFacts: CertBlockFacts = {
+	authorName: 'Editorial',
+	authorTitle: null,
+	reviewerName: 'Dr. Jane Doe',
+	credential: '',
+	credentialVerifiedAt: '',
+	certifiedAt: '2026-03-08',
+	memo: '',
+	bio: '',
+	profileUrl: '',
+	certificateUrl: 'https://certrev.com/verify/abc',
+	compensationCue: 'Compensated expert',
+}
 
 /** A minimally-certified delivery — every test below varies exactly one field off this. */
 const cardBase: Partial<BuilderCertChromeData> = {
@@ -172,16 +188,57 @@ const cardBase: Partial<BuilderCertChromeData> = {
 	stringsVersion: '2026-07',
 }
 
-describe('S2 — one placement default, owned by renderCertBlock alone', () => {
-	it('an unset mode renders the SIDEBAR face — the card names no fallback of its own', () => {
+/**
+ * THE COMPATIBILITY BRIDGE FOR PRE-EXISTING ENTRIES. Delete this block only together with the
+ * `?? 'banner'` in `CertReviewCard`, once the exporter emits an explicit `mode` AND existing
+ * entries have been backfilled. Until both are true, this is a live customer contract.
+ *
+ * WHAT IT PINS, AND WHY IT IS A DIFFERENT KIND OF TEST
+ *   Not the presence of text on a rendered surface, and not a string in shipped source: a
+ *   BEHAVIOUR UNDER A MISSING INPUT. `mode` is a PLACEMENT input, never one of the 19 wire keys,
+ *   and the exporter emits only the wire projection (`options: { ...certData }`), so every entry
+ *   exported to date has no `mode` key at all. What such an entry paints is therefore decided
+ *   entirely by a fallback, and a fallback is invisible to any check that looks at what IS there.
+ *
+ * WHAT IT COST TO LEARN THIS
+ *   1.0.0 removed the card's `?? 'banner'` so the renderer would own the single default. Every
+ *   gate stayed green, because the sidebar face renders perfectly — it is simply not the face
+ *   those entries had rendered since they were created. Consumers install unpinned, so the
+ *   repaint reached live pages with no entry edit and no version bump on their side.
+ *
+ * The sidebar default is NOT reverted: it is still what a direct `renderCertBlock` caller gets
+ * and still the registered `defaultValue`, asserted immediately below, so every block created in
+ * the editor from now on carries an explicit `mode` and never reaches the fallback at all.
+ */
+describe('the pre-exporter-`mode` bridge — an entry with no `mode` still paints BANNER', () => {
+	it('renders the banner face when `mode` is absent entirely (the exported-entry shape)', () => {
 		const html = renderToStaticMarkup(<CertReviewCard {...cardBase} />)
-		expect(html).toContain('data-certrev-mode="sidebar"')
-		expect(html).toContain('certrev-cert--sidebar')
+		expect(html).toContain('data-certrev-mode="banner"')
+		expect(html).toContain('certrev-cert--banner')
+		expect(html).not.toContain('certrev-cert--sidebar')
 	})
-	it('an explicit mode still wins (the default is a fallback, not an override)', () => {
-		const html = renderToStaticMarkup(<CertReviewCard {...cardBase} mode="floating" />)
-		expect(html).toContain('data-certrev-mode="floating"')
+	it('renders the banner face when `mode` is present-but-nullish, which is the same absence', () => {
+		// A CMS round-trip can turn a missing key into an explicit null; both are "the editor
+		// chose nothing", so both must land on the same face.
+		for (const mode of [undefined, null] as const) {
+			const html = renderToStaticMarkup(<CertReviewCard {...cardBase} mode={mode} />)
+			expect(html, `mode={${String(mode)}} must be treated as absent`).toContain('data-certrev-mode="banner"')
+		}
 	})
+	it('the bridge is a fallback, never an override — an explicit mode still wins', () => {
+		for (const mode of ['sidebar', 'floating'] as const) {
+			const html = renderToStaticMarkup(<CertReviewCard {...cardBase} mode={mode} />)
+			expect(html).toContain(`data-certrev-mode="${mode}"`)
+		}
+	})
+	it('the renderer itself is untouched: a DIRECT caller omitting mode still gets sidebar', () => {
+		// The bridge lives in the Builder card only. This is what proves the 1.0.0 decision stands
+		// and that the fix was scoped to the path that actually regressed.
+		expect(renderCertBlock({ facts: directFacts })).toContain('data-certrev-mode="sidebar"')
+	})
+})
+
+describe('S2 — one placement default, owned by renderCertBlock alone', () => {
 	it('the registered `mode` input declares the sidebar default + the three faces as a dropdown', () => {
 		const mode = PLACEMENT_INPUTS.find((i) => i.name === 'mode')
 		expect(mode?.defaultValue).toBe('sidebar')
