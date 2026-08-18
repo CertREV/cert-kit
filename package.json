@@ -1,7 +1,7 @@
 {
 	"name": "@certrev/cert-kit",
 	"private": true,
-	"description": "Public source for @certrev/cert-block and @certrev/cert-contract — the CertREV render + signed-envelope contract kit published to npm.",
+	"description": "Public source for @certrev/cert-block and @certrev/cert-contract: the CertREV render + signed-envelope contract kit published to npm.",
 	"scripts": {
 		"build": "pnpm -r build",
 		"typecheck": "pnpm -r typecheck",
