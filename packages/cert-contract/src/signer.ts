@@ -70,6 +70,10 @@ export interface CertFacts {
 	 *  deterministic derivation of `certId`+year, NOT a second identity (verifyUrl is the real link).
 	 *  Same omit-when-undefined byte-neutrality as `articleTitle`. */
 	readonly displayCertId?: string | null
+	/** v0.6 — the certification's provenance basis (see `CertBasis` in `types.ts`).
+	 *  Same omit-when-undefined byte-neutrality as `articleTitle`/`displayCertId`: a
+	 *  mint that doesn't classify a basis stays BYTE-IDENTICAL to a pre-v0.6 envelope. */
+	readonly basis?: CertContent['basis']
 }
 
 /** Everything needed to mint a payload: the stable identity binding (subject), the
@@ -104,6 +108,9 @@ export function buildPayload(input: MintPayloadInput): CertPayload {
 		// enumerated here or it is silently dropped before signing.)
 		...(input.facts.articleTitle !== undefined ? { articleTitle: input.facts.articleTitle } : {}),
 		...(input.facts.displayCertId !== undefined ? { displayCertId: input.facts.displayCertId } : {}),
+		// v0.6: same omit-when-undefined rule — a mint that doesn't classify a basis stays
+		// byte-identical to a pre-v0.6 envelope.
+		...(input.facts.basis !== undefined ? { basis: input.facts.basis } : {}),
 	}
 	return {
 		contractVersion: CONTRACT_VERSION,

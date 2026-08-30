@@ -154,6 +154,25 @@ export interface CertDisplayConfig {
 export type ComplianceClass = 'free' | 'gated' | 'fused' | 'locked'
 
 /**
+ * v0.6 — the certification's PROVENANCE BASIS. Mirrors the portal's
+ * `certifications.basis` CHECK vocabulary exactly (the contract does not invent its
+ * own naming for a fact the issuer already classifies at mint):
+ *
+ *  - `direct_review`          — the expert reviewed the exact bytes the cert pins.
+ *  - `faithful_incorporation` — the expert's feedback was faithfully incorporated
+ *                                into content the expert did not re-read verbatim.
+ *  - `hand_back_reapproval`   — the expert re-approved after a hand-back round.
+ *  - `brand_amendment_unreviewed` — a post-publish edit the BRAND classified minor
+ *                                and no new expert review covers. The honest,
+ *                                narrower claim: this credential's content moved
+ *                                since the expert review it otherwise inherits.
+ *
+ * Optional on the wire (see `CertContent.basis`) so a mint that does not classify
+ * a basis — every pre-v0.6 envelope — stays byte-identical.
+ */
+export type CertBasis = 'direct_review' | 'faithful_incorporation' | 'hand_back_reapproval' | 'brand_amendment_unreviewed'
+
+/**
  * A single VERIFIED expert credential as it appears on the wire (e.g. `RDN`,
  * `Registered Dietitian Nutritionist`). Named (not inline) so every edge — the React
  * SDK, the Web Component, downstream verifiers — imports the SAME credential type from
@@ -238,6 +257,23 @@ export interface CertContent {
 	 * byte-neutrality, and `buildPayload` thread-through caveat as `articleTitle` above.
 	 */
 	readonly displayCertId?: string | null
+	/**
+	 * v0.6 — the certification's PROVENANCE BASIS: what kind of fact this credential
+	 * attests (direct expert review, faithful incorporation of expert feedback,
+	 * hand-back re-approval, or an unreviewed brand amendment). Same TOP-LEVEL
+	 * placement, byte-neutrality, and `buildPayload` thread-through caveat as
+	 * `articleTitle`/`displayCertId` above — a `content` fact, not an `expert` fact,
+	 * so it is not nested under `expert` even though a nested extension would ride
+	 * the signed bytes for free (see the CROSS-CHECK note on `buildPayload` in
+	 * `signer.ts`: nesting was considered and rejected because `basis` describes
+	 * what the certificate covers, not who the reviewer is).
+	 *
+	 * Optional + byte-neutral: pre-v0.6 envelopes omit it and verify unchanged. A
+	 * mint that supplies it carries the value on the signed bytes, inside the
+	 * signature — so a viewer who tampers with only this field fails closed
+	 * (`invalid_signature`), never a softened badge.
+	 */
+	readonly basis?: CertBasis | null
 	/**
 	 * @deprecated v0.2 — evicted to `brand_render_defs` (accept-on-read / never-write).
 	 * OPTIONAL from v0.2: the issuer no longer stamps it, so new envelopes omit it entirely

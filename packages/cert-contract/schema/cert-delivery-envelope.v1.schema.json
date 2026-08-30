@@ -165,6 +165,10 @@
 				"displayCertId": {
 					"type": ["string", "null"],
 					"description": "v0.5: display-only pretty cert id (CR-YYYY-NNNN) for the modal meta row; a deterministic derivation of certId+year, not a second identity (verifyUrl is the real link)."
+				},
+				"basis": {
+					"enum": ["direct_review", "faithful_incorporation", "hand_back_reapproval", "brand_amendment_unreviewed", null],
+					"description": "v0.6: the certification's provenance basis, mirroring the portal's certifications.basis vocabulary. Optional + omit-when-undefined; a mint that doesn't classify a basis stays byte-identical to a pre-v0.6 envelope."
 				}
 			}
 		},
