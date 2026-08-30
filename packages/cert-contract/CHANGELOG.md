@@ -4,6 +4,23 @@ The signed-envelope contract. Semver contract: **the canonical byte contract (RF
 the payload) and the fail-closed `VerdictKernel` semantics never change in a patch or minor**;
 payload extensions are additive (old edges suppress unknown shapes: fail-closed by design).
 
+## 0.6.0 · 2026-08-30
+
+- **New top-level content field: `basis`.** Mirrors the portal's `certifications.basis` CHECK
+  vocabulary (`direct_review`, `faithful_incorporation`, `hand_back_reapproval`, and the new
+  `brand_amendment_unreviewed`) — the certification's provenance basis, riding the signed bytes
+  when a mint supplies it. Additive and optional: `buildPayload` omits the key entirely when the
+  caller does not populate `CertFacts.basis`, so an envelope minted without it is byte-identical to
+  a pre-0.6 envelope (same omit-when-undefined discipline as `articleTitle`/`displayCertId` in
+  0.5). `CONTRACT_VERSION` stays `1` — this is a non-breaking content extension, not an envelope
+  version bump.
+- **Schema updated to match.** `cert-delivery-envelope.v1.schema.json`'s `CertContent` gained a
+  `basis` enum property (the four vocabulary values plus `null`), `additionalProperties: false`
+  otherwise unchanged.
+- A top-level key, not nested under `expert`: `basis` describes what the certificate COVERS, not
+  who reviewed it, so it does not ride for free the way a nested `expert.*`/`author.*` extension
+  would — it must be (and now is) enumerated explicitly in `buildPayload`.
+
 ## 0.5.4 · 2026-08-18
 
 - **One thrown-error string loses an em dash.** `canonicalPayloadBytes`' cross-language number

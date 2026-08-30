@@ -209,6 +209,44 @@ describe('v0.5 wire-shape: top-level articleTitle/displayCertId ride the signed 
 })
 
 /**
+ * v0.6 WIRE-SHAPE GUARD — the TOP-LEVEL content extension `basis` must reach the SIGNED canonical
+ * bytes when supplied, and be OMITTED (byte-identical to a pre-v0.6 envelope) when not. Same
+ * omit-when-undefined discipline as articleTitle/displayCertId above (CP2); `CONTRACT_VERSION`
+ * stays 1 — this is an additive, non-breaking content extension, not an envelope version bump.
+ */
+describe('v0.6 wire-shape: top-level basis rides the signed bytes', () => {
+	it('carries basis on content when supplied — in the exact signed bytes', async () => {
+		const { privateKey } = generateKeyPairSync('ed25519')
+		const input: MintPayloadInput = {
+			...baseInput,
+			certId: 'cert_v0_6_wire',
+			facts: { ...baseInput.facts, basis: 'brand_amendment_unreviewed' },
+		}
+		const envelope = await mintEnvelope(input, {
+			kid: 'local-test-key',
+			sign: localEd25519Signer(privateKey),
+			signedAt: input.lifecycle.issuedAt,
+		})
+
+		expect(envelope.payload.content.basis).toBe('brand_amendment_unreviewed')
+		// The load-bearing assertion: the field is present in the EXACT canonical bytes that were signed.
+		const signedCanonical = new TextDecoder().decode(canonicalPayloadBytes(envelope.payload))
+		expect(signedCanonical).toContain('"basis":"brand_amendment_unreviewed"')
+		expect(signedCanonical).toBe(canonicalizeJson(envelope.payload))
+	})
+
+	it('OMITS the key entirely when not supplied — byte-identical to a pre-v0.6 envelope', () => {
+		// baseInput sets no basis → buildPayload must not emit the key (never `"basis":null`).
+		const payload = buildPayload(baseInput)
+		expect('basis' in payload.content).toBe(false)
+		const canonical = canonicalizeJson(payload)
+		expect(canonical).not.toContain('basis')
+		// CONTRACT_VERSION is unchanged by this additive content extension.
+		expect(payload.contractVersion).toBe(1)
+	})
+})
+
+/**
  * v0.2 DISPLAY EVICTION — a mint with `facts.display` OMITTED produces canonical bytes carrying
  * NO `display` key, and still VERIFIES + RENDERS under the kernel. Proves the never-write behavior
  * (`buildPayload` omits the key rather than emitting `display: undefined`) end-to-end.
