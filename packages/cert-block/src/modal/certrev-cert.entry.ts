@@ -10,7 +10,6 @@
 
 import type { ResolvePublicKeyByKid } from '@certrev/cert-contract'
 import './certrev-cert-modal.js' // registers the unified <certrev-cert-modal> element
-import { installFtcGuard } from './ftc-guard.js'
 import { initCertInteractionsOnReady } from './interactions.js'
 import { initCertPlacement } from './placement.js'
 import { initBadgeRevalidation } from './revalidate.js'
@@ -37,10 +36,9 @@ if (typeof document !== 'undefined') {
 	// in-article position — so the badge re-verify pass below finds `<certrev-badge>` already in
 	// place and never re-runs against a detached/re-attached node.
 	initCertPlacement(document)
+	// No disclosure guard since 1.1.1: nothing here hides, replaces or re-checks a face at load or on
+	// mutation, so a face that loads inside a closed <details>, tab or accordion renders when opened.
 	// Tap-to-expand contributor bios + the in-page certificate modal (progressive enhancement).
 	initCertInteractionsOnReady(document)
-	// FTC §3 anti-stripping: neutralize a memo whose verbatim disclosure was stripped/hidden/altered
-	// (restores the iframe kill switch in the native, in-DOM render). No-op when there's no memo.
-	installFtcGuard(document)
 	initBadgeRevalidation(document, { verify: createDeliveryVerifier(resolveKid) })
 }

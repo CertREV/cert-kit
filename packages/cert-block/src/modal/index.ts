@@ -6,8 +6,8 @@
  * storefront (`<script src=".../dist/modal/certrev-cert.js">`) instead of vendoring a copy.
  *
  * Importing this module as ESM has the SAME side effect as loading the IIFE: it registers the
- * `<certrev-cert-modal>` element and (in a browser) runs placement + interactions + FTC guard +
- * badge revalidation. Bundler users: `import '@certrev/cert-block/modal'`.
+ * `<certrev-cert-modal>` element and (in a browser) runs placement + interactions + badge
+ * revalidation (no FTC guard since 1.1.1). Bundler users: `import '@certrev/cert-block/modal'`.
  */
 
 // Side-effect: register the element + (in a browser) kick off the DOM passes.
@@ -23,7 +23,8 @@ export {
 
 // Composable entry points for advanced consumers (the IIFE wires these itself).
 export { CERT_MODAL_TAG } from "./certrev-cert-modal.js";
-export { installFtcGuard } from "./ftc-guard.js";
+/** @deprecated Since 1.1.1 a no-op (the runtime FTC guard was removed); deleted in 2.0. */
+export { installFtcGuard } from "./deprecated.js";
 export { initCertInteractionsOnReady } from "./interactions.js";
 export { initCertPlacement } from "./placement.js";
 export {
