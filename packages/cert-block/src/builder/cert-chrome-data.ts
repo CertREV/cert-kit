@@ -61,6 +61,25 @@ export interface CertChromeRenderDef {
 }
 
 /**
+ * The DELIVERY MARKER (1.1.0): the exporter's statement that this block's cert is served,
+ * signed, by the CertREV Delivery API at `baseUrl`. When it is present the card no longer
+ * paints the other option keys: it takes its `externalId` from its own Builder entry id,
+ * fetches `GET {baseUrl}/api/cert/v1/delivery/builder/{externalId}`, verifies the envelope
+ * against the baked issuer key, and paints from the verified facts plus the brand's render
+ * def served beside them. A revoked, expired or unverifiable cert renders nothing.
+ *
+ * `baseUrl` is honoured ONLY when it is `https:` on `certrev.com` or a subdomain of it. The
+ * marker is an option like any other, so an editor can type into it; a foreign origin would
+ * let a page answer its own revocation check, and so renders nothing (never the options).
+ */
+export interface CertDeliveryMarker {
+	/** Marker shape version. Only `1` is understood; anything else renders nothing. */
+	readonly v: 1
+	/** The CertREV app origin that serves the Delivery API (e.g. `https://portal.certrev.com`). */
+	readonly baseUrl: string
+}
+
+/**
  * The OPTIONS a brand's native cert component receives. Delivered per certified
  * article; until the brand registers the component the block renders nothing.
  */
@@ -131,6 +150,13 @@ export interface BuilderCertChromeData {
 	renderDef: CertChromeRenderDef | null
 	/** Version of the delivered string set (`data-certrev-strings-version` for the crawl monitor). */
 	stringsVersion: string
+	/**
+	 * 1.1.0: where the signed envelope for this block is served, or null for an options-only
+	 * block. Present ⇒ the card paints from the verified envelope + def and ignores the keys
+	 * above; they stay on the wire so installs older than 1.1.0 keep painting during the
+	 * transition. See `CertDeliveryMarker`.
+	 */
+	delivery: CertDeliveryMarker | null
 }
 
 /**
@@ -160,6 +186,7 @@ export const BUILDER_CERT_CHROME_KEYS = [
 	'display',
 	'renderDef',
 	'stringsVersion',
+	'delivery',
 ] as const
 
 export type BuilderCertChromeKey = (typeof BUILDER_CERT_CHROME_KEYS)[number]

@@ -36,6 +36,21 @@ export {
 	type ResolvedDisplay,
 	resolveDisplay,
 } from './components/format.js'
+// ── The PHONE face's collapsible memo (1.1.0): the markup contract + the one toggle ──
+export {
+	MEMO_ATTR,
+	MEMO_COLLAPSE_LABEL,
+	MEMO_COLLAPSE_MIN_BREAKS,
+	MEMO_COLLAPSE_MIN_CHARS,
+	MEMO_COLLAPSED_LINES,
+	MEMO_EXPAND_LABEL,
+	MEMO_TEXT_ATTR,
+	MEMO_TOGGLE_ATTR,
+	memoCollapses,
+	memoToggleFor,
+	NARROW_VIEWPORT,
+	toggleMemo,
+} from './components/memo-toggle.js'
 // ── Pre-sales PREVIEW block — static, non-delivery, hard-bounded ──
 export {
 	type PreviewBlockOptions,
@@ -118,6 +133,19 @@ export {
 	serializeJsonLdForScript,
 } from './jsonld/project.js'
 export { TtlCache, type TtlCacheOptions } from './verify/cache.js'
+export {
+	type CachedDelivery,
+	deliveryCacheKey,
+	deliveryUrl,
+	type GetVerifiedDeliveryOptions,
+	getVerifiedDelivery,
+	invalidateDelivery,
+	parseRenderDef,
+	peekVerifiedDelivery,
+	settleDelivery,
+	sharedDeliveryCache,
+	type VerifiedDelivery,
+} from './verify/get-verified-delivery.js'
 // ── Verify layer ──────────────────────────────────────────────────────────────────
 export {
 	type EnvelopeSource,

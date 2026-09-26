@@ -60,6 +60,11 @@ import { defineCertRevBadge, setCertRevKidResolver } from '@certrev/cert-block/w
 // Builder.io registration (separate subpath; no Builder dependency)
 import { certRevCertComponent, BUILDER_REGISTRATION, CERT_COMPONENT_NAME } from '@certrev/cert-block/builder'
 
+// The envelope face mapping on its own (separate subpath, react-free): verified envelope content
+// plus the brand's render def, to the renderCertBlock input a `delivery`-marker card paints.
+// A server-side preview renders through the same function as the card.
+import { envelopeCardInput, faceFromDef, themeFromDef, layoutFor, CERT_FACE_FIELDS } from '@certrev/cert-block/builder/face'
+
 // Certificate modal: the ONE SIDE-EFFECTING entry in the package. Importing it registers
 // <certrev-cert-modal> and, in a browser, starts four DOM passes (placement, interactions,
 // FTC guard, badge revalidation). Browser only. Never import it from server code. Most
@@ -606,7 +611,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`1.0.3`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`1.1.0`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.

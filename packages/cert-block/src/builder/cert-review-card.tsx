@@ -18,10 +18,16 @@
  *  - honors `display.showCredentials`.
  */
 
+import * as React from 'react'
+import { Suspense } from 'react'
+import { memoToggleFor, toggleMemo } from '../components/memo-toggle.js'
 import { type CertBlockMode, renderCertBlock } from '../components/render-cert-block.js'
-import type { ResolvedBlockTheme } from '../components/render-def.js'
+import { CERT_STRINGS_VERSION, type ResolvedBlockTheme } from '../components/render-def.js'
+import { getVerifiedDelivery, peekVerifiedDelivery, type VerifiedDelivery } from '../verify/get-verified-delivery.js'
 import type { BuilderCertChromeData } from './cert-chrome-data.js'
 import { BUILDER_CERT_CHROME_KEYS } from './cert-chrome-data.js'
+import { cardDeliveryRuntime } from './delivery-runtime.js'
+import { envelopeCardInput } from './envelope-face.js'
 
 /**
  * The canonical Builder block name. A brand's registration + the portal
@@ -49,6 +55,13 @@ export interface CertReviewCardProps extends Partial<BuilderCertChromeData> {
 	 * string-splitting shim is gone — `renderCertBlock` composes each part directly.
 	 */
 	part?: 'full' | 'header' | 'memo' | null
+	/**
+	 * 1.1.0: what `@builder.io/sdk-react` passes because the registration sets
+	 * `shouldReceiveBuilderProps: { builderContext: true }`. Only `content.id` is read: it is the
+	 * Builder entry this block renders inside, which IS the Delivery placement's `externalId`, so a
+	 * block copied onto another entry asks for that entry's cert and never shows this one's.
+	 */
+	builderContext?: { readonly content?: { readonly id?: unknown } | null } | null
 }
 
 /**
@@ -87,7 +100,121 @@ function fusedCredential(pair: BuilderCertChromeData['credentialVerification'] |
 	return credential && verifiedAt ? { credential, verifiedAt } : null
 }
 
+/**
+ * The delivery marker, accepted only as `{ v: 1, baseUrl }` with `baseUrl` an `https:` ORIGIN on
+ * `certrev.com` or one of its subdomains (no path, query, credentials or port). Anything else is
+ * null, and a block carrying a marker that is not accepted renders NOTHING: falling back to the
+ * options would let an edit to the marker switch revocation off.
+ */
+export function acceptedDeliveryMarker(value: unknown): { readonly baseUrl: string } | null {
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+	const { v, baseUrl } = value as { v?: unknown; baseUrl?: unknown }
+	if (v !== 1 || typeof baseUrl !== 'string') return null
+	let url: URL
+	try {
+		url = new URL(baseUrl)
+	} catch {
+		return null
+	}
+	if (url.protocol !== 'https:' || url.username || url.password || url.port) return null
+	if (url.pathname !== '/' || url.search || url.hash) return null
+	const host = url.hostname.toLowerCase()
+	if (host !== 'certrev.com' && !host.endsWith('.certrev.com')) return null
+	return { baseUrl: url.origin }
+}
+
+/**
+ * Suspend on a Delivery read. React 19 gets `use` with ONE promise per placement while it is in
+ * flight; React 18 (no `use`) gets the promise thrown, the Suspense protocol it supports. Either
+ * way the retry finds the settled read in the cache through `peekVerifiedDelivery`, so it never
+ * suspends on a second promise.
+ */
+const inflightReads = new Map<string, Promise<VerifiedDelivery>>()
+function suspendOn(key: string, start: () => Promise<VerifiedDelivery>): VerifiedDelivery {
+	let pending = inflightReads.get(key)
+	if (!pending) {
+		pending = start().finally(() => inflightReads.delete(key))
+		inflightReads.set(key, pending)
+	}
+	const use = (React as unknown as { use?: <T>(p: Promise<T>) => T }).use
+	if (typeof use === 'function') return use(pending)
+	throw pending
+}
+
+/**
+ * The painted envelope face, with the phone memo toggle bound. One native click listener on the
+ * wrapper (delegated, so it survives a re-render of the HTML) flips the memo box the button sits
+ * in; the button is native, so Enter and Space reach it as clicks. Bound after hydration only: the
+ * server HTML is the collapsed face, which is also what a reader without JS keeps (the whole memo
+ * is still in the text for a screen reader, and the desktop never clamps it).
+ */
+function EnvelopeFace(props: { readonly html: string; readonly defVersion: number | undefined }) {
+	const ref = React.useRef<HTMLDivElement>(null)
+	React.useEffect(() => {
+		const el = ref.current
+		if (!el) return
+		const onClick = (e: MouseEvent) => {
+			const button = memoToggleFor(e.target)
+			if (button && el.contains(button)) toggleMemo(button)
+		}
+		el.addEventListener('click', onClick)
+		return () => el.removeEventListener('click', onClick)
+	}, [])
+	return (
+		<div
+			ref={ref}
+			data-certrev-cert-chrome=""
+			// Marks a face painted from the verified envelope (the migration dry-run and crawl monitor
+			// tell the two faces apart by it). The strings are the package's locked constants here.
+			data-certrev-delivery=""
+			data-certrev-strings-version={CERT_STRINGS_VERSION}
+			data-certrev-def-version={props.defVersion}
+			// biome-ignore lint/security/noDangerouslySetInnerHtml: renderCertBlock is the escaping-safe SSR string renderer
+			dangerouslySetInnerHTML={{ __html: props.html }}
+		/>
+	)
+}
+
+function EnvelopeCertReviewCard(props: {
+	readonly baseUrl: string
+	readonly externalId: string
+	readonly mode: unknown
+	readonly part: unknown
+}) {
+	const rt = cardDeliveryRuntime()
+	// The clock is read per render, so the lifecycle is judged NOW, not when the envelope was fetched.
+	const context = { platform: 'builder', externalId: props.externalId, now: new Date(rt.now()) }
+	const read = { baseUrl: props.baseUrl, platform: 'builder', externalId: props.externalId, context, cache: rt.cache }
+	const settled =
+		peekVerifiedDelivery(read) ??
+		suspendOn(`${props.baseUrl}|${props.externalId}`, () =>
+			getVerifiedDelivery({ ...read, resolveKid: rt.resolveKid, fetchImpl: rt.fetchImpl(), timeoutMs: rt.timeoutMs }),
+		)
+	// Revoked, expired, unverifiable, for another entry, or unreachable: nothing at all.
+	if (settled.verdict.decision !== 'render') return null
+	const input = envelopeCardInput(settled.verdict.payload.content, settled.renderDef, {
+		mode: props.mode,
+		part: props.part,
+	})
+	if (!input) return null
+	return <EnvelopeFace html={renderCertBlock(input)} defVersion={settled.renderDef ? settled.renderDef.v : undefined} />
+}
+
 export function CertReviewCard(props: CertReviewCardProps) {
+	// 1.1.0: a block that carries the delivery marker paints from the signed envelope and the
+	// brand's def, never from the options beside it. No marker (every entry exported before 1.1.0)
+	// takes the options path below, unchanged from 1.0.3.
+	if (props.delivery != null) {
+		const marker = acceptedDeliveryMarker(props.delivery)
+		const entryId = text(props.builderContext?.content?.id)
+		if (!marker || !entryId) return null
+		return (
+			<Suspense fallback={null}>
+				<EnvelopeCertReviewCard baseUrl={marker.baseUrl} externalId={entryId} mode={props.mode} part={props.part} />
+			</Suspense>
+		)
+	}
+
 	const reviewerName = text(props.reviewerName)
 	const verifyUrl = text(props.verifyUrl)
 	if (!reviewerName || !verifyUrl) return null // no chrome pre-cert (or an unreadable delivery)
@@ -119,7 +246,7 @@ export function CertReviewCard(props: CertReviewCardProps) {
 		// explicit `mode` and never reaches this line.
 		//
 		// The problem is the entries that already exist. `mode` is a PLACEMENT input, not one of
-		// the 19 wire keys (`BUILDER_CERT_CHROME_KEYS`), and the exporter emits only the wire
+		// the 20 wire keys (`BUILDER_CERT_CHROME_KEYS`), and the exporter emits only the wire
 		// projection (`options: { ...certData }`), so every entry exported to date has NO `mode`
 		// key at all. Through 0.5.5 this line read `?? 'banner'` and those entries rendered the
 		// banner face. Removing it in 1.0.0 did not give them the renderer's default in the
@@ -224,6 +351,7 @@ const WIRE_INPUT_TYPE: Record<(typeof BUILDER_CERT_CHROME_KEYS)[number], Builder
 	display: 'object',
 	renderDef: 'object',
 	stringsVersion: 'string',
+	delivery: 'object',
 }
 
 /**
@@ -241,10 +369,12 @@ const WIRE_INPUT_HELPER_TEXT: Partial<Record<(typeof BUILDER_CERT_CHROME_KEYS)[n
 		'System-populated by CertREV. Only its PRESENCE is read (absent = a pro-bono reviewer, so no cue renders); the cue itself is a locked constant, so editing this text changes nothing on the page, and clearing it does not remove the disclosure.',
 	scopeLine:
 		'System-populated by CertREV. The FTC scope line renders byte-verbatim from a locked constant: editing this text changes nothing on the page.',
+	delivery:
+		'System-populated by CertREV. When set, the card shows the certificate CertREV serves for this entry, verified, and ignores the other fields; if CertREV revokes it or it expires, the card shows nothing. Do not edit.',
 }
 
 /**
- * The wire-type inputs — DERIVED from `BUILDER_CERT_CHROME_KEYS`, so the 19-field
+ * The wire-type inputs — DERIVED from `BUILDER_CERT_CHROME_KEYS`, so the 20-field
  * option set can never drift from the type (the W3 lock asserts name-parity). This
  * kills the demo's hand-maintained 17-entry array.
  */
@@ -299,6 +429,8 @@ export interface CertBlockBuilderRegistration {
 	readonly name: string
 	readonly component: typeof CertReviewCard
 	readonly inputs: readonly BuilderInput[]
+	/** 1.1.0: asks the SDK for `builderContext`, whose `content.id` the delivery path reads. */
+	readonly shouldReceiveBuilderProps: { readonly builderContext: true }
 }
 
 /**
@@ -313,6 +445,7 @@ export const BUILDER_REGISTRATION: CertBlockBuilderRegistration = {
 	name: CERT_COMPONENT_NAME,
 	component: CertReviewCard,
 	inputs: [...PLACEMENT_INPUTS, ...WIRE_INPUTS],
+	shouldReceiveBuilderProps: { builderContext: true },
 }
 
 /**
@@ -326,6 +459,12 @@ export interface CertReviewCardRegisteredComponent {
 	name: string
 	description?: string
 	inputs: BuilderInput[]
+	/**
+	 * 1.1.0: `@builder.io/sdk-react`'s `RegisteredComponent.shouldReceiveBuilderProps`. The SDK then
+	 * passes the `builderContext` prop, and the delivery path takes its placement from
+	 * `builderContext.content.id`.
+	 */
+	shouldReceiveBuilderProps: { builderContext: boolean }
 }
 
 /**
@@ -340,4 +479,5 @@ export const certRevCertComponent: CertReviewCardRegisteredComponent = {
 	description:
 		'CertREV expert-review cert card. Options are populated by the CertREV exporter; editors choose placement (mode/part) only.',
 	inputs: [...PLACEMENT_INPUTS, ...WIRE_INPUTS],
+	shouldReceiveBuilderProps: { builderContext: true },
 }

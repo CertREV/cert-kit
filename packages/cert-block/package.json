@@ -1,6 +1,6 @@
 {
 	"name": "@certrev/cert-block",
-	"version": "1.0.3",
+	"version": "1.1.0",
 	"description": "Headless render edge for the CertREV CertDeliveryEnvelope: SSR-safe React cert components, a framework-agnostic <certrev-badge> Web Component, a schema.org JSON-LD projector, and a fail-closed verify layer over the shared VerdictKernel.",
 	"repository": {
 		"type": "git",
@@ -22,6 +22,10 @@
 		"./builder": {
 			"types": "./dist/builder/index.d.ts",
 			"default": "./dist/builder/index.js"
+		},
+		"./builder/face": {
+			"types": "./dist/builder/envelope-face.d.ts",
+			"default": "./dist/builder/envelope-face.js"
 		},
 		"./webcomponent": {
 			"types": "./dist/webcomponent/certrev-badge.d.ts",
