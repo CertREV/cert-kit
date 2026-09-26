@@ -66,6 +66,15 @@
 
 import { escapeAttribute, escapeHtml, safeHttpUrl } from './escape.js'
 import { dedupeCredential, formatDate } from './format.js'
+import {
+	MEMO_ATTR,
+	MEMO_COLLAPSED_LINES,
+	MEMO_EXPAND_LABEL,
+	MEMO_TEXT_ATTR,
+	MEMO_TOGGLE_ATTR,
+	memoCollapses,
+	NARROW_VIEWPORT,
+} from './memo-toggle.js'
 import { CERTREV_LINK_REL } from './rel.js'
 import {
 	CERT_SCOPE_LINE,
@@ -165,6 +174,15 @@ export interface RenderCertBlockInput {
 	 * Ignored outside banner mode.
 	 */
 	readonly part?: 'full' | 'header' | 'memo'
+	/**
+	 * 1.1.0: the PHONE face. ABSENT ⇒ byte-identical to 1.0.3. `true` ⇒ at `NARROW_VIEWPORT` or
+	 * narrower the banner header stacks its author and reviewer columns, and a long memo
+	 * (`memoCollapses`) is clamped to `MEMO_COLLAPSED_LINES` lines behind a native toggle
+	 * (`memo-toggle.ts`) on every face that paints one. Wider viewports paint the same card as
+	 * without it. The Builder card's envelope face sets it; the options path and every other
+	 * surface leave it off.
+	 */
+	readonly responsive?: boolean
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -266,6 +284,77 @@ function showsCompensationCue(facts: CertBlockFacts, placed: PlacedTest): boolea
  */
 const STAMP_LINK_STYLE =
 	'font-family:var(--font-mono);font-size:10.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--navy);text-decoration:none;cursor:pointer;'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The PHONE face (1.1.0, `responsive`): one scoped stylesheet per root, and the
+// collapsible memo markup `memo-toggle.ts` flips
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The phone rules, scoped to a responsive root so a host page's other markup is never touched.
+ * Every rule lives inside the media query: a desktop viewport, or a host that strips the
+ * `<style>`, paints exactly the 1.0.3 card (the toggle stays hidden by its inline `display:none`,
+ * which only the `!important` rule here overrides).
+ */
+const RESPONSIVE_STYLE =
+	`<style>@media ${NARROW_VIEWPORT}{` +
+	`.certrev-cert[data-certrev-responsive] [data-certrev-stack]{grid-template-columns:1fr!important}` +
+	`.certrev-cert[data-certrev-responsive] [${MEMO_ATTR}="collapsed"] [${MEMO_TEXT_ATTR}]{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:${MEMO_COLLAPSED_LINES};line-clamp:${MEMO_COLLAPSED_LINES};overflow:hidden}` +
+	`.certrev-cert[data-certrev-responsive] [${MEMO_TOGGLE_ATTR}]{display:inline-flex!important}` +
+	`}</style>`
+
+/**
+ * The memo toggle: a native button (keyboard and screen reader for free), a 44px touch target,
+ * styled as the memo footer's stamp links. Hidden INLINE rather than with `hidden`, so a host
+ * stylesheet's `[hidden]{display:none!important}` cannot pin it shut on a phone.
+ */
+const MEMO_TOGGLE_STYLE =
+	'display:none;align-items:center;min-height:44px;padding:0;margin:0;border:0;background:none;cursor:pointer;font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--navy);text-decoration:underline;text-underline-offset:3px;'
+
+/** A stable short id for the memo text (the toggle's `aria-controls`); FNV-1a, base 36. */
+function memoId(seed: string): string {
+	let h = 0x811c9dc5
+	for (let i = 0; i < seed.length; i++) {
+		h ^= seed.charCodeAt(i)
+		h = Math.imul(h, 0x01000193)
+	}
+	return `certrev-memo-${(h >>> 0).toString(36)}`
+}
+
+/** The attributes and toggle a collapsible memo adds; all empty when it does not collapse. */
+interface MemoCollapse {
+	/** On the box that holds the memo text and its toggle: the state. */
+	readonly box: string
+	/** On the memo text element: its id and the clamp hook. */
+	readonly text: string
+	readonly toggle: string
+}
+
+const NO_MEMO_COLLAPSE: MemoCollapse = { box: '', text: '', toggle: '' }
+
+/**
+ * Collapsed by default: the phone rule clamps the text, and the desktop never reads the state.
+ * The clamp is visual only, so a screen reader reads the whole memo in either state and hears
+ * the toggle as "Read the full memo, button, collapsed".
+ */
+function memoCollapse(facts: CertBlockFacts, responsive: boolean, mode: CertBlockLayout): MemoCollapse {
+	if (!responsive || !memoCollapses(facts.memo)) return NO_MEMO_COLLAPSE
+	const id = memoId(`${mode}\n${facts.certificateUrl}\n${facts.memo}`)
+	return {
+		box: ` ${MEMO_ATTR}="collapsed"`,
+		text: ` id="${id}" ${MEMO_TEXT_ATTR}`,
+		toggle:
+			`<button type="button" ${MEMO_TOGGLE_ATTR} aria-expanded="false" aria-controls="${id}" ` +
+			`style="${MEMO_TOGGLE_STYLE}">${MEMO_EXPAND_LABEL}</button>`,
+	}
+}
+
+/** The sidebar/custom memo quote, collapsible on a phone. */
+function memoQuote(facts: CertBlockFacts, responsive: boolean, mode: CertBlockLayout): string {
+	const collapse = memoCollapse(facts, responsive, mode)
+	const quote = `<blockquote${collapse.text} style="margin:16px 0 0;padding-left:16px;border-left:3px solid var(--ba,#0a1b3f);font-size:15px;line-height:1.5;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</blockquote>`
+	return collapse.toggle ? `<div${collapse.box}>${quote}${collapse.toggle}</div>` : quote
+}
 
 /** A round avatar tile with the given initials. */
 function avatar(text: string, size: number, fontSize: number): string {
@@ -394,13 +483,22 @@ function rootStyle(theme: ResolvedBlockTheme): string {
 	].join(';')
 }
 
-function root(mode: CertBlockLayout, theme: ResolvedBlockTheme, inner: string, face?: CertBlockFace): string {
+function root(
+	mode: CertBlockLayout,
+	theme: ResolvedBlockTheme,
+	inner: string,
+	face?: CertBlockFace,
+	responsive = false,
+): string {
 	// The rung is an OBSERVABILITY stamp for the crawl monitor — only emitted when a
 	// face is present, so the grandfathered (face-absent) output stays byte-identical.
 	const rungAttr = face ? ` data-certrev-rung="${escapeAttribute(face.rung)}"` : ''
+	// The phone face (1.1.0): the scope its rules key on, and the rules, only when asked for.
+	const responsiveAttr = responsive ? ' data-certrev-responsive' : ''
+	const style = responsive ? RESPONSIVE_STYLE : ''
 	return (
 		`<div class="certrev-cert certrev-cert--${mode}" data-certrev-mode="${mode}" ` +
-		`data-certrev-strings-version="${CERT_STRINGS_VERSION}"${rungAttr} style="${rootStyle(theme)}">${inner}</div>`
+		`data-certrev-strings-version="${CERT_STRINGS_VERSION}"${rungAttr}${responsiveAttr} style="${rootStyle(theme)}">${style}${inner}</div>`
 	)
 }
 
@@ -408,7 +506,7 @@ function root(mode: CertBlockLayout, theme: ResolvedBlockTheme, inner: string, f
 // Face — BANNER: a certification header card + a separate expert-memo card
 // ─────────────────────────────────────────────────────────────────────────────
 
-function bannerHeaderCard(facts: CertBlockFacts, placed: PlacedTest): string {
+function bannerHeaderCard(facts: CertBlockFacts, placed: PlacedTest, responsive = false): string {
 	const certified = formatDate(facts.certifiedAt)
 	const subtitle =
 		placed('authorTitle') && facts.authorTitle
@@ -473,7 +571,8 @@ function bannerHeaderCard(facts: CertBlockFacts, placed: PlacedTest): string {
 		`<div style="border:1px solid var(--navy-10);border-radius:calc(var(--br,14px) * 0.7);overflow:hidden;font-family:var(--cr-bf);">` +
 		header +
 		`<div style="padding:22px 24px 18px;">` +
-		`<div style="display:grid;grid-template-columns:${gridCols};gap:22px;">` +
+		// On a phone (responsive) the two columns stack: the stylesheet keys on `data-certrev-stack`.
+		`<div${responsive ? ' data-certrev-stack' : ''} style="display:grid;grid-template-columns:${gridCols};gap:22px;">` +
 		authorColumn +
 		`<div>` +
 		`<div style="font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--navy);margin-bottom:11px;">Reviewed by</div>` +
@@ -487,7 +586,7 @@ function bannerHeaderCard(facts: CertBlockFacts, placed: PlacedTest): string {
 	)
 }
 
-function bannerMemoCard(facts: CertBlockFacts, placed: PlacedTest): string {
+function bannerMemoCard(facts: CertBlockFacts, placed: PlacedTest, responsive = false): string {
 	// The memo card composes `<name><, credential>` as two spans rather than through
 	// `nameWithCredential`, so it needs the SAME duplicate guard — the doubled "MD, MD" was
 	// visible on this card too. Gated on what SURVIVES the dedupe, not on the raw field: a
@@ -500,15 +599,18 @@ function bannerMemoCard(facts: CertBlockFacts, placed: PlacedTest): string {
 	// placement (the pattern `bio` already follows): placement alone painted an "Expert
 	// memo" heading over an empty `<p>` for a contract-legal empty memo.
 	const memoAvatar = placed('reviewerPhoto') ? avatar(initials(facts.reviewerName), 46, 13) : ''
+	// On a phone a long memo collapses; the name row stays visible above it (the box is the column).
+	const collapse = memoCollapse(facts, responsive, 'banner')
 	const memoSection =
 		placed('memo') && facts.memo
 			? `<div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--navy-55);margin-bottom:14px;">Expert memo</div>` +
 				`<div style="display:flex;gap:15px;">${memoAvatar}` +
-				`<div style="flex:1;min-width:0;">` +
+				`<div${collapse.box} style="flex:1;min-width:0;">` +
 				`<div style="font-size:16px;line-height:1.2;color:var(--cr-ink);"><span style="font-weight:700;">${escapeHtml(facts.reviewerName)}</span>${credTail}</div>` +
 				// Readable, UPRIGHT DM Sans quote (the display-serif italic hurt legibility);
 				// pre-line preserves the reviewer's paragraph breaks. No left accent bar (matches the guide).
-				`<p style="margin:11px 0 14px;font-size:15.5px;line-height:1.6;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</p>` +
+				`<p${collapse.text} style="margin:11px 0 14px;font-size:15.5px;line-height:1.6;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</p>` +
+				collapse.toggle +
 				`</div>` +
 				`</div>`
 			: ''
@@ -547,7 +649,7 @@ function bannerMemoCard(facts: CertBlockFacts, placed: PlacedTest): string {
 // Face — SIDEBAR (the DEFAULT): a reviewer card pinned beside the article body
 // ─────────────────────────────────────────────────────────────────────────────
 
-function sidebarCard(facts: CertBlockFacts, placed: PlacedTest): string {
+function sidebarCard(facts: CertBlockFacts, placed: PlacedTest, responsive = false): string {
 	const header = placed('label')
 		? `<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;background:var(--certrev-bar-bg,#0a1b3f);color:var(--certrev-bar-fg,#fff);font-family:var(--font-mono);font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;">${logo(18)} Expert reviewed</div>`
 		: ''
@@ -558,10 +660,7 @@ function sidebarCard(facts: CertBlockFacts, placed: PlacedTest): string {
 			: ''
 	// Gated on CONTENT as well as placement (like `bioPara` above) — placement alone rendered
 	// an empty accent-bordered blockquote for a contract-legal empty memo.
-	const blockquote =
-		placed('memo') && facts.memo
-			? `<blockquote style="margin:16px 0 0;padding-left:16px;border-left:3px solid var(--ba,#0a1b3f);font-size:15px;line-height:1.5;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</blockquote>`
-			: ''
+	const blockquote = placed('memo') && facts.memo ? memoQuote(facts, responsive, 'sidebar') : ''
 	// Disclosure row: cue + ` · ` + scope; the separator only when BOTH land, the row only when either does.
 	const cueEl = showsCompensationCue(facts, placed)
 		? `<span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(COMPENSATED_EXPERT_CUE)}</span>`
@@ -662,7 +761,7 @@ function floatingPill(facts: CertBlockFacts, placed: PlacedTest): string {
 // (which surfaces the switch covers) — not something to settle by quietly adding hooks.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function renderCustomFace(facts: CertBlockFacts, placed: PlacedTest): string {
+function renderCustomFace(facts: CertBlockFacts, placed: PlacedTest, responsive = false): string {
 	const parts: string[] = []
 
 	// 1. label — the navy "Expert reviewed" header bar (sidebar's header markup)
@@ -703,9 +802,7 @@ function renderCustomFace(facts: CertBlockFacts, placed: PlacedTest): string {
 
 	// 5. memo (sidebar's blockquote) — placement AND content, like `bio` directly above
 	if (placed('memo') && facts.memo) {
-		parts.push(
-			`<blockquote style="margin:16px 0 0;padding-left:16px;border-left:3px solid var(--ba,#0a1b3f);font-size:15px;line-height:1.5;color:var(--cr-ink-soft);white-space:pre-line;">${escapeHtml(facts.memo)}</blockquote>`,
-		)
+		parts.push(memoQuote(facts, responsive, 'custom'))
 	}
 
 	// 6. disclosures (sidebar's cue · scope row; separator only when BOTH land)
@@ -755,13 +852,14 @@ export function renderCertBlock(input: RenderCertBlockInput): string {
 	const theme = resolveBlockTheme(input.theme)
 	const { facts, face } = input
 	const placed = placedTester(face)
+	const responsive = input.responsive === true
 	switch (input.mode) {
 		case 'banner': {
 			// Suppress the memo card entirely when the engine placed none of its fields
 			// (avoids an empty bordered shell). Grandfather: all placed ⇒ card renders.
 			const memoCard =
 				placed('memo') || placed('profileLink') || placed('certificateLink') || placed('scopeLine')
-					? bannerMemoCard(facts, placed)
+					? bannerMemoCard(facts, placed, responsive)
 					: ''
 			// First-class memo split: default 'full' is byte-identical to the prior
 			// header+memo render; 'header'/'memo' emit only that card so the exporter can place
@@ -770,16 +868,17 @@ export function renderCertBlock(input: RenderCertBlockInput): string {
 			const part = input.part === 'header' || input.part === 'memo' ? input.part : 'full'
 			const inner =
 				part === 'header'
-					? bannerHeaderCard(facts, placed)
+					? bannerHeaderCard(facts, placed, responsive)
 					: part === 'memo'
 						? memoCard
-						: bannerHeaderCard(facts, placed) + memoCard
-			return root('banner', theme, inner, face)
+						: bannerHeaderCard(facts, placed, responsive) + memoCard
+			return root('banner', theme, inner, face, responsive)
 		}
 		case 'floating':
+			// The pill has no memo and no columns: nothing on it changes on a phone.
 			return root('floating', theme, floatingPill(facts, placed), face)
 		case 'custom':
-			return root('custom', theme, renderCustomFace(facts, placed), face)
+			return root('custom', theme, renderCustomFace(facts, placed, responsive), face, responsive)
 		// THE default placement, named here and nowhere else: the declared default and the
 		// runtime fallback are the same line, so they cannot drift apart. Naming `sidebar` as a
 		// real case also keeps the exhaustiveness read over CertBlockLayout honest — a reader
@@ -787,6 +886,6 @@ export function renderCertBlock(input: RenderCertBlockInput): string {
 		// biome-ignore lint/complexity/noUselessSwitchCase: the redundancy IS the mechanism (see above)
 		case 'sidebar':
 		default:
-			return root('sidebar', theme, sidebarCard(facts, placed), face)
+			return root('sidebar', theme, sidebarCard(facts, placed, responsive), face, responsive)
 	}
 }
