@@ -12,7 +12,7 @@
  * another article, and there is no `placementId` input to forge or mis-select.
  *
  * THE PUSH KIT DOES NOT INHERIT THAT PROPERTY, and this module exports it too. `CertReviewCard` /
- * `certRevCertComponent` register the 19 wire-type fields — `reviewerName`,
+ * `certRevCertComponent` register the 20 wire-type fields — `reviewerName`,
  * `credentialVerification`, `verifyUrl`, `memo` — as Builder INPUTS, and the card renders what
  * those inputs hold; it runs no signature check and consults no verdict. `advanced: true` folds
  * them out of the editor's default view, which is a UI reveal and not a lock, and `safeHttpUrl`
@@ -21,6 +21,17 @@
  * PUSH path is WRITE ACCESS TO THE CMS SPACE, not a signature, and nothing in this package
  * narrows it. See "PUSH trust model" in the package README for the full statement — including
  * what a revocation upstream does and does not reach.
+ *
+ * 1.1.0 NARROWS THAT FOR A BLOCK CARRYING THE `delivery` MARKER (`{ v: 1, baseUrl }`, which the
+ * CertREV exporter writes). Such a block ignores every other option: it reads the signed envelope
+ * for the entry it renders inside (`builderContext.content.id`) from the CertREV Delivery API on
+ * `baseUrl` (an https certrev.com origin, nothing else), verifies it against the baked
+ * `cert-issuer-1` key, re-judges revocation and expiry at every render, and paints the brand's
+ * render def served beside it. A revoked, expired, unverifiable or unreachable cert, a marker that
+ * is not exactly that shape, or a missing entry id renders nothing. A block WITHOUT the marker
+ * (every entry exported before 1.1.0) renders from its options exactly as 1.0.3 did, so the
+ * paragraph above still describes it: an editor who deletes the marker gets the options face back,
+ * which is the 1.0.3 trust boundary, not a new one.
  *
  * Three things the card DOES enforce, and they are the limit of it: no chrome at all without a
  * `reviewerName` and a `verifyUrl`; a credential renders only welded to its dated verification
@@ -144,8 +155,10 @@ export {
 	type BuilderCertChromeData,
 	type BuilderCertChromeKey,
 	type CertChromeRenderDef,
+	type CertDeliveryMarker,
 } from './cert-chrome-data.js'
 export {
+	acceptedDeliveryMarker,
 	BUILDER_REGISTRATION,
 	type BuilderInput,
 	CERT_COMPONENT_NAME,
@@ -157,3 +170,12 @@ export {
 	PLACEMENT_INPUTS,
 	WIRE_INPUTS,
 } from './cert-review-card.js'
+export {
+	CERT_FACE_FIELDS,
+	credentialLabel,
+	type EnvelopeCardOptions,
+	envelopeCardInput,
+	faceFromDef,
+	layoutFor,
+	themeFromDef,
+} from './envelope-face.js'
