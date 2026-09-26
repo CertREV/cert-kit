@@ -8,8 +8,8 @@
  *     (revealing the row's `.acc-bio` in place; the name caret rotates via CSS) and mirrors the
  *     state on `aria-expanded`. A click on a link inside the row (e.g. the "Compensated expert"
  *     cue) is NOT a toggle. Keyboard: Enter/Space on the role=button row.
- *   • In-page modals: a `[data-certrev-modal-open]` control opens the unified
- *     `<certrev-cert-modal>` element via its `.open('cert'|'expert')` method. Bare /
+ *   • In-page modals: a `[data-certrev-modal-open]` control opens its OWN face's
+ *     `<certrev-cert-modal>` element (`ownCertModal`) via its `.open('cert'|'expert')` method. Bare /
  *     `"cert"` opens the certificate dialog; `"expert"` opens the reviewer dialog. With no JS / no
  *     element / no envelope a link control falls back to its href (the certificate or the CertREV
  *     profile page). The element owns its OWN close plumbing (× / Close / backdrop / Esc) inside its
@@ -18,12 +18,18 @@
  * No crypto, no network — pure DOM. Idempotent install (guarded so a double-load can't double-bind).
  */
 
-import { CERT_MODAL_TAG } from './certrev-cert-modal.js'
+import { CERT_MODAL_TAG, ownCertModal } from './certrev-cert-modal.js'
 
 export const ACC_ATTR = 'data-certrev-acc'
 export const MODAL_OPEN_ATTR = 'data-certrev-modal-open'
 export const INITIALS_ATTR = 'data-certrev-initials'
 export const CARD_SELECTOR = '.certrev-card'
+/** Stamped on a control that could not tell which modal is its own (value: the reason), beside the
+ *  bubbling {@link MODAL_UNRESOLVED_EVENT}, so the miss is inspectable rather than a silent link. */
+export const MODAL_UNRESOLVED_ATTR = 'data-certrev-modal-unresolved'
+/** Dispatched on a control whose face has no modal of its own but sits between other faces'
+ *  (`ownCertModal` → `ambiguous`). `detail: { reason: 'ambiguous', modals }`. */
+export const MODAL_UNRESOLVED_EVENT = 'certrev:modal-unresolved'
 
 /** The dialog a `data-certrev-modal-open` control targets. */
 export type ModalKind = 'cert' | 'expert'
@@ -53,8 +59,10 @@ export function modalTargetKind(value: string | null): ModalKind {
 	return value === 'expert' ? 'expert' : 'cert'
 }
 
-/** Open a cert dialog via the `<certrev-cert-modal>` element. Returns false (so the caller lets an
- *  href fall back) when the element is absent or declines (no envelope + no fetch source). */
+/** Open a cert dialog via the document's FIRST `<certrev-cert-modal>` element: a page-level helper
+ *  for a page with one face. Controls go through `openOwnModal`, which finds their own face's element.
+ *  Returns false (so the caller lets an href fall back) when the element is absent or declines (no
+ *  envelope + no fetch source). */
 export function openModal(doc: Document, kind: ModalKind): boolean {
 	const el = doc.querySelector(CERT_MODAL_TAG) as CertModalElement | null
 	if (el && typeof el.open === 'function') return el.open(kind)
@@ -64,6 +72,28 @@ export function openModal(doc: Document, kind: ModalKind): boolean {
 /** Open the page's certificate modal (backward-compatible wrapper over openModal). */
 export function openCertModal(doc: Document): boolean {
 	return openModal(doc, 'cert')
+}
+
+/**
+ * Open a dialog of `control`'s OWN face's `<certrev-cert-modal>` (see `ownCertModal`), which is what
+ * the delegated click / key handlers do. Returns false (so a link control follows its own href) when
+ * the face has no modal, the element declines, or the control cannot tell which modal is its own; in
+ * that last case it is stamped `data-certrev-modal-unresolved="ambiguous"` and receives
+ * `certrev:modal-unresolved`, and another face's certificate is never opened in its place.
+ */
+export function openOwnModal(control: Element, kind: ModalKind): boolean {
+	const own = ownCertModal(control)
+	if (own.modal) {
+		const el = own.modal as CertModalElement
+		return typeof el.open === 'function' ? el.open(kind) : false
+	}
+	if (own.reason === 'ambiguous') {
+		control.setAttribute(MODAL_UNRESOLVED_ATTR, own.reason)
+		control.dispatchEvent(
+			new CustomEvent(MODAL_UNRESOLVED_EVENT, { bubbles: true, detail: { reason: own.reason, modals: own.count } }),
+		)
+	}
+	return false
 }
 
 function asElement(target: EventTarget | null): Element | null {
@@ -111,7 +141,7 @@ export function initCertInteractions(doc: Document): void {
 		// (Close is owned by the <certrev-cert-modal> element inside its shadow root.)
 		const opener = el.closest(`[${MODAL_OPEN_ATTR}]`)
 		if (opener) {
-			if (openModal(doc, modalTargetKind(opener.getAttribute(MODAL_OPEN_ATTR)))) e.preventDefault()
+			if (openOwnModal(opener, modalTargetKind(opener.getAttribute(MODAL_OPEN_ATTR)))) e.preventDefault()
 			return
 		}
 
@@ -144,7 +174,7 @@ export function initCertInteractions(doc: Document): void {
 
 		const opener = el.closest(`[${MODAL_OPEN_ATTR}]`)
 		if (opener) {
-			if (openModal(doc, modalTargetKind(opener.getAttribute(MODAL_OPEN_ATTR)))) {
+			if (openOwnModal(opener, modalTargetKind(opener.getAttribute(MODAL_OPEN_ATTR)))) {
 				e.preventDefault()
 				return
 			}

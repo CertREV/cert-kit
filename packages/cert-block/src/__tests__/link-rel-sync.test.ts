@@ -21,8 +21,8 @@ import { CERTREV_MODAL_LINK_REL } from '../modal/cert-modal-view.js'
  * Google's link-spam policy names as the remedy — are in both, so deleting one from EITHER side
  * fails here.
  *
- * The third copy, `NOTICE_LINK_REL` in `src/modal/ftc-guard.ts`, is module-local and unexported;
- * `ftc-guard.test.ts` pins it against `CERTREV_LINK_REL` through the HTML it emits.
+ * A third copy, `NOTICE_LINK_REL`, lived in `src/modal/ftc-guard.ts` until 1.1.1 removed the runtime
+ * FTC guard; the guard module and its test were deleted with it, leaving the two copies above.
  */
 
 const tokensOf = (rel: string): readonly string[] => rel.split(/\s+/).filter(Boolean)
@@ -121,11 +121,11 @@ describe('every anchor in the package source is qualified by a named constant', 
 		// the sweep pass on nothing at all.
 		expect(
 			anchors.length,
-			`the sweep found ${anchors.length} anchors; the package emitted 14 across 5 files when this ` +
+			`the sweep found ${anchors.length} anchors; the package emitted 13 across 6 files when this ` +
 				'was written. Fewer means either anchors were genuinely removed — lower this number in ' +
 				'the same commit — or the regex no longer recognizes how they are built, which is the ' +
 				'case this assertion exists for.',
-		).toBeGreaterThanOrEqual(14)
+		).toBeGreaterThanOrEqual(13)
 	})
 
 	it('sets rel from a *LINK_REL constant, never a literal', () => {
