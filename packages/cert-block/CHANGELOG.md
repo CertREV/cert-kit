@@ -5,6 +5,66 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 1.1.0 · 2026-09-26
+
+Minor: the Builder card can paint from the signed envelope and the brand's render def. **Read
+this before upgrading a Builder integration: a block that carries the new `delivery` marker
+renders a different face from the same block's options.** This is the one deliberate exception
+to the contract above, and it is opt-in per block: the marker is written by the CertREV exporter,
+never by the upgrade itself.
+
+- **No marker, no change.** A block without `delivery` (every entry exported before 1.1.0, and
+  every block an editor built by hand) renders through the options path exactly as 1.0.3 did,
+  byte for byte, including the banner bridge for entries with no `mode`. Upgrading changes no
+  pixel on an existing page. `delivery-card.test.tsx` pins this against the 1.0.3 mapping.
+- **With the marker, the options are ignored.** `delivery: { v: 1, baseUrl }` makes
+  `CertReviewCard` read `GET {baseUrl}/api/cert/v1/delivery/builder/{entry id}`, verify the signed
+  artifact against the baked `cert-issuer-1` key (the key the storefront badge ships), and paint
+  the verified content with the render def the Delivery API serves beside it (`renderDef`): the
+  brand's accent and surface, hidden fields (e.g. no reviewer photo), rung and layout. The entry id
+  is `builderContext.content.id`, so the registration now sets
+  `shouldReceiveBuilderProps: { builderContext: true }`; a block copied onto another entry asks for
+  that entry's cert.
+- **Fail-closed.** A revoked cert (tombstone), an expired one, a signature that does not verify,
+  an envelope for another entry, a 404/5xx/timeout, a marker that is not exactly `{ v: 1, baseUrl }`
+  with `baseUrl` an `https:` origin on `certrev.com` or a subdomain, or a missing entry id: the card
+  renders nothing. Revocation and expiry are re-judged at every render against the cached,
+  verified payload, so an expiry lands at `expiresAt`, and a revocation or def change lands within
+  the cache TTL (60s positive, 5s negative) with no republish.
+- **Suspense.** The marker path suspends once per placement (`React.use` on React 19; the thrown
+  promise on React 18) inside its own `<Suspense fallback={null}>`, so streaming SSR resolves it
+  and hydration finds the read cached.
+- **New API, all additive.** Root: `getVerifiedDelivery`, `peekVerifiedDelivery`,
+  `settleDelivery`, `invalidateDelivery`, `parseRenderDef`, `deliveryUrl`, `deliveryCacheKey`,
+  `sharedDeliveryCache` and their types. `./builder`: `acceptedDeliveryMarker`, the
+  `CertDeliveryMarker` type and the envelope-face helpers. New subpath `./builder/face`
+  (react-free): `envelopeCardInput`, the one mapping from verified content + def to the
+  `renderCertBlock` input, so a server-side preview renders through the same function as the card.
+- **Wire type.** `BuilderCertChromeData` gains `delivery: CertDeliveryMarker | null` (key 20,
+  appended to `BUILDER_CERT_CHROME_KEYS`, registered as an `advanced` input with helper text
+  telling editors not to edit it). A TypeScript exporter that builds the full wire object must
+  now set it (`null` keeps the options face).
+- **Phone face (opt-in, envelope card only).** `renderCertBlock` gains `responsive?: boolean`.
+  Only `responsive: true` changes anything; absent or `false`, every face is byte-identical to
+  1.0.3 (`render-cert-block-responsive.test.ts` pins 14 shapes against the 1.0.3 tarball's own
+  output). The envelope face (`envelopeCardInput`) always sets it, so a marker card on a viewport
+  640px wide or narrower stacks the banner header's two columns into one and clamps a long memo
+  (over 160 characters, or four or more line breaks) to 4 lines behind a native
+  `<button type="button">` ("Read the full memo" / "Show less") that flips `aria-expanded`. The
+  full memo stays in the markup, so a screen reader reads all of it in both states. Wider
+  viewports see the same card as before and no button. The rules ship as one `<style>` element,
+  first inside the card root, every rule inside `@media (max-width: 640px)` and scoped to
+  `.certrev-cert[data-certrev-responsive]`; a host that strips `<style>` or blocks it by CSP
+  (it needs `style-src 'unsafe-inline'`, as the card's inline styles already do) gets the
+  1.0.3 card, memo unclamped and button hidden. The toggle is `toggleMemo` / `memoToggleFor`,
+  new root exports with the `MEMO_*` constants, which `CertReviewCard` binds on its wrapper and
+  any other host of the phone face can call.
+- **Unchanged:** the registered name `CertREV Cert`, the `@certrev/cert-block/builder` import,
+  `certRevCertComponent` / `BUILDER_REGISTRATION`, every existing input, the anchor path, the web
+  component and the modal bundle. `renderCertBlock` and `renderPreviewBlock` paint exactly what
+  1.0.3 painted for every input without `responsive: true`, which is every caller in the package
+  but the envelope face (the options card among them); the floating pill is unchanged in every case.
+
 ## 1.0.3 · 2026-08-18
 
 Patch: restores the placement a pre-existing Builder entry renders. **If you integrated via
