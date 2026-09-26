@@ -753,12 +753,9 @@ function floatingPill(facts: CertBlockFacts, placed: PlacedTest): string {
 // `data-certrev-*`-hooked building blocks the locked layouts use, so the custom face
 // carries the same markers as banner/sidebar and the crawl monitor reads them alike.
 //
-// NOT the ftc-guard, though — and the comment here claimed otherwise for as long as the
-// face has existed. `modal/ftc-guard.ts` looks for `data-ftc-line` / `data-ftc-disclosure`
-// hooks, which `CertBadge.tsx` and `render-badge-html.ts` emit and this renderer emits at
-// NONE of its three scope-line sites. The kill switch therefore cannot see anything
-// renderCertBlock produces, on ANY face. Whether it should is a live design question
-// (which surfaces the switch covers) — not something to settle by quietly adding hooks.
+// No runtime guard watches any of it: the `modal/ftc-guard.ts` kill switch (which never saw
+// this renderer's output anyway: it keyed on `.certrev-memo`) was removed in 1.1.1. Whether a
+// face shows its scope line is decided by its configuration, not policed in the page.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function renderCustomFace(facts: CertBlockFacts, placed: PlacedTest, responsive = false): string {
