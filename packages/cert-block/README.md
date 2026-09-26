@@ -66,8 +66,8 @@ import { certRevCertComponent, BUILDER_REGISTRATION, CERT_COMPONENT_NAME } from 
 import { envelopeCardInput, faceFromDef, themeFromDef, layoutFor, CERT_FACE_FIELDS } from '@certrev/cert-block/builder/face'
 
 // Certificate modal: the ONE SIDE-EFFECTING entry in the package. Importing it registers
-// <certrev-cert-modal> and, in a browser, starts four DOM passes (placement, interactions,
-// FTC guard, badge revalidation). Browser only. Never import it from server code. Most
+// <certrev-cert-modal> and, in a browser, starts three DOM passes (placement, interactions,
+// badge revalidation). Browser only. Never import it from server code. Most
 // integrations should load the prebuilt IIFE as an external <script> instead (see below).
 import '@certrev/cert-block/modal'
 import { CERT_ISSUER_KID, CERT_ISSUER_PUBLIC_KEY_PEM, CERT_MODAL_TAG } from '@certrev/cert-block/modal'
@@ -304,8 +304,9 @@ page that loaded the modal script and carries `data-delivery-api` + `data-platfo
 `data-external-id`, the modal fetches the Delivery API live. If that returns a revocation
 tombstone, or an envelope with `revokedAt` set or `expiresAt` passed, the modal refuses to open
 and calls `markSuppressed()`: it stamps `data-certrev-suppressed` on itself and sets `hidden` +
-`aria-hidden` on **every** `[data-certrev-modal-open]` control in the document. So the certificate
-links disappear on that page view. The card body (the reviewer's name, the credential, the memo,
+`aria-hidden` on the `[data-certrev-modal-open]` controls **of its own face** (the controls that
+open that element; see "Several faces on one page" below). So that face's certificate links disappear on that page view, and
+another face on the same page keeps its own. The card body (the reviewer's name, the credential, the memo,
 the "Expert reviewed" chrome) is not touched, and nothing happens at all for a visitor who never
 clicks, for a page without the modal script, or for a crawler. One more way to lose even that: the
 modal prefers a synchronous envelope source, so if the page inlines one (a light-DOM
@@ -368,6 +369,19 @@ and is fine; it just means the origin has to be in `font-src`.
 
 `data-delivery-api` is the **origin only**: the element appends
 `/api/cert/v1/delivery/{platform}/{externalId}`.
+
+**Several faces on one page.** Each `[data-certrev-modal-open]` control opens its **own** face's
+`<certrev-cert-modal>`, never simply the first one in the document (1.1.0 and earlier did that, so
+every control on a two-face page opened the first face's certificate). A control's own modal is the
+one in the smallest subtree around the control that holds exactly one; when the control sits inside
+a face root `[data-certrev-cert]` (the WordPress plugin's per-face wrapper), only modals of that
+same face count and the search never leaves it. So give each face its own modal, and wrap each face
+in `data-certrev-cert` when faces share a container. A single face whose card and controls sit apart
+(the Shopify embed), or one page-level modal (a Builder page), resolves as before. A control that
+cannot tell which modal is its own (its face has none and it sits between two other faces' modals)
+opens nothing: it gets `data-certrev-modal-unresolved="ambiguous"`, a bubbling
+`certrev:modal-unresolved` event (`detail: { reason, modals }`) fires on it, and a link control
+follows its own `href`.
 
 ### PULL: the editor-placed anchor (alternative)
 
@@ -603,7 +617,7 @@ alongside each modal module. The load-bearing ones:
 - **`__tests__/escape-family.test.ts`** puts both escape families (`components/` and `modal/`) against wrong-typed input, not just null: a half-filled CMS object must degrade, never throw.
 - **`__tests__/webcomponent.test.tsx`**: the shared `renderBadgeHtml` string renderer (hand-escaping, unsafe-URL/color dropping, compact style) and the `<certrev-badge>` custom element (idempotent registration, SSR light-DOM preservation, client-mode fail-closed without a resolver).
 - **`builder/__tests__/builder.test.tsx`** covers the PUSH card and its registration: the wire-type ⇄ inputs parity lock, the fused-credential gate, and the mistyped-option degradation.
-- **`modal/*.test.ts`**, per module: the modal element (tombstone → `markSuppressed`), the dialog view, interactions, placement, badge revalidation, the FTC guard, and the Delivery-API verify client.
+- **`modal/*.test.ts`**, per module: the modal element (tombstone → `markSuppressed`), the dialog view, interactions, placement, badge revalidation, and the Delivery-API verify client. `modal/own-face-modal.test.ts` puts two faces on one page and proves each control opens its own face's modal; `modal/closed-container-face.test.ts` proves a face that loads inside a closed `<details>`, tab or accordion is left alone and renders when opened (there is no runtime disclosure guard).
 - **`__tests__/readme-version.test.ts`** + **`__tests__/readme-contract.test.ts`** pin the claims in this file that rot silently: the version stamp against `package.json`, the key id, the route-example heading, and every `exports` subpath appearing under Public API.
 
 Facts are mocked via `makeMockPayload` / `makeSignedEnvelope` (`src/contract/fixtures.ts`, also
@@ -611,7 +625,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`1.1.0`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`1.1.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.

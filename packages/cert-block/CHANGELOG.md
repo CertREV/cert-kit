@@ -5,6 +5,47 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 1.1.1 · 2026-09-26
+
+Patch: the browser bundle no longer hides or replaces a face, and each certificate control opens
+its own face's modal. Nothing about the rendered card changes; no integration needs a code change.
+
+- **No runtime FTC disclosure guard.** 1.1.0's `dist/modal/certrev-cert.js` checked every memo on
+  DOMContentLoaded and on every DOM mutation, and replaced any memo whose disclosure line was
+  missing, altered or had a zero-size box with "This CertREV verification cannot be displayed". A
+  face that loads inside a closed `<details>`, an inactive tab or a collapsed accordion has a zero
+  box, so it was replaced for good and never showed when the visitor opened it. The guard is gone
+  (`src/modal/ftc-guard.ts` deleted; the bundle installs no `MutationObserver`, never writes
+  `data-certrev-ftc-neutralized` and contains no notice text). Whether a face shows its disclosure
+  is settled where the face is configured. The disclosure line itself is unchanged: every face still
+  renders it. A WordPress page can drop CSS that hid a card whose memo the guard had neutralized.
+- **`installFtcGuard` stays exported, as a no-op.** It is public on `@certrev/cert-block/modal`,
+  and the contract above says a patch never breaks a compiling integration, so the name remains,
+  marked `@deprecated`. It installs nothing; its first call per document dispatches a
+  `certrev:deprecated-api` event on the document (`detail: { api: 'installFtcGuard',
+  removedIn: '1.1.1' }`) so a caller that still counts on it can find out. It goes in 2.0.
+- **Each control opens its own face's modal.** A `[data-certrev-modal-open]` control used to open
+  `document.querySelector('certrev-cert-modal')`, so on a page with two faces (a WordPress Query
+  Loop, a related-posts block) every control opened the FIRST face's certificate. A control now
+  opens the modal in the smallest subtree around it that holds exactly one, and inside a face root
+  (`[data-certrev-cert]`, the WordPress plugin's per-face wrapper) only that face's modal counts, so
+  the search never reaches a neighbour. A single Shopify embed (card and controls placed apart) and
+  a Builder page-level modal resolve exactly as before. A control that cannot tell which modal is
+  its own opens nothing and follows its own `href`, and says so: it gets
+  `data-certrev-modal-unresolved="ambiguous"` and a bubbling `certrev:modal-unresolved` event
+  (`detail: { reason, modals }`). A WordPress page no longer needs to print one modal per page.
+- **Revocation hides only its own face's controls.** When the modal's live Delivery-API fetch
+  returns a revocation or expiry, `markSuppressed()` used to hide every
+  `[data-certrev-modal-open]` control in the document. It now hides the controls whose own modal is
+  that element; another face's certificate links stay.
+- **Unchanged:** the rendered output of every renderer and component, the exports (`openModal` and
+  `openCertModal` keep their document-level behaviour; controls no longer go through them),
+  placement, interactions other than the modal lookup, badge revalidation, the verify client, and
+  `FTC_DISCLOSURE_LINE`.
+- **For this repo's own suite:** `src/modal/ftc-guard.test.ts` goes with the module, and so does
+  any assertion that the entry installs the guard. New: `src/modal/closed-container-face.test.ts`
+  and `src/modal/own-face-modal.test.ts`.
+
 ## 1.1.0 · 2026-09-26
 
 Minor: the Builder card can paint from the signed envelope and the brand's render def. **Read

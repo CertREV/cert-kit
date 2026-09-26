@@ -23,6 +23,9 @@
  *    so the document-level delegate can't see the close controls.
  *  - Fonts inject at document level on first open (font faces don't scope into a
  *    shadow root); deferring to first open avoids loading them on every article view.
+ *  - A page can carry several faces, each with its own element (a WordPress Query Loop, a
+ *    related-posts block). A trigger opens its OWN face's element (`ownCertModal`), never the
+ *    document's first one, and a suppressed element hides only its own face's triggers.
  */
 
 import { type CertDeliveryArtifact, isTombstone } from '@certrev/cert-contract'
@@ -32,6 +35,44 @@ import { CERT_MODAL_CSS } from './certrev-cert-modal.styles.js'
 
 export const CERT_MODAL_TAG = 'certrev-cert-modal'
 type ModalKind = 'cert' | 'expert'
+
+/**
+ * One rendered face on a surface that can print several per page: the WordPress plugin wraps each
+ * face's card, memo and rail wraps in `<div data-certrev-cert="1">`. A trigger never reaches a
+ * `<certrev-cert-modal>` in another face root, and one outside every face root never reaches a
+ * modal inside one.
+ */
+export const FACE_ROOT_SELECTOR = '[data-certrev-cert]'
+
+/** The element a trigger opens, or why it has none. */
+export type OwnCertModal =
+	| { readonly modal: Element; readonly reason: null }
+	| { readonly modal: null; readonly reason: 'none' | 'ambiguous'; readonly count: number }
+
+/**
+ * The `<certrev-cert-modal>` that belongs to `trigger`'s face: the one in the SMALLEST subtree that
+ * holds both. Walk up from the trigger; the first ancestor holding a modal decides:
+ *  - exactly one → that is the face's modal. On Shopify the card wrap (badge + modal) and the memo
+ *    wrap (triggers only) are placed apart in the article, and their nearest common container holds
+ *    the page's one modal; a Builder page puts one modal beside the CMS content; a WordPress face root
+ *    holds its own.
+ *  - more than one → `ambiguous`: the trigger's face has no modal of its own and sits between other
+ *    faces'. Picking one would open another cert's certificate, so there is no answer.
+ * The walk never leaves the trigger's face root, and only counts modals in that same face root (or,
+ * for a trigger in none, modals in none), so a WordPress face without a modal resolves to `none`.
+ */
+export function ownCertModal(trigger: Element): OwnCertModal {
+	const face = trigger.closest(FACE_ROOT_SELECTOR)
+	for (let node: Element | null = trigger; node; node = node.parentElement) {
+		const found = Array.from(node.querySelectorAll(CERT_MODAL_TAG)).filter(
+			(m) => m.closest(FACE_ROOT_SELECTOR) === face,
+		)
+		if (found.length === 1) return { modal: found[0] as Element, reason: null }
+		if (found.length > 1) return { modal: null, reason: 'ambiguous', count: found.length }
+		if (node === face) break
+	}
+	return { modal: null, reason: 'none', count: 0 }
+}
 
 /** Shared constructable stylesheet (one per document lifetime). */
 let sharedSheet: CSSStyleSheet | null = null
@@ -208,11 +249,13 @@ export class CertRevCertModal extends HTMLElement {
 	/**
 	 * The modal kill-switch: a fetched envelope is REVOKED/EXPIRED. Don't open;
 	 * mark the host suppressed (mirrors the badge revalidation's `data-certrev-suppressed`) and
-	 * hide the light-DOM triggers so a stale click can't re-open a pulled cert. Best-effort DOM.
+	 * hide THIS face's light-DOM triggers (those whose `ownCertModal` is this element) so a stale
+	 * click can't re-open a pulled cert. Another face's triggers on the page are not touched.
 	 */
 	private markSuppressed(): void {
 		this.setAttribute('data-certrev-suppressed', '')
-		for (const t of Array.from(document.querySelectorAll('[data-certrev-modal-open]'))) {
+		for (const t of Array.from(this.ownerDocument.querySelectorAll('[data-certrev-modal-open]'))) {
+			if (ownCertModal(t).modal !== this) continue
 			t.setAttribute('hidden', '')
 			t.setAttribute('aria-hidden', 'true')
 		}
