@@ -5,6 +5,385 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 1.2.1 · 2026-10-09
+
+Patch, stable (dist-tag `latest`): **1.2.1-canary.0, below, as a stable release.** A card the browser renders while
+the page is still loading waits for the record a streaming server sends after it, so a phone's first load of a
+streamed page keeps its card. The source is the canary's, byte for byte; only the version stamps change. No
+integration change, and the rendered cert output is unchanged: a card that hydrates, a `clientRead` card and a card
+mounted after the page has loaded paint exactly as in 1.2.0. The profile and certificate modals for the Builder card
+are not in this release.
+
+## 1.2.1-canary.0 · 2026-10-07
+
+Patch, canary tag only: **a card the browser renders while the page is still loading waits for the record a
+streaming server sends after it, instead of painting the options face (or nothing) and never looking again.** No
+integration change; a card that hydrates, a `clientRead` card and a card mounted after the page has loaded paint
+exactly as in 1.2.0.
+
+- **The loss it fixes (the judge's round 15, CertREV's canary replica on 1.2.0).** On a phone's first load of a pinned
+  URL, the one document response held the card at the pinned version, but no card was ever attached to the page. A
+  streaming host (Hydrogen, React Router 7) sends a visitor's browser the page's shell first; a card whose server
+  read is still running streams later, in a hidden `<div id="S:0">` after `</html>`, with a script (`$RC`) that moves
+  it into its Suspense boundary. A local replay of the served page found two ways React renders the card on the
+  client before that part arrives: an update that reaches the waiting boundary (React error #421: React deletes the
+  boundary and client-renders it, and `$RC` then drops the part), and a hydration mismatch above it (#418, #425, then
+  #423: React client-renders the whole document, removing the server's `<html>`, and the parser goes on writing the
+  stream into that detached tree, where no script runs). Either way the card mounted with no record in the page and,
+  with no `clientRead`, painted the block's options face, or nothing for the replica's block, which has no options.
+- **Now** (`StreamedRecordCard`, `watchStreamedRecords` in `ssr-seed.ts`): a card the client renders while
+  `document.readyState` is `loading`, with no record in the page and no `clientRead`, paints nothing and waits. One
+  `MutationObserver` per page watches the document and the `<html>` element the server sent (held from module load
+  and from the card's first render, so React's whole-document render cannot take it away first); every record it
+  sees is kept, even one `$RC` removes a moment later. When the card's own record arrives it paints exactly what the
+  record says: the server's face (judged at the browser's clock, as a hydrated card is), the options face, or
+  nothing. When the page has loaded (`DOMContentLoaded`) the watch scans once more, the document and the removed
+  `<html>`, and stops; a card still without a record then paints what a client mount paints (the options face, or
+  nothing). A browser with no `MutationObserver` gets that last scan only. No browser read, ever.
+- **Unchanged:** the server's render and its record; hydration (a card in front of its own server HTML); a card
+  mounted after the page has loaded (an in-app navigation, Builder's editor); `clientRead`; a pinned card takes only
+  a record carrying its pin.
+- **Tests:** `src/builder/__tests__/streamed-record-card.test.tsx` (jsdom; 14 tests): the #421 path, the #423 path
+  with and without `MutationObserver`, the replica's pinned card, a pinned card and an unpinned record, no record,
+  streamed options and none records, an expired seed, `clientRead`, a loaded page and hydration unchanged, and
+  `streamedRecordFor`. Positive controls: with the wait disabled 8 of the 14 fail; without the observer on the
+  server's `<html>` the #423 test fails; without the last scan of it the no-`MutationObserver` test fails.
+
+## 1.2.0 · 2026-10-06
+
+Minor, the first stable release with the `delivery` card's reader face (dist-tag `latest`). It follows
+`1.2.0-canary.5` (the design pin, below, is part of it) and adds these changes: **the delivery card never reads
+from the browser unless the brand opts in, so no storefront needs a Content-Security-Policy change**, **a card whose
+server could not reach CertREV paints the block's own options face, never nothing**, **the server's read waits 8 s
+and serves a certificate stale while it refreshes**, **a field the def hides is absent from the page**, **the reader
+face's avatar shows the person's initials where it has no photo to paint, or a photo fails to load**, and **the
+reader sidebar card's float leaves its Builder block** (canary.6). No integration needs a code change, and an
+options-only block is untouched.
+
+- **No browser read by default; the options face when CertREV is not reached (the 1.2.0 re-cut).** A proof run on a
+  cold staging read found the failure this release exists to remove: the server's read missed the verifier's 3 s
+  deadline, so the server painted no card, and the browser's own read was then blocked by the storefront's CSP. Now:
+  - The card **never fetches from the browser** unless the block opts in with the new `clientRead` prop (code only,
+    not a Builder input). A card the browser renders with no server render behind it paints the block's options face,
+    or nothing (a block with no options).
+  - Where the server has no envelope it writes a **fallback record** in the seed attribute,
+    `{ v: 1, baseUrl, externalId, design?, face }` with `face` `"options"` or `"none"` and nothing of a certificate.
+    CertREV not reached (a 5xx, a body that is not an envelope, a network error, the deadline) paints the block's
+    own **options face**, the 1.0.3 bytes, in the block's `mode`, else its def's `layout`, else the banner; a block
+    whose options cannot paint writes `"none"`. A pinned card (canary.5's design pin, CertREV's replica) paints the
+    options face too, with a record naming its pin, so the replica shows what a brand's page shows: of canary.5's
+    fail-closed list below, only the 503 changes. A definitive no (revoked, expired, unverifiable,
+    another entry, a 404 or 410) still paints nothing, with `"none"`, so the options face never paints over a
+    revocation. The browser keeps the recorded face through hydration and through React's client re-render after a
+    hydration error, with no read.
+  - The card runtime's server read waits **8 s** (`CARD_DELIVERY_TIMEOUT_MS`; `getVerifiedEnvelope` and
+    `getVerifiedDelivery` keep their 3 s default). Its cache gains `staleMs` (5 minutes, `CARD_DELIVERY_STALE_MS`):
+    past the 60 s TTL a certificate is served at once while ONE background refresh runs (stale-while-revalidate),
+    and kept while CertREV cannot be reached (stale-if-error); a definitive refusal replaces it as soon as its
+    refresh lands, and a negative entry is never served stale. `inflightMaxMs` (deadline + 2 s) lets the next render
+    start a new load instead of joining one the host runtime abandoned. `TtlCache` without the new options behaves
+    exactly as before.
+  - A reviewer photo that **fails to load** (a CSP `img-src` block, a 404) is repainted as the person's initials,
+    whether it failed before hydration or after; the record is unchanged and nothing is requested.
+
+- **The browser hydrates from the server's read (no browser fetch).** Through canary.5 a `delivery`-marker
+  card read the Delivery API on the server and again in the browser on hydration; a storefront whose CSP
+  `connect-src` names no CertREV origin blocked the second read, the read settled as a suppress and the
+  server's card vanished. The face's wrapper now carries the envelope it was painted from,
+  `data-certrev-envelope` = `{ v: 1, baseUrl, externalId, design?, payload, signature?, renderDef }` (the payload
+  as served, less hidden fields, below; `src/builder/ssr-seed.ts`), and the browser hydrates from it with zero
+  requests. After hydration the card re-runs the lifecycle and subject policy at the browser's clock, so an
+  expiry that passes while the page is open still takes it down. A card the browser mounts later paints
+  from any seed the page carried for the same placement. A card with no server render behind it (a
+  client-only page, Builder's editor preview) makes no read unless the block opts in with `clientRead`
+  (above); where an opted-in read is blocked or fails it renders nothing and logs nothing, and it never
+  unmounts the host's tree. A pinned card
+  (canary.5's `certrevDesignPin`) takes only a seed carrying the same pin, and the seed records it.
+- **Server render or browser hydration is decided from the page, with no switch.** The card used to ask the
+  delivery runtime's `isServer()`, which defaulted to `typeof document === 'undefined'`; a `react-dom/server` render
+  under jsdom (or any DOM shim) therefore took the browser path and painted `<!--$--><!--/$-->`. The seam is gone.
+  A card with no `document` is a server; a card past hydration or mounted on the client is a browser; a card that is
+  hydrating is a browser only when the live document already holds server-rendered HTML in front of it (this
+  placement's seed, or any React Suspense boundary marker, which the card's own `<Suspense>` always leaves) and is a
+  server render otherwise. One case is not seen: a server render run while the document still holds server-rendered
+  React HTML is taken for a hydration, so a harness that hydrates one page and renders another into the same document
+  clears it between them.
+- **A hidden field is absent from the page.** The seed (and so the page source) used to carry the reviewer's photo
+  URL even where the def hides `reviewerPhoto` or the payload's `display.showExpertPhoto` is `false`, and the memo text
+  where the def hides `memo`. Now the payload is stripped of what is hidden before the card paints and before it writes
+  the seed: `reviewerPhoto` removes `content.expert.photoUrl` and `content.author.photoUrl`, `display.showExpertPhoto:
+  false` removes the same two (whatever the def hides; only a literal `false` counts, as the reader face reads it), and
+  `memo` removes `content.memo`. The face is painted from the
+  stripped payload, on the server and in the browser, so the two stay identical. The seed then **carries no
+  signature**: it signs the full payload, a stripped one no longer verifies, the browser never re-checks a seed's
+  signature (it re-runs the lifecycle and subject policy only, which read nothing that is stripped), and a pair that
+  fails to verify would only mislead. A seed that stripped nothing keeps the signature. `content.expert.compensationCue`
+  is never stripped: it is a locked disclosure, and the banner, the memo and the sidebar paint "Compensated expert" from it (the floating pill's own markup carries no
+  disclosure line, as in the portal's snippets; the modal it opens paints the cue). One visible
+  consequence: a reader def that hides `memo` now paints no memo on the Builder card (the reader face called directly,
+  and the portal's snippets, still paint the memo they are given).
+- **The reader face's avatar is the person's initials where it has no photo to paint.** The silhouette is now the
+  fallback for a name with no initials, not for a missing photo. A photo that is missing or unsafe, `display.showExpertPhoto:
+  false`, and a def that hides `reviewerPhoto` (which used to remove the avatar altogether, and now removes the photo:
+  its URL is never written) all paint the initials. The initials are fixed bytes the portal's Liquid and PHP twins
+  print too: trim the name, split on single spaces and skip the empty parts (so "Jane  Doe", two spaces, is "JD"), drop a
+  leading dr, mr, mrs, ms, prof or mx (with or without the dot), take the first character of each of the first two
+  parts left, uppercase, and paint exactly
+  `<svg viewBox="0 0 40 40" aria-hidden="true" focusable="false"><text x="20" y="20" text-anchor="middle"
+  dominant-baseline="central" font-size="15" font-weight="700">JD</text></svg>`, escaped. It applies to every avatar of the face
+  (the sidebar reviewer, the banner and memo reviewer, and the banner's writer under the writer's own name). A photo that is
+  painted is the same `<img>` as before.
+- **The reader card loads no font file.** Its inlined `<style>` is `READER_CSS` without the 40 remote
+  `@font-face` rules (`https://assets.certrev.com/fonts/…`), so the card needs no `font-src` and logs no
+  violation on a strict CSP. The four metric Fallback faces stay, so text paints in Arial and Times New Roman
+  sized to the demo's fonts and the layout holds. `READER_CSS` and `./reader.css` are unchanged and still
+  carry all 44 rules: a host that wants certrev.com's faces links `./reader.css` and allows the origin.
+- **The reader sidebar card's float leaves its Builder block (canary.6).** Builder serves a page's blocks as a flex
+  column (`.builder-blocks`), and each block (`.builder-block`) is a flex item, which is a formatting context of its
+  own and so contains a float. The block around a reader sidebar card therefore spanned the whole column at the
+  aside's height (at 1280: 1208 px wide), and no copy could sit beside the aside. A reader face now paints one more
+  element right after its wrapper: `<style data-certrev-builder-flow="">` holding `BUILDER_SIDEBAR_FLOW_CSS`
+  (exported from `./builder/cert-review-card`). Its three rules apply only above the reader CSS's own stacking
+  breakpoint (`@media not all and (max-width: 820px)`), and only in a Builder column holding a reader SIDEBAR card
+  as `.builder-blocks > .builder-block > [data-certrev-face="reader"] > .certrev-reader > .certrev-r-side`:
+  - that column becomes `display: flow-root`;
+  - the card's block and the face's wrapper become `display: block`, so they take no height and the aside is the
+    box the copy flows around.
+
+  Any other column, a card that is not a direct child of a Builder block, the stacked widths and a browser with no
+  `:has()` keep their layout. In a column the rules do apply, its blocks lay out as blocks: `align-self` has no
+  effect there, and vertical margins between blocks collapse. `reader-face-sidebar-flow.test.tsx` pins the element,
+  the breakpoint read from the reader CSS, and what the rules select in a Builder-shaped page.
+- **Bytes.** The legacy face's HTML is unchanged. The reader face's is unchanged except the avatars above and the
+  flow rules' `<style>` after the wrapper. The wrapper of either gains the one attribute, and the card's inlined
+  stylesheet loses the remote font faces. The cache
+  keeps the envelope's signature beside the verdict so the seed can carry it.
+- **Tests.** `delivery-card-hydrate.test.tsx` (rewritten: zero browser reads on hydration for both faces, the
+  same DOM nodes, the seed verifying against the issuer key, revoked and browser-clock-expired cards, a later
+  client mount, the options and none records kept through hydration and through a client re-render after a
+  hydration error with no read, the no-record client mount making no read without `clientRead` and with it reading
+  once or failing closed silently, a broken or pre-failed photo repainted as initials, every server render under
+  jsdom with no switch), `delivery-card.test.tsx` (each unreachable case paints the 1.0.3 options face byte for
+  byte with an options record; the def layout and an editor's mode; a pinned card's options record; the 8 s deadline; a
+  read slower than 3 s still painting; the stale window over a CertREV outage), `cache.test.ts` (new: the stale
+  window, stale-if-error and the in-flight limit, and the cache unchanged without them) and `ssr-seed.test.tsx` (the seed and fallback-record parsers' refusals, `withoutPhotos`, the design pin in the seed key, the hidden-field
+  strip and the signature decision, and a card stylesheet with no font URL). The reader tests gain the initials
+  cases (`reader-initials.test.ts`).
+
+## 1.2.0-canary.5 · 2026-10-06
+
+Minor, still on the `canary` dist-tag. It adds a design pin for CertREV's own canary replica (the judge's Part 3,
+route a). **Output without a pin is unchanged.** A card with no pin reads the same Delivery URL, under the same
+cache key, and paints the same bytes as canary.4. The faces, the stylesheet, the modal, `CERT_FONT_FACE_CSS` and
+`@certrev/cert-contract` are as they were. No integration needs a code change, and production brands never send
+a pin.
+
+- **The pin.** Builder `<Content>`'s `context` prop may carry `certrevDesignPin` (`{ design, designBrand? }`).
+  The card reads it from `builderContext.context`. A pinned card reads
+  `<base>/api/cert/v1/delivery/builder/<entryId>?design=<version>[&designBrand=<brandKey>]`. The version must
+  match `/^[1-9][0-9]{0,8}$/` and the brand `/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/`; the brand is sent
+  URL-encoded. The pinned read gets its own cache entry and suspense key.
+- **Fail-closed.** A pinned card paints only a reader def (`face: 'reader'`) at exactly the pinned version, and
+  never the live design in its place. Each of these renders nothing:
+  - a pin that cannot be read, with no fetch;
+  - a pin on a block without the `delivery` marker, with no fetch;
+  - a 404 (`no_design`) or 503 from the API;
+  - any other def: none, malformed, legacy, an unknown face, or another version.
+
+  A missing pin is `undefined` or `null`, including a missing or empty `context`. Such a card is the unpinned
+  card.
+- **API.** These are new on `.` and `./builder`:
+  - `DesignPin` (`{ version, brand? }`);
+  - `parseDesignPin(raw)`, which returns a `DesignPin`, `'invalid'` or `undefined`;
+  - `designPinFromUrl(url)`, which returns `{ design, designBrand? }` from a URL's query, or `undefined`, and
+    never throws.
+
+  `GetVerifiedDeliveryOptions` gains an optional `design`. `deliveryUrl`, `deliveryCacheKey`,
+  `peekVerifiedDelivery` and `invalidateDelivery` take it. Without it, they build exactly what canary.4 built.
+- **Tests.** There are two new files:
+  - `design-pin-card.test.tsx`, which covers the card through the real delivery path;
+  - `design-pin-card-use.test.tsx`, which covers the React 19 `use` path, with one promise per read.
+
+  `get-verified-delivery.test.ts` adds the pinned URL, key and cache, and the grammar tables for
+  `parseDesignPin` and `designPinFromUrl`. One of those checks is that the unpinned key is unchanged. No
+  existing test changed.
+
+## 1.2.0-canary.4 · 2026-10-05
+
+Minor, still on the `canary` dist-tag: the judge's round 6 E1 (portal `1ff942fff6`). **Legacy output is
+unchanged**: a def without `face: 'reader'` paints the 1.1.1 bytes, and the modal, `CERT_FONT_FACE_CSS` and
+`@certrev/cert-contract` are as they were. No integration needs a code change.
+
+- **The banner foot's cue is plain words (E1).** The reader banner's foot read `Compensated <a …>expert</a>`, and
+  the stylesheet's `.certrev-reader .certrev-r-foot a` rule underlined the link, so every banner drew a 1 px line
+  under "expert" that the demo's foot does not have (the demo's foot is plain text). The cue is now
+  `<span>Compensated expert</span>` and the rule is gone. The words are unchanged (`COMPENSATED_EXPERT_CUE`); the
+  reviewer's profile stays one click away through the card's or the memo's "View … profile" link, which opens the
+  same modal. Three goldens changed on this account (the banners of navy-full, gold-serif-sharp-full and
+  burgundy-mono-pill-nophoto, the three cued cells), each by exactly the link; the sparse cells carry no cue.
+- **Stylesheet.** `reader.css` is the portal's generated section byte for byte without the 4-line foot-link rule
+  (31,558 bytes, sha256 `7ce6f09e...d10e`; full value in `src/reader/__tests__/fixtures/SOURCES.json`).
+- **Tests.** Goldens, the oracle cells and SOURCES.json come from portal `1ff942fff6` by
+  `pnpm refresh:reader --portal --oracle`; the stylesheet pin in `reader-face-card.test.tsx` follows. Nothing is
+  loosened: every golden and differential test still compares byte for byte.
+
+## 1.2.0-canary.3 · 2026-10-04
+
+Minor, still on the `canary` dist-tag: the reader face brought to the portal's M9 reader (the judge's round 3
+text and image leaves; portal `d232d7e2ae`). **Legacy output is unchanged**: a def without `face: 'reader'`
+paints the 1.1.1 bytes (the 1.1.1 golden still passes), an options-only block never reads the def, and the
+modal, `CERT_FONT_FACE_CSS` and `@certrev/cert-contract` are as they were. No integration needs a code change.
+
+- **The logo is the demo's own file (R3-W2 / R3-S2 b).** certrev.com's reader card prints `<img>` elements that
+  point at `logo-white.svg` and `logo-mono.svg`, and the judge compares the `src`. The face's logo was a
+  redrawn inline mark. It is now the two files themselves, as base64 `data:image/svg+xml` URIs of their exact
+  bytes, which is what the portal's Liquid parity engine prints for the Shopify snippet's `asset_url`:
+  `logo-white.svg` on a dark accent's cap, `logo-mono.svg` in the verified footer and on a light accent's cap
+  (sha256 `3c819f65...2d07` and `da906f44...3c3e`, 9,289 bytes each). They are bundled in
+  `src/reader/logo-assets.generated.ts`, written by `pnpm refresh:reader` from the portal's copies; it is still
+  a `data:` URI, so no host `img-src` changes, and the face still makes no request. Eight goldens changed on
+  this account, in the `<img src>` only: the banner and sidebar of navy-full, gold-serif-sharp-full,
+  burgundy-mono-pill-nophoto and navy-sparse. The two files' bytes make a banner with a memo (it paints both)
+  about 22 KB larger in its server HTML.
+- **Scope text nodes (R3-W2 / R3-S2 a).** The cue's separator in the scope line is followed by an empty
+  `<!-- -->` (`<em>Illustrative example</em> · <!-- -->Independent editorial review ...`, and the same after
+  `<em>Compensated expert</em>`), as the demo's React server render leaves it: the element's DOM holds " · " and
+  the sentence as two text nodes, which is what the judge compares. The comment is not text, so the
+  `data-ftc-line` element still reads `{cue} · {sentence}` and the FTC sentence is byte-exact. With no cue there
+  is no separator and no comment. Six goldens changed on this account (the banner and the sidebar of the three
+  cued cells, navy-full, gold-serif-sharp-full and burgundy-mono-pill-nophoto), each by exactly the inserted
+  comment; the sparse cells carry no cue and are unchanged.
+- **Wrapper armor.** The stylesheet ends with the portal's rule
+  `:is(.certrev-card-wrap, .certrev-memo-wrap):has(.certrev-reader) { margin-block: 0 !important; padding: 0 !important; }`
+  (WordPress's block-gap margin and Shopify's body-fallback padding stacked on the card's own). The Builder face
+  paints neither wrapper, so the rule matches nothing on a Builder page; it is carried because `reader.css` is the
+  portal's generated section byte for byte (31,664 bytes, sha256 `5f90e70a...a466`; full value in
+  `src/reader/__tests__/fixtures/SOURCES.json`). Nothing else in the stylesheet changed.
+- **Not in this release.** The portal's trimmed Liquid doc comments and its rebuilt WordPress zip change nothing
+  here: no renderer, stylesheet or golden of the Builder face depends on them.
+- **Tests.** New: `reader-logo-files.test.ts` (the two files' sha256, the white/mono choice per accent, no inline
+  mark left) and `reader-scope-text-nodes.test.ts` (the scope line's DOM shape, cued, illustrative and uncued).
+  Goldens, the oracle cells (236, now carrying the data URIs) and SOURCES.json, which now also records the two
+  logo files, come from portal `d232d7e2ae` by `pnpm refresh:reader --portal --oracle`; the script now writes
+  the logo module too and formats the oracle file past biome's 1 MiB default. Two tests that encoded the old
+  bytes are updated to the new exact values, not loosened: the stylesheet sha pin in
+  `reader-face-card.test.tsx`, and the list of reader sources in `reader-safety.test.ts`, which gains
+  `logo-assets.generated.ts` (so the new file is held to the same no-network, no-script rules as the rest).
+
+## 1.2.0-canary.2 · 2026-10-04
+
+Minor, still on the `canary` dist-tag: the reader face brought to the portal's current render (its M4, judge
+round 2; portal `4cc33bd`). **Legacy output is unchanged**: a def without `face: 'reader'` paints the 1.1.1
+bytes (the 1.1.1 golden still passes), an options-only block never reads the def, and the legacy `@font-face`
+rules and the modal's font injection are as they were. No integration needs a code change.
+
+- **Fonts (B1).** The "CertREV Reader Serif" and "CertREV Reader Grotesk" aliases are gone. The serif and
+  grotesk `--cr-bf` stacks are the demo's own (`'Playfair Display', ui-serif, Georgia, serif` and
+  `'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif`), and the stylesheet ends with 44 `@font-face`
+  rules: certrev.com's own DM Sans, Playfair Display, Plus Jakarta Sans and JetBrains Mono faces (40 rules over
+  12 `https://assets.certrev.com/fonts/cert-reader-*.woff2` files) and the four metric "* Fallback" faces
+  (`src: local(Arial)`, no fetch), all at `font-stretch: 101%`. The reader root asks for 101%, so the faces
+  apply to reader text only and never to a legacy face of the same name. The card inlines this stylesheet in
+  its own `<style data-certrev-reader-css>` (server HTML and a browser-only mount alike), so DM Sans and
+  JetBrains Mono, which the card used to name with no face of its own until a modal had opened, are in the
+  document when the card mounts. A host with a `font-src` CSP needs `https://assets.certrev.com` for the card
+  on every slot now, not only serif and grotesk; without it the stack falls to its generic family.
+- **Theme armor (W1).** Every declaration on the `.certrev-reader` root is `!important` (colour, font family,
+  size, style, weight, `font-stretch: 101%`, line height, spacing, alignment, case, shadow, wrapping and
+  hyphenation), and `box-sizing: border-box` covers the root and everything in it. A guard rule,
+  `.certrev-reader :is(div, section, aside, p, blockquote, span, a, b, strong, em, i, time, small)`, makes
+  descendant text inherit those over a host theme's element rules; `b`/`strong` stay `bolder`, `em`/`i`
+  italic, and `p` carries the DM Sans stack, all `!important`.
+- **Square images (B2).** The image armor adds `border-radius: 0 !important`: Hydrogen's starter `app.css`
+  rounds every `img` 4px, which reached the cap and verified logos and the reviewer photo. The round avatar
+  stays its wrapper's 50% clip.
+- **Text leaves are the demo's.** The Liquid snippets split text as the demo's React does, and the face follows
+  them (the Liquid-harness oracle and the goldens hold it byte for byte): the memo name is the name, `,` and
+  the credential (`<b>Name</b>, <!-- -->RDN, LD, PhD`); the profile link is "View", the first name and
+  "&rsquo;s profile" (`View <!-- -->Avery<!-- -->&rsquo;s profile`); the sidebar name is the name, `,` and the
+  credential in one `<b>`; the certified date is direct text of its span beside the "Certified" cue (no
+  `<time>`); and the scope sentence is direct text of the scope element, which now carries `data-ftc-line`
+  itself (no inner `<span>`; still one marker per render). The "Certified" and "Illustrative example" mono
+  labels are nested in the date's and the disclaimer's elements, as in the demo.
+- **Stylesheet and tests.** `reader.css` is 31,542 bytes, sha256 `e43fd748...fbab` (full value in
+  `src/reader/__tests__/fixtures/SOURCES.json`); goldens, the oracle cells and SOURCES.json come from portal
+  `4cc33bd` by `pnpm refresh:reader --portal --oracle`. New: `reader-face-card-fonts.test.tsx` (10), which
+  mounts the card with no modal opened and finds the DM Sans `@font-face` at `font-stretch: 101%` in the
+  document, and checks that every family the card or the stylesheet asks for has a face. Two tests that
+  encoded the old aliases are updated to the new rules: the stylesheet-loads-only-CertREV-fonts test in
+  `reader-safety.test.ts` and the stylesheet sha pin in `reader-face-card.test.tsx`.
+
+## 1.2.0-canary.1 · 2026-10-04
+
+Minor, still on the `canary` dist-tag: the reader face brought to the portal's current render (its M3).
+**Legacy output is unchanged**: a def without `face: 'reader'` paints the 1.1.1 bytes, and an options-only
+block never reads the def. No integration needs a code change.
+
+- **Greys.** The stylesheet's muted text is the portal's AA-floor greys: `#14141495` in place of
+  `#1414148c` and `#14141459` (seven declarations). The stylesheet is 13,764 bytes, sha256 `29d8ab04...a8b0`
+  (full value in `src/reader/__tests__/fixtures/SOURCES.json`).
+- **The banner's credential line** is the demo's three leaves in one `<em>`:
+  `<em><span>RDN, LD, PhD</span> · <span>Credential verified by CertREV on May 1, 2026</span></em>`.
+  It was one string in a single text node. A reviewer with no displayed credential still makes no
+  verification claim, and the sidebar's line (the attribution alone) is unchanged.
+- **Token allow-list.** The brand's accent, bar ink and corner radius are no longer filtered by a list of
+  forbidden characters. A colour must be `#RGB` or `#RRGGBB` and a radius a bare `0` or one non-negative
+  `px`, `rem`, `em` or `%` length; anything else paints the default (navy `#0A1B3F`, `14px`). The old
+  guard let a value such as `#abc/*` through, and its comment opener hid the `;` that ends the declaration.
+  The Shopify snippets and the WordPress twin hold the same list.
+- **Avatars and the writer's line, pinned, not changed.** A v9 Banners def with nothing hidden paints the
+  silhouette avatars (36 px writer, 42 px reviewer, 46 px in the memo); `hidden: ["reviewerPhoto"]` removes
+  every avatar, the writer's included, as the Liquid does; `display.showExpertPhoto: false` keeps the
+  silhouettes. The writer's `<em>` is the envelope's `author.title`, printed only when it is non-empty.
+  New tests hold each case against the Liquid harness and through the delivery card.
+- **Tests.** The Liquid-harness oracle covers 236 cells (was 136): the 100 new ones are 75 colour and
+  radius cells, 17 avatar cells and 8 writer-line cells. Goldens and cells come from portal `fa4e8e5b2a`
+  (the reader CSS, snippets and goldens are as at `32525a64`). A card-level test
+  (`reader-face-avatars.test.tsx`) drives the avatar cases through a signed envelope.
+
+## 1.2.0-canary.0 · 2026-10-03
+
+Minor, published to the `canary` dist-tag only until a CertREV Builder space has painted it: a new,
+**opt-in** card face. **Legacy output is unchanged**: every def that does not say `face: 'reader'`
+renders exactly the bytes 1.1.1 renders, and an options-only block (no `delivery` marker) never reads
+the def at all. No integration needs a code change.
+
+- **The reader face.** certrev.com's "reader" design (the banner card with the expert memo, the sidebar
+  card, the floating pill) as a second face on the Builder card. It is selected only when the delivered
+  render def says `face: 'reader'`, spelled exactly; `legacy`, an unknown name, a non-string, a padded or
+  capitalised `Reader` all keep painting the face 1.1.1 paints. The markup is byte-equal to the Shopify
+  `certrev-reader-*` snippets (the portal's canonical render), held by golden pages copied from the
+  portal with their sha256 and by a differential suite over the Liquid harness's output.
+- **What 1.1.1 did with the new keys.** Its def parser kept only `v`, `preset`, `rung`, `tokens`,
+  `hidden`, `barInkFg`, `layout` and `customFace`: a def carrying `face` or `accentFg` was neither
+  rejected nor honoured, the keys were dropped and the legacy face painted with the def's tokens. So a
+  1.1.x space keeps painting the legacy face for a reader-face brand, and 1.2.0 reads `face` (a string)
+  and `accentFg` (`#141414` or `#ffffff`) from the def; a malformed value is dropped, never a reason to
+  reject the def.
+- **The stylesheet** is the portal's reader CSS (the generated section of `certrev-cert.css`), copied
+  byte for byte: new exports `@certrev/cert-block/reader.css` (the file) and `READER_CSS`
+  (`@certrev/cert-block/reader`, react-free). The Builder card inlines it once per card, inside the
+  face's wrapper, in a `<style data-certrev-reader-css>`. The `--cr-*` variables stay on `.certrev-reader`.
+  `pnpm refresh:reader` regenerates the CSS, its TS copy and the golden fixtures from a portal checkout.
+- **Fonts.** The stylesheet declares reader-only `@font-face` aliases, "CertREV Reader Serif" (400-700, with
+  italic) and "CertREV Reader Grotesk" (400-800), whose `src` is `https://assets.certrev.com/fonts/*.woff2`,
+  and the serif and grotesk `--cr-bf` stacks name the alias first, then the legacy family. The card makes no
+  request itself, but the browser fetches those woff2 files for a serif or grotesk reader card: a host with a
+  `font-src` CSP needs `https://assets.certrev.com` for the card too, and without it the stack falls through
+  to the legacy name and the generic family. The legacy `@font-face` rules and the other slots are untouched.
+- **New exports.** `@certrev/cert-block/reader` (`renderReaderFace`, `READER_CSS`),
+  `envelopeCardHtml`, `isReaderFaceDef` and `READER_FACE` on `./builder` and `./builder/face`, and
+  `face` / `accentFg` on `CertChromeRenderDef`. `envelopeCardInput`, `renderCertBlock` and
+  `@certrev/cert-contract` are untouched.
+- **Modal and links.** The profile and certificate links carry `data-certrev-modal-open` (the profile's
+  `="expert"`), as the Liquid face's; the card emits the hooks and the host wires the modal script. The
+  face makes no request of its own (the fonts above are the browser's). Its anchors carry `CERTREV_LINK_REL` (`nofollow sponsored noopener`), as the legacy
+  faces' do, so the sponsored/nofollow signal Builder pages declare today survives the new face. The Liquid
+  snippets say `noopener noreferrer`; the `rel` value on the anchors is the only byte the reader differs
+  from them in, and a named test (`reader-link-rel.test.ts`) pins that over every golden and harness cell.
+- **Tests.** The legacy face is pinned against 1.1.1's own output (136 cases, from the `cert-block@1.1.1`
+  tag's source) and `avatar-alt-sync` now knows the brand mark the reader paints.
+
 ## 1.1.1 · 2026-09-26
 
 Patch: the browser bundle no longer hides or replaces a face, and each certificate control opens

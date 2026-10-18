@@ -1,0 +1,265 @@
+#!/usr/bin/env node
+/**
+ * One-command refresh of everything the reader face copies from the CertREV portal checkout.
+ *
+ *   node scripts/refresh-reader.mjs --portal <portal repo>            (or CERTREV_PORTAL=<portal repo>)
+ *   node scripts/refresh-reader.mjs --portal <portal repo> --oracle   also re-run the portal's Liquid harness
+ *
+ * It READS the portal and writes only inside packages/cert-block. What it copies, byte for byte:
+ *   1. the generated reader stylesheet: the lines of shopify/extensions/certrev-schema/assets/certrev-cert.css from
+ *      `CERTREV-READER-GEN:BEGIN` through `CERTREV-READER-GEN:END`, markers included  -> src/reader/reader.css
+ *      and its TS twin                                                                -> src/reader/reader-css.generated.ts
+ *   2. the portal's golden embed pages  src/lib/cert-render/reader/__golden__/reader/*.html
+ *                                                                                    -> src/reader/__tests__/fixtures/golden/
+ *   3. the reader logo: the demo's own certrev-logo-white.svg and certrev-logo-mono.svg (the theme extension's assets,
+ *      which must equal the portal's site-snapshot logo-{white,mono}.svg), as the base64 `data:image/svg+xml` URIs the
+ *      portal's parity engine prints for them                                         -> src/reader/logo-assets.generated.ts
+ *   4. src/reader/__tests__/fixtures/SOURCES.json: where every copy came from (portal commit, whether the copied files
+ *      are committed there) and the sha256 of each, which the tests re-check against the files on disk.
+ *
+ * --oracle additionally runs scripts/reader-oracle/*.oracle.ts inside the portal's own vitest (the Liquid harness that
+ * writes the portal goldens) and stores its output next to the goldens: golden-cells.json (the golden cells' inputs)
+ * and oracle-extra.json (edge cells plus the Liquid harness's output for each). Needs the portal's node_modules.
+ *
+ * Run it whenever the portal's reader CSS or goldens change; the golden tests then say what the renderer must follow.
+ */
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const READER = path.join(PKG, 'src', 'reader')
+const FIXTURES = path.join(READER, '__tests__', 'fixtures')
+const GOLDEN_DIR = path.join(FIXTURES, 'golden')
+
+const CSS_REL = 'shopify/extensions/certrev-schema/assets/certrev-cert.css'
+const GOLDEN_REL = 'src/lib/cert-render/reader/__golden__/reader'
+const LOGO_RELS = {
+	white: 'shopify/extensions/certrev-schema/assets/certrev-logo-white.svg',
+	mono: 'shopify/extensions/certrev-schema/assets/certrev-logo-mono.svg',
+}
+const LOGO_SNAPSHOT_RELS = {
+	white: 'src/lib/cert-render/reader/site-snapshot/logo-white.svg',
+	mono: 'src/lib/cert-render/reader/site-snapshot/logo-mono.svg',
+}
+const BEGIN = '/* CERTREV-READER-GEN:BEGIN */'
+const END = '/* CERTREV-READER-GEN:END */'
+
+const sha256 = (buf) => createHash('sha256').update(buf).digest('hex')
+
+function arg(name) {
+	const i = process.argv.indexOf(`--${name}`)
+	return i === -1 ? undefined : (process.argv[i + 1] ?? '')
+}
+
+const portal = path.resolve(arg('portal') || process.env.CERTREV_PORTAL || '')
+if (!arg('portal') && !process.env.CERTREV_PORTAL) {
+	console.error('usage: node scripts/refresh-reader.mjs --portal <portal repo> [--oracle]')
+	process.exit(2)
+}
+if (!fs.existsSync(path.join(portal, CSS_REL))) {
+	console.error(`not a portal checkout (no ${CSS_REL}): ${portal}`)
+	process.exit(2)
+}
+
+function git(...args) {
+	try {
+		return execFileSync('git', ['-C', portal, ...args], {
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'ignore'],
+		}).trim()
+	} catch {
+		return null
+	}
+}
+
+/** Whether the portal's HEAD carries exactly the working-tree bytes of these paths (git's own answer). */
+function committed(...rels) {
+	return git('status', '--porcelain', '--', ...rels) === ''
+}
+
+// ── 1. the stylesheet ────────────────────────────────────────────────────────────────
+const cssSource = fs.readFileSync(path.join(portal, CSS_REL), 'utf8')
+const lines = cssSource.split('\n')
+const begin = lines.indexOf(BEGIN)
+const end = lines.indexOf(END)
+if (begin === -1 || end === -1 || end < begin || lines.indexOf(BEGIN, begin + 1) !== -1) {
+	console.error(`${CSS_REL} must carry exactly one ${BEGIN} ... ${END} block`)
+	process.exit(1)
+}
+const css = `${lines.slice(begin, end + 1).join('\n')}\n`
+if (css.includes('</style')) {
+	console.error('the reader CSS contains "</style": it cannot be inlined into a <style> element')
+	process.exit(1)
+}
+fs.mkdirSync(READER, { recursive: true })
+fs.writeFileSync(path.join(READER, 'reader.css'), css)
+fs.writeFileSync(
+	path.join(READER, 'reader-css.generated.ts'),
+	[
+		'// biome-ignore-all format: generated file',
+		'// biome-ignore-all lint: generated file',
+		'// GENERATED by scripts/refresh-reader.mjs from src/reader/reader.css (the portal reader stylesheet, byte for',
+		'// byte). Do not edit: run the script. reader-css.test.ts asserts this string equals the .css file.',
+		`export const READER_CSS = ${JSON.stringify(css)}`,
+		'',
+	].join('\n'),
+)
+
+// ── 1b. the logo files ───────────────────────────────────────────────────────────────
+// The demo's own two files. The theme extension's copy is what the portal's Liquid parity engine answers `asset_url`
+// with (as a base64 data URI of these exact bytes); the site snapshot's copy is the canonical one. They must be one.
+const logos = {}
+for (const ink of Object.keys(LOGO_RELS)) {
+	const bytes = fs.readFileSync(path.join(portal, LOGO_RELS[ink]))
+	const snapshot = path.join(portal, LOGO_SNAPSHOT_RELS[ink])
+	if (fs.existsSync(snapshot) && !fs.readFileSync(snapshot).equals(bytes)) {
+		console.error(`${LOGO_RELS[ink]} differs from the site snapshot's ${LOGO_SNAPSHOT_RELS[ink]}`)
+		process.exit(1)
+	}
+	logos[ink] = {
+		source: LOGO_RELS[ink],
+		bytes: bytes.length,
+		sha256: sha256(bytes),
+		uri: `data:image/svg+xml;base64,${bytes.toString('base64')}`,
+	}
+}
+fs.writeFileSync(
+	path.join(READER, 'logo-assets.generated.ts'),
+	[
+		'// biome-ignore-all format: generated file',
+		'// biome-ignore-all lint: generated file',
+		"// GENERATED by scripts/refresh-reader.mjs from the portal's certrev-logo-{white,mono}.svg (the demo's own logo",
+		'// files) as the base64 data URIs the portal parity engine prints for them. Do not edit: run the script.',
+		'// reader-logo-files.test.ts decodes each and pins the sha256 of its bytes. (Typed `string`, so the .d.ts stays small.)',
+		`export const LOGO_WHITE_DATA_URI: string = ${JSON.stringify(logos.white.uri)}`,
+		`export const LOGO_MONO_DATA_URI: string = ${JSON.stringify(logos.mono.uri)}`,
+		'',
+	].join('\n'),
+)
+
+// ── 2. the goldens ───────────────────────────────────────────────────────────────────
+const goldenSrc = path.join(portal, GOLDEN_REL)
+const goldenNames = fs
+	.readdirSync(goldenSrc)
+	.filter((n) => n.endsWith('.html'))
+	.sort()
+if (goldenNames.length === 0) {
+	console.error(`no goldens in ${GOLDEN_REL}`)
+	process.exit(1)
+}
+fs.mkdirSync(GOLDEN_DIR, { recursive: true })
+for (const stale of fs.readdirSync(GOLDEN_DIR)) {
+	if (stale.endsWith('.html') && !goldenNames.includes(stale)) fs.unlinkSync(path.join(GOLDEN_DIR, stale))
+}
+const goldens = {}
+for (const name of goldenNames) {
+	const bytes = fs.readFileSync(path.join(goldenSrc, name))
+	fs.writeFileSync(path.join(GOLDEN_DIR, name), bytes)
+	goldens[name] = { bytes: bytes.length, sha256: sha256(bytes) }
+}
+
+// ── 3. the oracle (optional) ─────────────────────────────────────────────────────────
+const oracle = {}
+if (process.argv.includes('--oracle')) {
+	const vitest = path.join(portal, 'node_modules', 'vitest', 'vitest.mjs')
+	if (!fs.existsSync(vitest)) {
+		console.error(`--oracle needs the portal's installed vitest (${vitest})`)
+		process.exit(1)
+	}
+	const work = fs.mkdtempSync(path.join(os.tmpdir(), 'certrev-reader-oracle-'))
+	try {
+		for (const f of fs.readdirSync(path.join(PKG, 'scripts', 'reader-oracle'))) {
+			if (f.endsWith('.oracle.ts')) fs.copyFileSync(path.join(PKG, 'scripts', 'reader-oracle', f), path.join(work, f))
+		}
+		// The oracle files and the config resolve vitest and the portal's own modules from the portal's install.
+		fs.symlinkSync(path.join(portal, 'node_modules'), path.join(work, 'node_modules'))
+		fs.writeFileSync(
+			path.join(work, 'vitest.config.ts'),
+			[
+				"import path from 'node:path'",
+				"import { defineConfig } from 'vitest/config'",
+				'export default defineConfig({',
+				'\troot: __dirname,',
+				`\tresolve: { alias: { '@': path.join(${JSON.stringify(portal)}, 'src') } },`,
+				'\tserver: { fs: { strict: false } },',
+				"\tcacheDir: path.join(__dirname, '.vite-cache'),",
+				"\ttest: { environment: 'node', include: ['*.oracle.ts'], env: { SKIP_ENV_VALIDATION: 'true' }, globals: true },",
+				'})',
+				'',
+			].join('\n'),
+		)
+		const env = { ...process.env, READER_ORACLE_OUT: work }
+		for (const k of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS', 'ANTHROPIC_API_KEY']) {
+			delete env[k]
+		}
+		execFileSync(process.execPath, [vitest, 'run', '--config', path.join(work, 'vitest.config.ts')], {
+			cwd: work,
+			env,
+			stdio: 'inherit',
+		})
+		for (const name of ['golden-cells.json', 'oracle-extra.json']) {
+			const bytes = fs.readFileSync(path.join(work, name))
+			fs.writeFileSync(path.join(FIXTURES, name), bytes)
+			oracle[name] = { bytes: bytes.length, sha256: sha256(bytes) }
+		}
+		// Keep the committed JSON in the repo's own format (biome owns .json), when biome is installed.
+		// (--files-max-size: oracle-extra.json is over biome's 1 MiB default now that the logo is a data URI in every cell;
+		// without it biome skips the file and leaves it as one line.)
+		const biome = path.join(PKG, '..', '..', 'node_modules', '.bin', 'biome')
+		if (fs.existsSync(biome)) {
+			const files = Object.keys(oracle).map((n) => path.join(FIXTURES, n))
+			execFileSync(biome, ['format', '--write', '--files-max-size=33554432', ...files], { stdio: 'inherit' })
+			for (const name of Object.keys(oracle)) {
+				const bytes = fs.readFileSync(path.join(FIXTURES, name))
+				oracle[name] = { bytes: bytes.length, sha256: sha256(bytes) }
+			}
+		}
+	} finally {
+		fs.rmSync(work, { recursive: true, force: true })
+	}
+} else {
+	// Without --oracle the inputs are untouched; keep what the manifest already recorded for them.
+	const prev = path.join(FIXTURES, 'SOURCES.json')
+	if (fs.existsSync(prev)) Object.assign(oracle, JSON.parse(fs.readFileSync(prev, 'utf8')).oracle?.files ?? {})
+}
+
+// ── the manifest ─────────────────────────────────────────────────────────────────────
+const manifest = {
+	note: 'Written by scripts/refresh-reader.mjs; reader-sources.test.ts re-hashes every file named here.',
+	portal: {
+		head: git('rev-parse', 'HEAD'),
+		cssAndGoldensCommitted: committed(CSS_REL, GOLDEN_REL, ...Object.values(LOGO_RELS)),
+	},
+	css: {
+		source: `${CSS_REL} (the lines from ${BEGIN} through ${END}, markers included)`,
+		file: 'src/reader/reader.css',
+		bytes: Buffer.byteLength(css),
+		sha256: sha256(css),
+	},
+	logos: {
+		note: "The demo's own logo files (the theme extension's copies, equal to the site snapshot's), whose bytes src/reader/logo-assets.generated.ts carries as base64 data URIs.",
+		file: 'src/reader/logo-assets.generated.ts',
+		files: Object.fromEntries(
+			Object.entries(logos).map(([ink, l]) => [ink, { source: l.source, bytes: l.bytes, sha256: l.sha256 }]),
+		),
+	},
+	goldens: { source: GOLDEN_REL, dir: 'src/reader/__tests__/fixtures/golden', files: goldens },
+	oracle: {
+		note: 'Inputs for the golden cells, and the portal Liquid harness output for edge cells (scripts/reader-oracle). Not portal goldens.',
+		dir: 'src/reader/__tests__/fixtures',
+		files: oracle,
+	},
+}
+fs.writeFileSync(path.join(FIXTURES, 'SOURCES.json'), `${JSON.stringify(manifest, null, '\t')}\n`)
+
+console.log(`reader.css   ${manifest.css.bytes} bytes  sha256 ${manifest.css.sha256}`)
+for (const [ink, l] of Object.entries(manifest.logos.files))
+	console.log(`logo ${ink.padEnd(5)}  ${l.bytes} bytes  sha256 ${l.sha256}`)
+for (const [name, g] of Object.entries(goldens)) console.log(`golden       ${g.sha256}  ${name}`)
+console.log(
+	`portal HEAD  ${manifest.portal.head ?? '(not a git checkout)'}  css+goldens committed there: ${manifest.portal.cssAndGoldensCommitted}`,
+)

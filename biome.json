@@ -6,6 +6,7 @@
 		"useIgnoreFile": true
 	},
 	"files": {
+		"maxSize": 8388608,
 		"ignoreUnknown": true,
 		"includes": [
 			"**/*.ts",
