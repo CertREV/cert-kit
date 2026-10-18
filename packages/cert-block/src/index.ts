@@ -135,11 +135,14 @@ export {
 export { TtlCache, type TtlCacheOptions } from './verify/cache.js'
 export {
 	type CachedDelivery,
+	type DesignPin,
 	deliveryCacheKey,
 	deliveryUrl,
+	designPinFromUrl,
 	type GetVerifiedDeliveryOptions,
 	getVerifiedDelivery,
 	invalidateDelivery,
+	parseDesignPin,
 	parseRenderDef,
 	peekVerifiedDelivery,
 	settleDelivery,

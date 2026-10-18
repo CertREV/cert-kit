@@ -59,11 +59,25 @@ import { defineCertRevBadge, setCertRevKidResolver } from '@certrev/cert-block/w
 
 // Builder.io registration (separate subpath; no Builder dependency)
 import { certRevCertComponent, BUILDER_REGISTRATION, CERT_COMPONENT_NAME } from '@certrev/cert-block/builder'
+// 1.2.0-canary.5: the design pin, for CertREV's own canary replica only (see "Design pin (staging replica)").
+// Also on the main entry. Production brands never use it.
+import { designPinFromUrl, parseDesignPin, type DesignPin } from '@certrev/cert-block/builder'
 
 // The envelope face mapping on its own (separate subpath, react-free): verified envelope content
 // plus the brand's render def, to the renderCertBlock input a `delivery`-marker card paints.
 // A server-side preview renders through the same function as the card.
 import { envelopeCardInput, faceFromDef, themeFromDef, layoutFor, CERT_FACE_FIELDS } from '@certrev/cert-block/builder/face'
+// 1.2.0: the same subpath's card-level entry, which also picks the reader face when the def says
+// `face: 'reader'` (every other def gets exactly the renderCertBlock face, as before).
+import { envelopeCardHtml, isReaderFaceDef, READER_FACE } from '@certrev/cert-block/builder/face'
+
+// 1.2.0: the reader face (certrev.com's "What your reader sees" design), react-free: the same markup
+// the Shopify reader snippets paint, and its stylesheet. A `delivery`-marker Builder card paints it by
+// itself when the brand's def says `face: 'reader'`; import this subpath for a server-side preview,
+// or a host that places the pieces itself.
+import { renderReaderFace, READER_CSS } from '@certrev/cert-block/reader'
+// The same stylesheet as a file: the generated reader section of the Shopify stylesheet, byte for byte.
+import readerCss from '@certrev/cert-block/reader.css'
 
 // Certificate modal: the ONE SIDE-EFFECTING entry in the package. Importing it registers
 // <certrev-cert-modal> and, in a browser, starts three DOM passes (placement, interactions,
@@ -276,6 +290,218 @@ actually makes (`mode`, `part`). The component enforces the fused-credential rul
 construction (a credential is unrenderable without its dated verification) and themes to the
 brand's render-def (accent / surface / corners / font + v2 bar-ink / body-ink).
 
+### The reader face (1.2.0, opt-in)
+
+certrev.com's "reader" design (a banner card plus the expert memo, a sidebar card, a floating pill) is a
+**second face** beside the one every earlier version paints. A `delivery`-marker card paints it only when
+the Delivery API's render def says `face: 'reader'`, spelled exactly. Any other def (no `face`, `legacy`, an
+unknown name, a non-string) paints exactly the face bytes 1.1.1 painted: the byte tests in
+`src/builder/__tests__/legacy-face-1.1.1.test.ts` compare it to the 1.1.1 tag's own output. (From 1.2.0
+the face's wrapper also carries its `data-certrev-envelope` seed; see
+[The delivery card in the browser](#the-delivery-card-in-the-browser-120).) A block without
+the `delivery` marker (an options-only block) never reads the envelope, so it stays on the legacy face.
+
+- **Same bytes as the Liquid.** The markup is the Shopify `certrev-reader-*` snippets', and the portal's
+  golden pages are copied into `src/reader/__tests__/fixtures/golden/` with their sha256, so the two
+  cannot drift without a test saying so.
+- **The stylesheet** is the generated reader section of `certrev-cert.css`
+  (`/* CERTREV-READER-GEN:BEGIN */ ... END`), copied byte for byte as `src/reader/reader.css` (`./reader.css`)
+  and as `READER_CSS`. The card inlines it once, in a `<style data-certrev-reader-css>`, inside the face's
+  wrapper; the brand's colours, corners and font ride the `--cr-*` variables on `.certrev-reader`.
+  `pnpm refresh:reader` regenerates the CSS, the TS copy and the fixtures from a portal checkout.
+  The stylesheet ends with 44 `@font-face` rules: certrev.com's own DM Sans, Playfair Display, Plus Jakarta
+  Sans and JetBrains Mono faces (40 rules over 12 files, `https://assets.certrev.com/fonts/cert-reader-*.woff2`)
+  and the four metric "* Fallback" faces (`src: local(Arial)`, so no fetch). They are declared at
+  `font-stretch: 101%` and the reader root asks for 101%, so they apply to reader text only and never to a
+  legacy face of the same name. The brand font stacks are the demo's own (`'DM Sans', ui-sans-serif, ...`);
+  there are no "CertREV Reader" aliases. **The card's own `<style>` (1.2.0) is `READER_CSS` without the 40
+  remote faces**: it keeps the four Fallback faces and names no font URL, so a card loads no font file and
+  needs no `font-src`, and a storefront whose CSP allows no CertREV origin logs no violation. Its text paints
+  in the Fallback metric faces (Arial and Times New Roman sized to the demo's fonts, so the layout matches)
+  unless the page already declares the demo's families. A host that wants certrev.com's own faces links
+  `@certrev/cert-block/reader.css` (which keeps all 44 rules) from its own stylesheet and allows
+  `font-src https://assets.certrev.com`; the card then paints in them with no change of its own.
+  Every declaration on the `.certrev-reader` root is `!important`, a guard rule makes descendant text inherit
+  the reader's font, colour and spacing over a host theme's element rules, and an image armor keeps `img`
+  corners square (`border-radius: 0 !important`; Hydrogen's starter `app.css` rounds every `img` 4px).
+  The stylesheet also ends with the portal's wrapper rule,
+  `:is(.certrev-card-wrap, .certrev-memo-wrap):has(.certrev-reader) { margin-block: 0 !important; padding: 0 !important; }`,
+  which a Shopify or WordPress page needs so its card and memo wrappers add no spacing around a reader card.
+  The Builder face paints no such wrapper (it emits the `.certrev-reader` sections alone), so the rule matches
+  nothing there; it is in the file because the file is the portal's bytes.
+- **The logo is the demo's own file.** The `<img>` in the card cap and in the memo's verified footer is
+  `logo-white.svg` (the cap on a dark accent) or `logo-mono.svg` (the footer, and the cap on a light accent),
+  printed as a base64 `data:image/svg+xml` URI of the file's exact bytes
+  (`src/reader/logo-assets.generated.ts`, from the portal by `pnpm refresh:reader`; sha256 `3c819f65...2d07` and
+  `da906f44...3c3e`). It is a `data:` URI as before, so a host's `img-src` needs nothing new, and the face
+  still loads no image of its own. The scope line's cue separator is followed by an empty `<!-- -->`
+  (`<em>Compensated expert</em> · <!-- -->Independent editorial review ...`), as the demo's React render leaves
+  it, so the separator and the sentence are two text nodes.
+- **Modal and links.** The profile and certificate links carry `data-certrev-modal-open` (the profile's
+  with `="expert"`), as in the Liquid face; the card only emits the hooks, and the host loads the modal
+  script as for any face. The face makes no request of its own. Its links carry `CERTREV_LINK_REL`
+  (`nofollow sponsored noopener`), as every other face's do, so a Builder page keeps declaring the paid
+  placement; the Liquid snippets say `noopener noreferrer`, and that `rel` value is the one byte the face
+  does not share with them.
+- **Layout** follows the editor's `mode` when set, else the def's `layout`, else the banner; the reader
+  has no custom composition, so a `custom` layout paints the banner. The sidebar card floats right inside
+  a wrapper that establishes its own formatting context (`display: flow-root`).
+- **Brand tokens** are an allow-list, as the Shopify and WordPress twins' are. The accent and bar ink must
+  be a `#RGB` or `#RRGGBB` string; the corner radius a bare `0` or one non-negative `px`, `rem`, `em` or `%`
+  length. Anything else (a named colour, `rgb()`, a negative or unitless radius, a value with a quote, a
+  comment opener or a bracket) paints the default, navy `#0A1B3F` and `14px`, and never reaches the
+  `style` attribute. The font is one of five stacks (`sans`, `serif`, `grotesk`, `mono`, `system`); an
+  unknown slot paints sans.
+- **Avatars.** Every byline paints a round avatar: the person's photo when there is one to paint, else their
+  initials, else the silhouette (a name with no initials). It is 36 px for the writer, 42 px for the banner
+  reviewer, 46 px for the memo and sidebar reviewer. The initials and the silhouette are an inline `<svg>`, not an
+  `<img>`, so a page with no photos holds no avatar image. The initials are the same bytes the portal's Liquid
+  snippets and WordPress renderer print: the name trimmed and split on single spaces (empty parts skipped, so
+  "Jane  Doe" is "JD"), a leading dr, mr, mrs, ms, prof or mx (with or without the dot) dropped, the first character (by code point) of each of the first two parts left,
+  uppercased, in
+  `<svg viewBox="0 0 40 40" aria-hidden="true" focusable="false"><text x="20" y="20" text-anchor="middle" dominant-baseline="central" font-size="15" font-weight="700">JD</text></svg>`
+  (the initials escaped); an empty result paints the silhouette. A def that hides `reviewerPhoto`, and
+  `display.showExpertPhoto: false`, never read a photo URL and paint the initials: the hidden photo is removed, not
+  the avatar. `reviewerPhoto` takes the reviewer's and the writer's photo alike, which is data on the brand, not a face
+  setting.
+- **Credential line.** The banner prints the reviewer's credential, a middle dot and the attribution as
+  three leaves of one `<em>` (`RDN, LD, PhD · Credential verified by CertREV on May 1, 2026`); a reviewer
+  with no displayed credential makes no verification claim. The writer's `<em>` under the name is the
+  envelope's `author.title`, printed only when it is non-empty.
+
+### The delivery card in the browser (1.2.0)
+
+A `delivery`-marker card reads the signed envelope (and the brand's render def) from the Delivery API **on
+the server**, and the face it paints carries that read as one attribute on its wrapper:
+`data-certrev-envelope` = `{ v: 1, baseUrl, externalId, design?, payload, signature?, renderDef }`. The payload is
+the served one less the fields the def hides (below), and `design` is the design pin the read was made with. The
+browser hydrates from it:
+
+- **A server-rendered card makes no browser read.** It hydrates from its own `data-certrev-envelope`,
+  byte for byte the server's face, so a storefront whose CSP `connect-src` names no CertREV origin keeps
+  the card painted and logs nothing. Through 1.1.1 the browser re-read the Delivery API on hydration, and a
+  blocked read took the server's card down.
+- **Where the server had no envelope to paint, it writes what it painted instead**, in the same attribute: a
+  record `{ v: 1, baseUrl, externalId, design?, face }` with no payload, no signature and no def. The browser keeps
+  that face through hydration and any later render of the same placement, and reads nothing:
+  - **CertREV not reached** (a 5xx, a body that is not an envelope, a network error, the 8 s deadline): the
+    block's own options face, the card 0.5.x and 1.0.x painted from the same fields, with `face: "options"`. Its
+    placement is the block's `mode`, else its def's `layout`, else the banner. A page never loses its card to an
+    outage. A pinned card (below) paints it too, with a record naming its pin. A block whose options cannot
+    paint (no reviewer) paints nothing, with `face: "none"`.
+  - **A definitive no** (revoked, expired, unverifiable, another entry's envelope, a 404 or 410): nothing, with
+    `face: "none"`, so a revocation is never painted over by the options face.
+- **After hydration** the card re-runs the lifecycle and subject policy at the browser's clock: a cert
+  whose `expiresAt` passed while the page was open comes down. The signature is not re-checked in the
+  browser (whoever can write the page's HTML can already write any card), and a revocation shows on the
+  next page load, which is when the server reads again.
+- **A card the browser mounts later** (an in-app navigation, a re-render) paints from any seed the page's
+  server HTML carried for the same placement, so it makes no read either. A pinned card (the design pin,
+  below) takes only a seed carrying the same pin.
+- **A card with no server render behind it** (a client-only page, Builder's visual editor preview) **makes no
+  read**: it paints the block's own options face, as the unreachable case does, pinned or not, or nothing (a
+  block with no options). The browser never fetches by default, so no brand's CSP needs a CertREV origin.
+- **A card the browser renders while the page is still loading waits for its record (1.2.1).** A streaming
+  server (`renderToPipeableStream`, `renderToReadableStream`: Hydrogen and React Router for a visitor's browser)
+  sends a card whose read was still running after the page's shell, in a hidden `<div id="S:0">` past `</html>`.
+  When React renders the card on the client before that part arrives (an update reaches the waiting boundary,
+  React error #421; a hydration mismatch above it re-renders the whole document, #418 then #423), the card has no
+  record in front of it. Through 1.2.0 it painted the options face, or nothing, at once and never looked again, so
+  a phone's first load could end with no card. Now it paints nothing until the record streams in, then exactly
+  what the record says (the server's face, the options face, or nothing), and what the bullet above says if the
+  page finishes loading (`DOMContentLoaded`) without one. It watches the document, and the `<html>` element the
+  server sent, which React's whole-document render removes while the parser goes on writing into it: one
+  `MutationObserver` for every card on the page, and one scan when the page has loaded (the only look where
+  `MutationObserver` is missing). It makes no read. A hydrating card, a `clientRead` card and a card mounted
+  after the page loaded behave as in 1.2.0.
+- **`clientRead` (a prop, off by default) opts in to that read.** A card with `clientRead` and no server render
+  behind it reads the Delivery API once from the browser and settles exactly as a server does. That read needs
+  `connect-src` for the Delivery origin; where it is blocked or fails, the card **renders nothing and logs
+  nothing**, never a broken card and never the host's tree unmounted. It is not a Builder input: a brand that wants
+  it sets it in code, on a wrapper of the registered component.
+- **The server's read** waits up to 8 s (the verifier's own default stays 3 s). Its cache keeps a certificate for
+  60 s, then serves it for up to 5 minutes more while one background refresh runs or while CertREV cannot be
+  reached; a refusal (revoked, expired) lands as soon as its refresh does. A cold placement waits once; a warm one
+  never waits.
+- **A reviewer photo the browser cannot load** (a CSP `img-src` without the photo's origin, a 404) is repainted as
+  the person's initials, the same bytes the face paints for a hidden photo (below), with no request and no change to
+  the record.
+- **Server render or hydration is decided from the page, with no switch.** React tells a component nothing
+  about which it is in, and under jsdom (or a DOM shim) a `react-dom/server` render sees a `document` too.
+  So the card reads what a hydration has and a server render cannot: server-rendered HTML in the document. No
+  `document` is a server; a card mounted on the client, or past its hydration, is a browser; a card that is
+  hydrating is a browser only if the live document holds this placement's seed or a React Suspense boundary marker
+  (the card's own `<Suspense>` leaves one even where the server painted no card), and otherwise is a server render,
+  which reads and seeds as a server does. The one case that is not seen is a server render run while the document
+  still holds server-rendered React HTML (a test or shim that hydrates one page and renders another into the same
+  document): it is taken for a hydration, so clear the document between pages in such a harness.
+
+#### Hidden fields are absent from the page
+
+A def's `hidden` set (`reviewerPhoto`, `memo`) and the payload's `display.showExpertPhoto: false` are the brand's
+statement that the page does not show those fields, so the seed does not carry them either. Before the card paints and
+before it writes the seed, the payload is stripped:
+
+| hidden by | removed from the payload |
+| --- | --- |
+| the def's `reviewerPhoto` | `content.expert.photoUrl` and `content.author.photoUrl` (the reader face paints the writer's photo under the same switch) |
+| `display.showExpertPhoto: false` (a literal `false`; absent or `null` shows the photo) | the same two photo URLs, whatever the def hides |
+| the def's `memo` | `content.memo` |
+
+The face is painted from the stripped payload on the server and in the browser, so the two are identical and the page
+source holds neither the photo URL nor the memo text. `content.expert.compensationCue` is never stripped: it is a locked
+disclosure no def can hide, and the banner, the memo and the sidebar paint "Compensated expert" from it (the floating pill's own markup carries no
+disclosure line, as in the portal's snippets; the modal it opens paints the cue). **When anything was stripped the seed
+carries no `signature`.** The signature signs the whole payload, so a stripped payload no longer verifies against it;
+the browser never re-checks a seed's signature, only the lifecycle and subject policy at its own clock, and neither reads
+a stripped field. A seed that stripped nothing keeps the signature, so its payload can still be checked against the issuer
+key. A reader def that hides `memo` paints no memo card on the Builder card (the reader face called directly, like the
+portal's Shopify snippets, paints the memo it is given).
+
+### Design pin (staging replica)
+
+1.2.0-canary.5. **This is for CertREV's own canary replica only; production brands never send it.** The
+replica paints one saved design version of a brand's Appearance settings on a real Builder page, chosen by the
+replica's own page URL. A production page passes no pin, and its card reads
+the same URL, under the same cache key, and paints the same bytes as before.
+
+- **The URL.** A pinned card asks the Delivery API for that design instead of the brand's live def:
+  `GET <base>/api/cert/v1/delivery/builder/<entryId>?design=<version>[&designBrand=<brandKey>]`. `version`
+  matches `/^[1-9][0-9]{0,8}$/` and `brandKey` matches `/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/` (sent
+  URL-encoded). The pin is part of the URL, so a pinned read has its own cache entry and its own suspense key.
+  It never shares either with the unpinned read or with another pin.
+- **The context key.** The card never reads the page URL itself. The replica passes the pin through Builder
+  `<Content>`'s own `context` prop as `certrevDesignPin`, and the card reads
+  `builderContext.context.certrevDesignPin`. `designPinFromUrl(request.url)` builds that value from the
+  replica's own request: `{ design, designBrand? }` as strings, or `undefined` when the URL has neither param. It
+  never throws. `parseDesignPin` is the card's judge: `undefined` for no pin, a `DesignPin`
+  (`{ version, brand? }`), or `'invalid'`.
+
+  ```tsx
+  import { certRevCertComponent, designPinFromUrl } from '@certrev/cert-block/builder'
+
+  const certrevDesignPin = designPinFromUrl(request.url) // in the replica's loader
+  <Content model="blog-article" content={content} apiKey={apiKey} customComponents={[certRevCertComponent]}
+    context={certrevDesignPin ? { certrevDesignPin } : {}} />
+  ```
+- **Fail-closed.** A pin never falls back to the live design. Each of these renders nothing:
+  - a pin that cannot be read. This covers a brand without a version, `0`, a leading zero, a word, an
+    upper-case or empty brand, and anything that is not a `{ design, designBrand? }` object. Nothing is
+    fetched.
+  - a pin on a block without the `delivery` marker. The options face is never the pinned design, and nothing
+    is fetched.
+  - a 404 (`no_design`) from the API, and every verdict that already suppresses an unpinned card
+    (revoked, expired, unverifiable, another entry).
+
+  CertREV not reached (a 503, a timeout, a network error) is not a fail-closed case since 1.2.0: a pinned card
+  paints the block's own options face, as an unpinned card does, with a record that names the pin and says
+  `options`. That is never the live design, and the record tells a capture it is not the pinned one either.
+  - a def that is anything other than a **reader** def (`face: 'reader'`) at **exactly** the pinned version.
+    That includes no def, a malformed def, a legacy or unknown face, and another version.
+
+  No pin at all is `undefined` or `null`, which also covers a missing or empty `context`. In that case the
+  card is the unpinned card, byte for byte, as `src/builder/__tests__/design-pin-card.test.tsx` checks.
+
 ### PUSH trust model
 
 Read this before choosing PUSH. The registered card is **chrome, not a verifier**, and it is a
@@ -344,9 +570,15 @@ import certScriptUrl from '@certrev/cert-block/modal/certrev-cert.js?url'
 <script src={certScriptUrl} defer />
 ```
 
-CSP allowances for the headless host. The **registered card** needs none; it fetches no font,
-loads no image (the avatar is rendered initials) and inlines its logo as SVG. These are what the
-**modal** needs:
+CSP allowances for the headless host. The **registered card** needs none when the server renders it
+(1.2.0): it hydrates from the envelope in its own server HTML with no browser read (see
+[The delivery card in the browser](#the-delivery-card-in-the-browser-120)), fetches no font (the reader
+face's inlined stylesheet names no font URL), and paints its logo and silhouette avatars inline. Two
+things a host may still want: `img-src` for the reviewer's photo when the brand's def shows it (a reader
+face `<img>` of the envelope's `photoUrl`, usually `https://assets.certrev.com`; a def that hides
+`reviewerPhoto` loads no image, and a photo the policy blocks is repainted as the person's initials), and
+`connect-src` only for a block that opts in to a browser read with `clientRead`. These are what the **modal**
+needs:
 
 - `connect-src` → the CertREV Delivery origin the element fetches the signed envelope from
   (production `https://portal.certrev.com`; staging `https://staging.portal.certrev.com`).
@@ -606,7 +838,7 @@ notification channel, because for those consumers it is the only one.
 
 ## Tests
 
-`pnpm test` (Vitest) runs all 17 test files. They sit next to what they cover: `src/__tests__/`
+`pnpm test` (Vitest) runs every test file. They sit next to what they cover: `src/__tests__/`
 for the cross-cutting suites, `src/builder/__tests__/` for the Builder kit, and `src/modal/*.test.ts`
 alongside each modal module. The load-bearing ones:
 
@@ -617,6 +849,8 @@ alongside each modal module. The load-bearing ones:
 - **`__tests__/escape-family.test.ts`** puts both escape families (`components/` and `modal/`) against wrong-typed input, not just null: a half-filled CMS object must degrade, never throw.
 - **`__tests__/webcomponent.test.tsx`**: the shared `renderBadgeHtml` string renderer (hand-escaping, unsafe-URL/color dropping, compact style) and the `<certrev-badge>` custom element (idempotent registration, SSR light-DOM preservation, client-mode fail-closed without a resolver).
 - **`builder/__tests__/builder.test.tsx`** covers the PUSH card and its registration: the wire-type ⇄ inputs parity lock, the fused-credential gate, and the mistyped-option degradation.
+- **`builder/__tests__/delivery-card-hydrate.test.tsx`** + **`builder/__tests__/ssr-seed.test.tsx`** (1.2.0): a server-rendered delivery card hydrates on both faces with zero browser reads, no mismatch and the same nodes; its seed is the served envelope and still verifies; revoked and browser-clock-expired cards come down; a later client mount reuses the page's seed; the server's options and none records are kept through hydration and through React's client re-render after a hydration error, with no read; a client mount with no record makes no read and paints the options face or nothing, and only with `clientRead` reads once, or renders nothing and logs nothing when the read is refused; a reviewer photo that fails to load repaints as initials; the seed and fallback-record parsers refuse malformed records and each other's; the design pin is part of the seed's key; a hidden `reviewerPhoto` or `memo`, or `display.showExpertPhoto: false` (the photo URLs), is absent from the whole server HTML and the seed carries no signature; every server render in these files runs under jsdom with no server switch; and the card's inlined reader stylesheet names no font URL. **`builder/__tests__/delivery-card.test.tsx`** pins the unreachable cases to the 1.0.3 options face byte for byte, and the 8 s deadline and the stale window; **`verify/__tests__/cache.test.ts`** the cache's stale-while-revalidate, stale-if-error and in-flight limit. **`reader/__tests__/reader-initials.test.ts`** pins the initials bytes (honorifics, escaping, hidden and missing photos, `showExpertPhoto`, the empty name).
+- **`builder/__tests__/streamed-record-card.test.tsx`** (1.2.1): a card the client renders while the page loads paints nothing, then the record the stream adds, to the document (#421) or to the server's `<html>` after React replaced it (#423, with and without `MutationObserver`), and what a client mount paints once the page loads with none; pinned, options, none and expired records; no read; hydration, `clientRead` and a loaded page unchanged.
 - **`modal/*.test.ts`**, per module: the modal element (tombstone → `markSuppressed`), the dialog view, interactions, placement, badge revalidation, and the Delivery-API verify client. `modal/own-face-modal.test.ts` puts two faces on one page and proves each control opens its own face's modal; `modal/closed-container-face.test.ts` proves a face that loads inside a closed `<details>`, tab or accordion is left alone and renders when opened (there is no runtime disclosure guard).
 - **`__tests__/readme-version.test.ts`** + **`__tests__/readme-contract.test.ts`** pin the claims in this file that rot silently: the version stamp against `package.json`, the key id, the route-example heading, and every `exports` subpath appearing under Public API.
 
@@ -625,7 +859,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`1.1.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`1.2.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.

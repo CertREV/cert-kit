@@ -26,14 +26,16 @@
  * it only returns null when the verified content cannot make a face (no reviewer, no verify URL).
  */
 
-import type {
-	CertBlockFace,
-	CertBlockLayout,
-	CertBlockMode,
-	RenderCertBlockInput,
+import {
+	type CertBlockFace,
+	type CertBlockLayout,
+	type CertBlockMode,
+	type RenderCertBlockInput,
+	renderCertBlock,
 } from '../components/render-cert-block.js'
 import { accentFg, HIDEABLE_FIELDS, isOpaqueHexColor, type ResolvedBlockTheme } from '../components/render-def.js'
 import type { CertContent } from '../contract/kernel.js'
+import { type ReaderLayout, renderReaderFace } from '../reader/render.js'
 import type { CertChromeRenderDef } from './cert-chrome-data.js'
 
 /**
@@ -74,6 +76,10 @@ export interface EnvelopeCardOptions {
 	readonly mode?: unknown
 	/** Banner memo placement, passed through as on the options path. */
 	readonly part?: unknown
+	/** The verified payload's `certId`: stamped on the reader face (`data-certrev-cert-id`). The legacy face ignores it. */
+	readonly certId?: unknown
+	/** A CertREV preview, never a live page: the reader face words the cue's empty slot as the demo does. Only `true` counts. */
+	readonly illustrative?: unknown
 }
 
 /** The def's theme tokens as `renderCertBlock` theme input, with the accent ink derived. */
@@ -170,4 +176,47 @@ export function envelopeCardInput(
 			compensationCue: optionalText(expert.compensationCue) ? undefined : null,
 		},
 	}
+}
+
+/** The def `face` that selects the certrev.com reader face (1.2.0). Nothing else does. */
+export const READER_FACE = 'reader'
+
+/** Whether a def asks for the reader face: `face === 'reader'`, exactly. Absent or any other value is the legacy face. */
+export function isReaderFaceDef(def: CertChromeRenderDef | null | undefined): boolean {
+	return def?.face === READER_FACE
+}
+
+/**
+ * The card's HTML for a verified envelope's content and the brand's def, or '' when nothing paints.
+ *
+ * THE ONE SELECTION POINT between the two faces, react-free so the portal's preview reaches it too:
+ *  - `renderDef.face === 'reader'` paints the reader face (`renderReaderFace`), the same bytes as the Shopify reader
+ *    snippets for the same facts;
+ *  - EVERY other def (no `face`, `face: 'legacy'`, a face this version has never heard of, no def at all) paints
+ *    exactly `renderCertBlock(envelopeCardInput(...))`, byte for byte what 1.1.1 paints. An unknown face degrades to
+ *    the face the page had before, never to nothing and never to the reader.
+ * The reader branch sits BESIDE the legacy one; `envelopeCardInput` and `renderCertBlock` are not touched.
+ *
+ * Both faces keep the one gate they share: a content with no reviewer name or no certificate URL cannot make a face.
+ * The reader's layout is `layoutFor` (an editor mode wins, then the def's own layout, else banner); the legacy-only
+ * `custom` composition has no reader twin and paints the reader banner.
+ */
+export function envelopeCardHtml(
+	content: CertContent,
+	renderDef: CertChromeRenderDef | null,
+	options: EnvelopeCardOptions = {},
+): string {
+	const input = envelopeCardInput(content, renderDef, options)
+	if (!input) return ''
+	if (!isReaderFaceDef(renderDef)) return renderCertBlock(input)
+	const chosen = layoutFor(renderDef, options.mode)
+	const layout: ReaderLayout = chosen === 'custom' ? 'banner' : chosen
+	return renderReaderFace({
+		content,
+		def: renderDef,
+		layout,
+		part: input.part,
+		certId: typeof options.certId === 'string' ? options.certId : undefined,
+		illustrative: options.illustrative === true,
+	})
 }

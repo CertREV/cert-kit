@@ -1,0 +1,495 @@
+{
+	"certId": "cert-embed-parity",
+	"cells": [
+		{
+			"id": "banner.navy-full",
+			"variant": "full",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": { "accentColor": "#0A1B3F", "surface": "#ffffff", "cornerRadius": "12px", "fontSlot": "sans" },
+				"hidden": [],
+				"accentFg": "#ffffff",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": "2026-05-01T00:00:00.000Z",
+					"profileUrl": "https://certrev.com/experts/masked-reviewer",
+					"photoUrl": "https://cdn.example.test/masked/reviewer.jpg",
+					"bio": "Short reviewer bio (fixture).",
+					"background": "Long reviewer background (fixture).",
+					"compensationCue": "Compensated expert"
+				},
+				"author": {
+					"name": "Morgan Placeholder",
+					"title": "Staff Writer",
+					"photoUrl": "https://cdn.example.test/masked/author.jpg",
+					"bio": "Author bio (fixture)."
+				},
+				"memo": "Claims checked against the cited sources.",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "banner.navy-sparse",
+			"variant": "sparse",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": { "accentColor": "#0a1b3f", "surface": "#ffffff", "cornerRadius": "12px", "fontSlot": "sans" },
+				"hidden": [],
+				"accentFg": "#ffffff",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": null,
+					"profileUrl": null,
+					"photoUrl": null,
+					"bio": null,
+					"background": null,
+					"compensationCue": null
+				},
+				"author": { "name": "Morgan Placeholder", "title": "Staff Writer", "photoUrl": null, "bio": null },
+				"memo": "",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "banner.gold-serif-sharp-full",
+			"variant": "full",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": {
+					"accentColor": "#F5C518",
+					"surface": "#ffffff",
+					"cornerRadius": "0px",
+					"fontSlot": "serif",
+					"barInk": "#F5C518"
+				},
+				"barInkFg": "#141414",
+				"hidden": [],
+				"accentFg": "#141414",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": "2026-05-01T00:00:00.000Z",
+					"profileUrl": "https://certrev.com/experts/masked-reviewer",
+					"photoUrl": "https://cdn.example.test/masked/reviewer.jpg",
+					"bio": "Short reviewer bio (fixture).",
+					"background": "Long reviewer background (fixture).",
+					"compensationCue": "Compensated expert"
+				},
+				"author": {
+					"name": "Morgan Placeholder",
+					"title": "Staff Writer",
+					"photoUrl": "https://cdn.example.test/masked/author.jpg",
+					"bio": "Author bio (fixture)."
+				},
+				"memo": "Claims checked against the cited sources.",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "banner.burgundy-mono-pill-nophoto",
+			"variant": "full",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": {
+					"accentColor": "#7A1F2B",
+					"surface": "#ffffff",
+					"cornerRadius": "22px",
+					"fontSlot": "mono",
+					"barInk": "#7A1F2B"
+				},
+				"barInkFg": "#ffffff",
+				"hidden": ["reviewerPhoto"],
+				"accentFg": "#ffffff",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": "2026-05-01T00:00:00.000Z",
+					"profileUrl": "https://certrev.com/experts/masked-reviewer",
+					"photoUrl": "https://cdn.example.test/masked/reviewer.jpg",
+					"bio": "Short reviewer bio (fixture).",
+					"background": "Long reviewer background (fixture).",
+					"compensationCue": "Compensated expert"
+				},
+				"author": {
+					"name": "Morgan Placeholder",
+					"title": "Staff Writer",
+					"photoUrl": "https://cdn.example.test/masked/author.jpg",
+					"bio": "Author bio (fixture)."
+				},
+				"memo": "Claims checked against the cited sources.",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "sidebar.navy-full",
+			"variant": "full",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": { "accentColor": "#0A1B3F", "surface": "#ffffff", "cornerRadius": "12px", "fontSlot": "sans" },
+				"hidden": [],
+				"layout": "sidebar",
+				"accentFg": "#ffffff",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": "2026-05-01T00:00:00.000Z",
+					"profileUrl": "https://certrev.com/experts/masked-reviewer",
+					"photoUrl": "https://cdn.example.test/masked/reviewer.jpg",
+					"bio": "Short reviewer bio (fixture).",
+					"background": "Long reviewer background (fixture).",
+					"compensationCue": "Compensated expert"
+				},
+				"author": {
+					"name": "Morgan Placeholder",
+					"title": "Staff Writer",
+					"photoUrl": "https://cdn.example.test/masked/author.jpg",
+					"bio": "Author bio (fixture)."
+				},
+				"memo": "Claims checked against the cited sources.",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "sidebar.navy-sparse",
+			"variant": "sparse",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": { "accentColor": "#0a1b3f", "surface": "#ffffff", "cornerRadius": "12px", "fontSlot": "sans" },
+				"hidden": [],
+				"layout": "sidebar",
+				"accentFg": "#ffffff",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": null,
+					"profileUrl": null,
+					"photoUrl": null,
+					"bio": null,
+					"background": null,
+					"compensationCue": null
+				},
+				"author": { "name": "Morgan Placeholder", "title": "Staff Writer", "photoUrl": null, "bio": null },
+				"memo": "",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "sidebar.gold-serif-sharp-full",
+			"variant": "full",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": {
+					"accentColor": "#F5C518",
+					"surface": "#ffffff",
+					"cornerRadius": "0px",
+					"fontSlot": "serif",
+					"barInk": "#F5C518"
+				},
+				"barInkFg": "#141414",
+				"hidden": [],
+				"layout": "sidebar",
+				"accentFg": "#141414",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": "2026-05-01T00:00:00.000Z",
+					"profileUrl": "https://certrev.com/experts/masked-reviewer",
+					"photoUrl": "https://cdn.example.test/masked/reviewer.jpg",
+					"bio": "Short reviewer bio (fixture).",
+					"background": "Long reviewer background (fixture).",
+					"compensationCue": "Compensated expert"
+				},
+				"author": {
+					"name": "Morgan Placeholder",
+					"title": "Staff Writer",
+					"photoUrl": "https://cdn.example.test/masked/author.jpg",
+					"bio": "Author bio (fixture)."
+				},
+				"memo": "Claims checked against the cited sources.",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "sidebar.burgundy-mono-pill-nophoto",
+			"variant": "full",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": {
+					"accentColor": "#7A1F2B",
+					"surface": "#ffffff",
+					"cornerRadius": "22px",
+					"fontSlot": "mono",
+					"barInk": "#7A1F2B"
+				},
+				"barInkFg": "#ffffff",
+				"hidden": ["reviewerPhoto"],
+				"layout": "sidebar",
+				"accentFg": "#ffffff",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": "2026-05-01T00:00:00.000Z",
+					"profileUrl": "https://certrev.com/experts/masked-reviewer",
+					"photoUrl": "https://cdn.example.test/masked/reviewer.jpg",
+					"bio": "Short reviewer bio (fixture).",
+					"background": "Long reviewer background (fixture).",
+					"compensationCue": "Compensated expert"
+				},
+				"author": {
+					"name": "Morgan Placeholder",
+					"title": "Staff Writer",
+					"photoUrl": "https://cdn.example.test/masked/author.jpg",
+					"bio": "Author bio (fixture)."
+				},
+				"memo": "Claims checked against the cited sources.",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "floating.navy",
+			"variant": "full",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": { "accentColor": "#0A1B3F", "surface": "#ffffff", "cornerRadius": "12px", "fontSlot": "sans" },
+				"hidden": [],
+				"layout": "floating",
+				"accentFg": "#ffffff",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": "2026-05-01T00:00:00.000Z",
+					"profileUrl": "https://certrev.com/experts/masked-reviewer",
+					"photoUrl": "https://cdn.example.test/masked/reviewer.jpg",
+					"bio": "Short reviewer bio (fixture).",
+					"background": "Long reviewer background (fixture).",
+					"compensationCue": "Compensated expert"
+				},
+				"author": {
+					"name": "Morgan Placeholder",
+					"title": "Staff Writer",
+					"photoUrl": "https://cdn.example.test/masked/author.jpg",
+					"bio": "Author bio (fixture)."
+				},
+				"memo": "Claims checked against the cited sources.",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "floating.gold-serif-sharp",
+			"variant": "full",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": {
+					"accentColor": "#F5C518",
+					"surface": "#ffffff",
+					"cornerRadius": "0px",
+					"fontSlot": "serif",
+					"barInk": "#F5C518"
+				},
+				"barInkFg": "#141414",
+				"hidden": [],
+				"layout": "floating",
+				"accentFg": "#141414",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": "2026-05-01T00:00:00.000Z",
+					"profileUrl": "https://certrev.com/experts/masked-reviewer",
+					"photoUrl": "https://cdn.example.test/masked/reviewer.jpg",
+					"bio": "Short reviewer bio (fixture).",
+					"background": "Long reviewer background (fixture).",
+					"compensationCue": "Compensated expert"
+				},
+				"author": {
+					"name": "Morgan Placeholder",
+					"title": "Staff Writer",
+					"photoUrl": "https://cdn.example.test/masked/author.jpg",
+					"bio": "Author bio (fixture)."
+				},
+				"memo": "Claims checked against the cited sources.",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		},
+		{
+			"id": "floating.burgundy-mono-pill",
+			"variant": "full",
+			"def": {
+				"v": 1,
+				"preset": "memo",
+				"rung": "memo",
+				"tokens": {
+					"accentColor": "#7A1F2B",
+					"surface": "#ffffff",
+					"cornerRadius": "22px",
+					"fontSlot": "mono",
+					"barInk": "#7A1F2B"
+				},
+				"barInkFg": "#ffffff",
+				"hidden": [],
+				"layout": "floating",
+				"accentFg": "#ffffff",
+				"face": "reader"
+			},
+			"content": {
+				"expert": {
+					"displayName": "Dr. Avery Quinlan",
+					"credentials": [
+						{ "abbreviation": "RDN", "fullName": "Registered Dietitian Nutritionist", "cardLabel": "RDN, LD" },
+						{ "abbreviation": "PhD", "fullName": "Doctor of Philosophy" }
+					],
+					"credentialVerifiedAt": "2026-05-01T00:00:00.000Z",
+					"profileUrl": "https://certrev.com/experts/masked-reviewer",
+					"photoUrl": "https://cdn.example.test/masked/reviewer.jpg",
+					"bio": "Short reviewer bio (fixture).",
+					"background": "Long reviewer background (fixture).",
+					"compensationCue": "Compensated expert"
+				},
+				"author": {
+					"name": "Morgan Placeholder",
+					"title": "Staff Writer",
+					"photoUrl": "https://cdn.example.test/masked/author.jpg",
+					"bio": "Author bio (fixture)."
+				},
+				"memo": "Claims checked against the cited sources.",
+				"certifiedAt": "2026-06-20T12:00:00.000Z",
+				"contentModifiedAt": "2026-06-21T12:00:00.000Z",
+				"articleTitle": "Masked YISE article",
+				"displayCertId": "CR-2026-0001",
+				"verifyUrl": "https://certrev.com/verify/masked-yise",
+				"display": { "badgeStyle": "full" }
+			}
+		}
+	]
+}
