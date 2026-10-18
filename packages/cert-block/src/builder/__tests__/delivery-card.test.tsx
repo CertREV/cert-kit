@@ -4,12 +4,17 @@
  *  - Without it, every options-only shape paints what 1.0.3 painted, byte for byte (the golden
  *    was rendered by the 1.0.3 tarball source, not by this tree).
  *  - With it, the card paints the VERIFIED envelope for its own Builder entry with the brand's
- *    def, and renders nothing for every way that can fail.
+ *    def, and renders nothing for every definitive no (revoked, expired, unverifiable, for another
+ *    entry, not found).
+ *  - 1.2.0: where CertREV cannot be reached (a 5xx, a body that is not JSON, a network error, the
+ *    deadline), it paints the block's own options face, as 0.5.x did, rather than nothing. The
+ *    server's read waits up to 8s, and a cached certificate is served up to 5 minutes past its TTL
+ *    while one refresh runs or while CertREV is down.
  */
 
 import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderCertBlock } from '../../components/render-cert-block.js'
 import { CERT_STRINGS_VERSION } from '../../components/render-def.js'
 import { BUILDER_CERT_CHROME_KEYS } from '../cert-chrome-data.js'
@@ -22,7 +27,12 @@ import {
 	certRevCertComponent,
 	WIRE_INPUTS,
 } from '../cert-review-card.js'
-import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
+import {
+	CARD_DELIVERY_STALE_MS,
+	CARD_DELIVERY_TIMEOUT_MS,
+	cardDeliveryRuntime,
+	setCardDeliveryRuntimeForTests,
+} from '../delivery-runtime.js'
 import {
 	BASE,
 	builderSubject,
@@ -38,13 +48,22 @@ import {
 	renderToHtml,
 	type ScriptedDelivery,
 	scriptedDelivery,
+	seedOf,
 	T0,
+	withoutSeed,
 } from './delivery-harness.js'
 import { OPTIONS_ONLY_SHAPES } from './options-only-shapes.js'
 
 const GOLDEN = JSON.parse(readFileSync(new URL('./__golden__/options-only-1.0.3.json', import.meta.url), 'utf8')) as {
 	golden: Record<string, string>
 }
+
+/** The memo the fixture block's OPTIONS carry; the envelope's memo is another sentence, so this tells the faces apart. */
+const OPTIONS_MEMO = 'The retinol guidance and usage cadence are accurate and safely framed.'
+/** The record a server writes beside a face it did not paint from an envelope. */
+const fallbackRecord = (face: 'options' | 'none') => ({ v: 1, baseUrl: BASE, externalId: ENTRY_ID, face })
+/** Server HTML less React's Suspense boundary comments, so it compares with a `renderToStaticMarkup` paint. */
+const withoutBoundaries = (html: string) => html.replace(/<!--\/?\$-->/g, '')
 
 describe('no delivery marker: the 1.0.3 options face, unchanged', () => {
 	for (const [name, props] of Object.entries(OPTIONS_ONLY_SHAPES)) {
@@ -325,7 +344,10 @@ describe('with the delivery marker: the envelope face', () => {
 		it('revoked: the Delivery API serves a tombstone', async () => {
 			const tombstone = await issuer.tombstone()
 			delivery.respond(() => json(tombstone))
-			await expectNothing()
+			const html = await expectNothing()
+			// An empty hidden element carries the server's "nothing", so a client re-render keeps it (1.2.0).
+			expect(html).toMatch(/<div hidden="" data-certrev-envelope="/)
+			expect(seedOf(html)).toEqual(fallbackRecord('none'))
 		})
 
 		it('revoked inside the envelope (revokedAt set)', async () => {
@@ -381,29 +403,17 @@ describe('with the delivery marker: the envelope face', () => {
 			await expectNothing()
 		})
 
-		it('404 (never certified here)', async () => {
-			delivery.respond(() => json({ error: 'not_found' }, 404))
-			await expectNothing()
+		it.each([
+			['404 (never certified here)', 404],
+			['410 (gone)', 410],
+		])('%s', async (_label, status) => {
+			delivery.respond(() => json({ error: 'not_found' }, status))
+			expect(seedOf(await expectNothing())).toEqual(fallbackRecord('none'))
 		})
 
-		it('500', async () => {
-			delivery.respond(() => json({ error: 'boom' }, 500))
-			await expectNothing()
-		})
-
-		it('a body that is not JSON', async () => {
-			delivery.respond(() => new Response('<html>oops</html>', { status: 200 }))
-			await expectNothing()
-		})
-
-		it('a network error', async () => {
-			delivery.respond(() => Promise.reject(new TypeError('fetch failed')))
-			await expectNothing()
-		})
-
-		it('the fetch deadline', async () => {
-			delivery.respond(() => new Promise<Response>(() => {}))
-			await expectNothing()
+		it('an envelope for another entry carries the none record too (it is a definitive no, not an outage)', async () => {
+			delivery.respond(() => json(deliveryBody(issuer.envelope({ subject: builderSubject('another-entry') }))))
+			expect(seedOf(await expectNothing())).toEqual(fallbackRecord('none'))
 		})
 
 		it('no builderContext, or no content id: never fetches', async () => {
@@ -436,7 +446,117 @@ describe('with the delivery marker: the envelope face', () => {
 		})
 	})
 
+	describe("CertREV not reached: the block's own options face (1.2.0)", () => {
+		const expectOptionsFace = async (element = card()) => {
+			const html = await renderToHtml(element)
+			expect(chromeRoot(html)).not.toBeNull()
+			expect(html).toContain(OPTIONS_MEMO)
+			expect(html).not.toContain('I reviewed the retinol claims')
+			expect(seedOf(html)).toEqual(fallbackRecord('options'))
+			return html
+		}
+
+		it.each([
+			['a 500', () => json({ error: 'boom' }, 500)],
+			['a 503', () => json({ error: 'unavailable' }, 503)],
+			['a body that is not JSON', () => new Response('<html>oops</html>', { status: 200 })],
+			['a JSON body that is not an object', () => json([1, 2])],
+			['a network error', () => Promise.reject(new TypeError('fetch failed'))],
+			['the fetch deadline', () => new Promise<Response>(() => {})],
+		])('%s: the options face 0.5.x painted, byte for byte, with an options record', async (_label, answer) => {
+			delivery.respond(answer)
+			const html = await expectOptionsFace()
+			expect(withoutBoundaries(withoutSeed(html))).toBe(GOLDEN.golden.todaysExport)
+			expect(delivery.calls).toEqual([DELIVERY_URL])
+		})
+
+		it("paints in the def layout the block carries, and an editor's mode wins over it", async () => {
+			delivery.respond(() => json({ error: 'boom' }, 500))
+			const sidebarDef = { ...(OPTIONS_ONLY_SHAPES.todaysExportWithDef.renderDef as object), layout: 'sidebar' }
+			const byDef = await expectOptionsFace(card({ renderDef: sidebarDef as never }))
+			expect(withoutBoundaries(withoutSeed(byDef))).toBe(
+				renderToStaticMarkup(
+					<CertReviewCard
+						{...(OPTIONS_ONLY_SHAPES.todaysExport as CertReviewCardProps)}
+						renderDef={sidebarDef as never}
+						mode="sidebar"
+					/>,
+				),
+			)
+			const byEditor = await expectOptionsFace(card({ renderDef: sidebarDef as never, mode: 'banner' }))
+			expect(withoutBoundaries(withoutSeed(byEditor))).toBe(
+				renderToStaticMarkup(
+					<CertReviewCard
+						{...(OPTIONS_ONLY_SHAPES.todaysExport as CertReviewCardProps)}
+						renderDef={sidebarDef as never}
+						mode="banner"
+					/>,
+				),
+			)
+		})
+
+		it('a block whose options cannot paint (no reviewer) still renders nothing, with a none record', async () => {
+			delivery.respond(() => json({ error: 'boom' }, 500))
+			const html = await renderToHtml(card({ reviewerName: null as never }))
+			expect(chromeRoot(html)).toBeNull()
+			expect(seedOf(html)).toEqual(fallbackRecord('none'))
+		})
+
+		it('a pinned card (the canary replica) paints the options face too, with an options record that names its pin', async () => {
+			delivery.respond(() => json({ error: 'boom' }, 500))
+			const html = await renderToHtml(
+				card({
+					builderContext: {
+						content: { id: ENTRY_ID },
+						context: { certrevDesignPin: { design: '4', designBrand: 'staging-shopify-canary' } },
+					},
+				}),
+			)
+			expect(chromeRoot(html)).not.toBeNull()
+			expect(html).toContain(OPTIONS_MEMO)
+			expect(seedOf(html)).toEqual({
+				...fallbackRecord('options'),
+				design: { version: 4, brand: 'staging-shopify-canary' },
+			})
+			expect(delivery.calls).toEqual([`${DELIVERY_URL}?design=4&designBrand=staging-shopify-canary`])
+		})
+
+		it('the card runtime waits 8s (the verifier defaults to 3s), and serves a certificate 5 minutes past its TTL', () => {
+			restore()
+			expect(CARD_DELIVERY_TIMEOUT_MS).toBe(8_000)
+			expect(CARD_DELIVERY_STALE_MS).toBe(300_000)
+			expect(cardDeliveryRuntime().timeoutMs).toBe(CARD_DELIVERY_TIMEOUT_MS)
+			restore = setCardDeliveryRuntimeForTests({ fetchImpl: () => delivery.fetch })
+			expect(cardDeliveryRuntime().timeoutMs).toBe(CARD_DELIVERY_TIMEOUT_MS)
+		})
+
+		it('a read slower than 3s still paints the envelope under the card deadline', async () => {
+			restore()
+			restore = setCardDeliveryRuntimeForTests({
+				resolveKid: issuer.resolveKid,
+				fetchImpl: () => delivery.fetch,
+				now: () => clock,
+			})
+			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+			try {
+				const body = deliveryBody(issuer.envelope())
+				delivery.respond(() => new Promise<Response>((resolve) => setTimeout(() => resolve(json(body)), 5_000)))
+				const pending = renderToHtml(card())
+				await vi.advanceTimersByTimeAsync(5_000)
+				const html = await pending
+				expect(html).toContain('I reviewed the retinol claims')
+				expect(seedOf(html)).toMatchObject({ externalId: ENTRY_ID, payload: { subject: { externalId: ENTRY_ID } } })
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+	})
+
 	describe('lifecycle is judged at render time, over a cached verified read', () => {
+		/** Render until `check` holds: a stale read's one background refresh lands between renders. */
+		const eventually = (check: (html: string) => void) =>
+			vi.waitFor(async () => check(await renderToHtml(card())), { timeout: 2_000, interval: 5 })
+
 		it('an expiry lands at expiresAt without a refetch', async () => {
 			const payload = issuer.envelope().payload
 			const expiresAt = new Date(T0 + 30_000).toISOString()
@@ -447,35 +567,58 @@ describe('with the delivery marker: the envelope face', () => {
 			expect(delivery.calls).toHaveLength(1)
 		})
 
-		it('a revocation lands after the cache TTL with no write on the brand side', async () => {
+		it('a revocation lands with the first refresh after the cache TTL, with no write on the brand side', async () => {
 			expect(chromeRoot(await renderToHtml(card()))).not.toBeNull()
 			const tombstone = await issuer.tombstone()
 			delivery.respond(() => json(tombstone))
 			clock = T0 + 30_000
 			expect(chromeRoot(await renderToHtml(card()))).not.toBeNull()
 			expect(delivery.calls).toHaveLength(1)
+			// Past the TTL the cached certificate paints once more, at once, while ONE refresh reads the tombstone.
 			clock = T0 + 61_000
-			expect(chromeRoot(await renderToHtml(card()))).toBeNull()
+			expect(chromeRoot(await renderToHtml(card()))).not.toBeNull()
+			expect(delivery.calls).toHaveLength(2)
+			await eventually((html) => expect(chromeRoot(html)).toBeNull())
 			expect(delivery.calls).toHaveLength(2)
 		})
 
-		it('a def change lands after the cache TTL', async () => {
+		it('a def change lands with the first refresh after the cache TTL', async () => {
 			expect(await renderToHtml(card())).toContain('--ba:#000000')
 			delivery.respond(() =>
 				json(deliveryBody(issuer.envelope(), { ...ELF_LIKE_DEF, v: 5, tokens: { accentColor: '#e6007e' } })),
 			)
 			clock = T0 + 61_000
-			const after = await renderToHtml(card())
-			expect(after).toContain('--ba:#e6007e')
-			expect(after).toContain('data-certrev-def-version="5"')
+			expect(await renderToHtml(card())).toContain('--ba:#000000')
+			await eventually((after) => {
+				expect(after).toContain('--ba:#e6007e')
+				expect(after).toContain('data-certrev-def-version="5"')
+			})
 		})
 
-		it('a failed read is retried after the short negative TTL', async () => {
+		it('CertREV down past the TTL: the verified card keeps painting for up to 5 minutes, then the options face', async () => {
+			expect(await renderToHtml(card())).toContain('I reviewed the retinol claims')
 			delivery.respond(() => json({ error: 'boom' }, 500))
-			expect(chromeRoot(await renderToHtml(card()))).toBeNull()
+			clock = T0 + 61_000
+			expect(await renderToHtml(card())).toContain('I reviewed the retinol claims')
+			await eventually((html) => expect(html).toContain('I reviewed the retinol claims'))
+			clock = T0 + 60_000 + 299_000
+			expect(await renderToHtml(card())).toContain('I reviewed the retinol claims')
+			clock = T0 + 60_000 + 300_000
+			const after = await renderToHtml(card())
+			expect(after).toContain(OPTIONS_MEMO)
+			expect(seedOf(after)).toEqual(fallbackRecord('options'))
+		})
+
+		it('a failed read paints the options face, and is retried after the short negative TTL', async () => {
+			delivery.respond(() => json({ error: 'boom' }, 500))
+			expect(seedOf(await renderToHtml(card()))).toEqual(fallbackRecord('options'))
 			delivery.respond(() => json(deliveryBody(issuer.envelope())))
+			clock = T0 + 4_000
+			expect(seedOf(await renderToHtml(card()))).toEqual(fallbackRecord('options'))
+			expect(delivery.calls).toHaveLength(1)
 			clock = T0 + 6_000
-			expect(chromeRoot(await renderToHtml(card()))).not.toBeNull()
+			expect(await renderToHtml(card())).toContain('I reviewed the retinol claims')
+			expect(delivery.calls).toHaveLength(2)
 		})
 
 		it('two cards on one page share one read', async () => {

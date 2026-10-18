@@ -152,3 +152,30 @@ export function chromeRoot(html: string): string | null {
 	const at = html.indexOf('<div data-certrev-cert-chrome')
 	return at === -1 ? null : html.slice(at)
 }
+
+/**
+ * `html` without the `data-certrev-envelope` attribute the face wrapper carries since 1.2.0. The seed is the one thing a
+ * 1.2.0 face adds to the markup, so a test that compares the painted face with another paint (a golden, the unpinned
+ * card, the Delivery path) compares it with the seed taken off; the seed itself is asserted where it is the subject.
+ */
+export function withoutSeed(html: string): string {
+	return html.replace(/ data-certrev-envelope="[^"]*"/g, '')
+}
+
+/** A parsed JSON value a test reads by path (`seed.payload.content.memo`) and compares with `expect`. */
+export interface LooseJson {
+	[key: string]: LooseJson
+}
+
+/** The seed the first `data-certrev-envelope` attribute in `html` carries, unescaped and parsed, or null when there is none. */
+export function seedOf(html: string): LooseJson | null {
+	const raw = /data-certrev-envelope="([^"]*)"/.exec(html)?.[1]
+	if (raw === undefined) return null
+	const text = raw
+		.replace(/&quot;/g, '"')
+		.replace(/&#x27;/g, "'")
+		.replace(/&lt;/g, '<')
+		.replace(/&gt;/g, '>')
+		.replace(/&amp;/g, '&')
+	return JSON.parse(text) as LooseJson
+}

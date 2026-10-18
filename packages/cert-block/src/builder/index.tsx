@@ -149,6 +149,9 @@ export const certRevAnchorComponent: CertRevBuilderRegistration = {
 	inputs: [],
 }
 
+// 1.2.0-canary.5: the design pin, for CertREV's own canary replica (`<Content context={{ certrevDesignPin }}>`).
+export { type DesignPin, designPinFromUrl, parseDesignPin } from '../verify/get-verified-delivery.js'
+
 // ── The Builder.io PUSH kit (CertReviewCard) + the single-sourced wire type ──
 export {
 	BUILDER_CERT_CHROME_KEYS,
@@ -174,8 +177,11 @@ export {
 	CERT_FACE_FIELDS,
 	credentialLabel,
 	type EnvelopeCardOptions,
+	envelopeCardHtml,
 	envelopeCardInput,
 	faceFromDef,
+	isReaderFaceDef,
 	layoutFor,
+	READER_FACE,
 	themeFromDef,
 } from './envelope-face.js'

@@ -11,6 +11,13 @@
  *      ONE fetch, not N.
  *   3. Negative-caches failures briefly so a hard-down origin doesn't get hammered, while
  *      still recovering quickly (short negative TTL).
+ *   4. (1.2.0, opt-in through `staleMs`) STALE-WHILE-REVALIDATE and STALE-IF-ERROR: a positive
+ *      entry past its TTL but inside the stale window is served at once while ONE background
+ *      refresh replaces it; a refresh that only failed to reach the origin (`isTransient`)
+ *      keeps the stale entry instead of overwriting it. So an origin that is slow or briefly
+ *      down costs the page nothing it already had. A definitive answer (a revocation, say)
+ *      replaces the entry the moment the refresh lands. With the default `staleMs` of 0 an
+ *      expired entry is gone, exactly as before 1.2.0.
  *
  * It is deliberately tiny + dependency-free (a Map + timestamps) so it runs in any server
  * runtime (Node, edge, workerd). For multi-instance deployments this is per-instance L1 and
@@ -25,6 +32,18 @@ export interface TtlCacheOptions {
 	readonly negativeTtlMs?: number
 	/** Max entries before LRU-ish eviction of the oldest insert (default 1000). */
 	readonly maxEntries?: number
+	/**
+	 * 1.2.0: how long past its TTL a POSITIVE entry may still be served while a refresh runs (default 0: never). A
+	 * negative entry is never served stale.
+	 */
+	readonly staleMs?: number
+	/**
+	 * 1.2.0: how long an unsettled load may be joined by later callers (default: no limit). Past it, the next caller
+	 * starts a fresh load. WHY: a runtime may cancel the I/O of a request that has finished (Cloudflare workerd does),
+	 * which can leave a background refresh's promise pending forever; without a limit every later caller would join
+	 * it and none would ever refresh again.
+	 */
+	readonly inflightMaxMs?: number
 	/** Injectable clock for deterministic tests. */
 	readonly now?: () => number
 }
@@ -35,28 +54,64 @@ interface Entry<V> {
 	readonly negative: boolean
 }
 
+interface Inflight<V> {
+	readonly promise: Promise<V>
+	readonly startedAt: number
+}
+
 export class TtlCache<V> {
 	private readonly store = new Map<string, Entry<V>>()
-	private readonly inflight = new Map<string, Promise<V>>()
+	private readonly inflight = new Map<string, Inflight<V>>()
 	private readonly ttlMs: number
 	private readonly negativeTtlMs: number
 	private readonly maxEntries: number
+	private readonly staleMs: number
+	private readonly inflightMaxMs: number
 	private readonly now: () => number
 
 	constructor(opts: TtlCacheOptions = {}) {
 		this.ttlMs = opts.ttlMs ?? 60_000
 		this.negativeTtlMs = opts.negativeTtlMs ?? 5_000
 		this.maxEntries = opts.maxEntries ?? 1000
+		this.staleMs = opts.staleMs !== undefined && opts.staleMs > 0 ? opts.staleMs : 0
+		this.inflightMaxMs = opts.inflightMaxMs ?? Number.POSITIVE_INFINITY
 		this.now = opts.now ?? Date.now
 	}
 
-	/** Read a live (non-expired) entry, or undefined. Prunes the entry if expired. */
-	peek(key: string): V | undefined {
+	/** The entry while it may still be served (fresh, or positive and inside the stale window); prunes it past that. */
+	private servable(key: string): Entry<V> | undefined {
 		const e = this.store.get(key)
 		if (!e) return undefined
+		const now = this.now()
+		if (e.expiresAt > now) return e
+		if (!e.negative && now < e.expiresAt + this.staleMs) return e
+		this.store.delete(key)
+		return undefined
+	}
+
+	/** Read a live (non-expired) entry, or undefined. Never serves a stale one; prunes an entry past its stale window. */
+	peek(key: string): V | undefined {
+		const e = this.servable(key)
+		return e && e.expiresAt > this.now() ? e.value : undefined
+	}
+
+	/**
+	 * The synchronous stale-while-revalidate read: a fresh value; or a positive entry past its TTL but inside the stale
+	 * window, returned at once while this starts (or joins) ONE background refresh through `loader`; else undefined,
+	 * and the caller loads (`getOrLoad`). The refresh caches as `getOrLoad` does, with the same arguments; its failure
+	 * is swallowed (the stale value was already served, and a thrown loader is never cached).
+	 */
+	peekOrRefresh(
+		key: string,
+		loader: () => Promise<V>,
+		isNegative?: (v: V) => boolean,
+		positiveTtlMs?: number,
+		isTransient?: (v: V) => boolean,
+	): V | undefined {
+		const e = this.servable(key)
+		if (!e) return undefined
 		if (e.expiresAt <= this.now()) {
-			this.store.delete(key)
-			return undefined
+			this.load(key, loader, isNegative, positiveTtlMs, isTransient).catch(() => undefined)
 		}
 		return e.value
 	}
@@ -74,29 +129,50 @@ export class TtlCache<V> {
 	 * It deliberately does NOT apply to a negative result: a caller asking for a 10-minute
 	 * positive TTL is asking for fewer origin reads, not for a transient failure to be
 	 * remembered for ten minutes (see the negative-TTL rationale in the module header).
+	 *
+	 * 1.2.0: inside the stale window (`staleMs`) an expired positive entry is returned at once and refreshed in the
+	 * background (`peekOrRefresh`). `isTransient(value)` marks a result that says only "the origin was not reached"
+	 * (a timeout, a 5xx): when a servable positive entry exists, such a result is NOT cached over it and the caller
+	 * gets that entry's value instead (stale-if-error). With no entry to keep, it is cached as `isNegative` says.
 	 */
 	async getOrLoad(
 		key: string,
 		loader: () => Promise<V>,
 		isNegative?: (v: V) => boolean,
 		positiveTtlMs?: number,
+		isTransient?: (v: V) => boolean,
 	): Promise<V> {
-		const cached = this.peek(key)
-		if (cached !== undefined) return cached
+		const served = this.peekOrRefresh(key, loader, isNegative, positiveTtlMs, isTransient)
+		if (served !== undefined) return served
+		return this.load(key, loader, isNegative, positiveTtlMs, isTransient)
+	}
 
+	/** Single-flight load and cache (joins an unsettled load younger than `inflightMaxMs`). */
+	private load(
+		key: string,
+		loader: () => Promise<V>,
+		isNegative: ((v: V) => boolean) | undefined,
+		positiveTtlMs: number | undefined,
+		isTransient: ((v: V) => boolean) | undefined,
+	): Promise<V> {
 		const existing = this.inflight.get(key)
-		if (existing) return existing
+		if (existing && this.now() - existing.startedAt < this.inflightMaxMs) return existing.promise
 
-		const promise = (async () => {
+		const promise: Promise<V> = (async () => {
 			const value = await loader()
+			if (isTransient?.(value)) {
+				const kept = this.servable(key)
+				if (kept && !kept.negative) return kept.value
+			}
 			const negative = isNegative ? isNegative(value) : false
 			this.set(key, value, negative, negative ? undefined : positiveTtlMs)
 			return value
 		})().finally(() => {
-			this.inflight.delete(key)
+			// Only this load's own slot: a newer load that replaced an abandoned one keeps its place.
+			if (this.inflight.get(key)?.promise === promise) this.inflight.delete(key)
 		})
 
-		this.inflight.set(key, promise)
+		this.inflight.set(key, { promise, startedAt: this.now() })
 		return promise
 	}
 

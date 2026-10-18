@@ -1,0 +1,93 @@
+{
+	"note": "Written by scripts/refresh-reader.mjs; reader-sources.test.ts re-hashes every file named here.",
+	"portal": {
+		"head": "2e35e014a5f29fdafe31f8d716c65c7fc2c295fd",
+		"cssAndGoldensCommitted": true
+	},
+	"css": {
+		"source": "shopify/extensions/certrev-schema/assets/certrev-cert.css (the lines from /* CERTREV-READER-GEN:BEGIN */ through /* CERTREV-READER-GEN:END */, markers included)",
+		"file": "src/reader/reader.css",
+		"bytes": 31558,
+		"sha256": "7ce6f09e2f7cfb821de6b063d3585bcfc20b9a09e9db3df9b5505a9da803d10e"
+	},
+	"logos": {
+		"note": "The demo's own logo files (the theme extension's copies, equal to the site snapshot's), whose bytes src/reader/logo-assets.generated.ts carries as base64 data URIs.",
+		"file": "src/reader/logo-assets.generated.ts",
+		"files": {
+			"white": {
+				"source": "shopify/extensions/certrev-schema/assets/certrev-logo-white.svg",
+				"bytes": 9289,
+				"sha256": "3c819f65aebfb0c22a5cc067ca592209212f00027f310db4c681075c2b3d2d07"
+			},
+			"mono": {
+				"source": "shopify/extensions/certrev-schema/assets/certrev-logo-mono.svg",
+				"bytes": 9289,
+				"sha256": "da906f44a636fb97a6d9a875649c50048f8de7e453d51dc4caf60383828f3c3e"
+			}
+		}
+	},
+	"goldens": {
+		"source": "src/lib/cert-render/reader/__golden__/reader",
+		"dir": "src/reader/__tests__/fixtures/golden",
+		"files": {
+			"banner.burgundy-mono-pill-nophoto.html": {
+				"bytes": 34791,
+				"sha256": "374330c112941f9690cc60b74e2a7d25377b669b71c3dca17cbfc1eb85b81957"
+			},
+			"banner.gold-serif-sharp-full.html": {
+				"bytes": 34610,
+				"sha256": "0ae94f11f775d7725963e625baceb235bbf0d0a086c766df438caa8532ea2235"
+			},
+			"banner.navy-full.html": {
+				"bytes": 34618,
+				"sha256": "b1756e6f60f87a4bb3e2c560554289e01596d65ab9f9f9b9eb6d478f35bb525d"
+			},
+			"banner.navy-sparse.html": {
+				"bytes": 20593,
+				"sha256": "232eab491de25edcfa13519fedc1d813122caa2140238b38d3b846a0738b64a4"
+			},
+			"floating.burgundy-mono-pill.html": {
+				"bytes": 3965,
+				"sha256": "615d201f9198242d3358007e4ef1078ba9ace622392aeb618c6b117e6c34df83"
+			},
+			"floating.gold-serif-sharp.html": {
+				"bytes": 3967,
+				"sha256": "a37dd3e89871e26dde4ff50b3766add344e9e47941af8deb4260782168eaa924"
+			},
+			"floating.navy.html": {
+				"bytes": 3971,
+				"sha256": "331e0c82b6e6bcdd95086df2037724d06cd8d3e7653a01f8324cfedd01d214f3"
+			},
+			"sidebar.burgundy-mono-pill-nophoto.html": {
+				"bytes": 17313,
+				"sha256": "35047f1895869fa75f2c3bb4a9721c56e1e7c058c141ee329b88d7cd0ad23139"
+			},
+			"sidebar.gold-serif-sharp-full.html": {
+				"bytes": 17254,
+				"sha256": "4d020679117ea04e1ac6813c001f2c6ce581ea0296505f779884799226fbe64d"
+			},
+			"sidebar.navy-full.html": {
+				"bytes": 17258,
+				"sha256": "2d4598d5213d44eef2d9adf6519c3b4283904c2a5bebb056b86cd64bfa38b8a9"
+			},
+			"sidebar.navy-sparse.html": {
+				"bytes": 16560,
+				"sha256": "a3f1f081422809dec3b79bbc7bea473543e4067820b53d472cf83a6002f27bd2"
+			}
+		}
+	},
+	"oracle": {
+		"note": "Inputs for the golden cells, and the portal Liquid harness output for edge cells (scripts/reader-oracle). Not portal goldens.",
+		"dir": "src/reader/__tests__/fixtures",
+		"files": {
+			"golden-cells.json": {
+				"bytes": 16213,
+				"sha256": "146efd62bde30ad57d5fe2965efd8283213becff7a2bab75f4ea0030604dea94"
+			},
+			"oracle-extra.json": {
+				"bytes": 3628185,
+				"sha256": "6782c4f748ddfc23f7fbe9c4eb569fab406a4192a06372794f4e30aa2485b985"
+			}
+		}
+	}
+}
