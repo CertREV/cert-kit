@@ -165,6 +165,18 @@
 				"displayCertId": {
 					"type": ["string", "null"],
 					"description": "v0.5: display-only pretty cert id (CR-YYYY-NNNN) for the modal meta row; a deterministic derivation of certId+year, not a second identity (verifyUrl is the real link)."
+				},
+				"faceDigest": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["v", "defVersion", "html", "css"],
+					"description": "v0.6: sha256 digests (lowercase hex) of a server-rendered face's markup and stylesheet for one saved design version; an edge handed that markup paints it only when it hashes to these values. Optional + omit-when-undefined.",
+					"properties": {
+						"v": { "const": 1 },
+						"defVersion": { "type": "integer", "minimum": 1 },
+						"html": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+						"css": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+					}
 				}
 			}
 		},

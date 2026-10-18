@@ -177,6 +177,19 @@ export interface CertCredential {
 	readonly claimBearing?: boolean
 }
 
+/**
+ * v0.6 — the digest of a server-rendered face (see `CertContent.faceDigest`). `html` and `css` are lowercase hex
+ * sha256 of the UTF-8 bytes exactly as delivered; `defVersion` is the saved design version they were rendered for
+ * (an edge handed another design's markup does not paint it). Integers and strings only: no empty object and no
+ * numeric keys, so the WordPress plugin's canonicalizer reproduces the same bytes.
+ */
+export interface CertFaceDigest {
+	readonly v: 1
+	readonly defVersion: number
+	readonly html: string
+	readonly css: string
+}
+
 export interface CertContent {
 	readonly expert: {
 		readonly displayName: string
@@ -238,6 +251,15 @@ export interface CertContent {
 	 * byte-neutrality, and `buildPayload` thread-through caveat as `articleTitle` above.
 	 */
 	readonly displayCertId?: string | null
+	/**
+	 * v0.6 — the sha256 digests of a server-rendered face (its markup and its stylesheet) for ONE saved design
+	 * version, so an edge that is handed that markup beside the envelope paints it only when the bytes it was handed
+	 * hash to these signed values (`@certrev/cert-block` 1.2.0's Builder card; it keeps its own card otherwise).
+	 * The markup itself never rides the signed bytes: content stays facts, the digest only binds what may be painted.
+	 * Optional + omit-when-undefined: a mint that does not set it is BYTE-IDENTICAL to a pre-v0.6 envelope, and
+	 * `contractVersion` stays 1, so every older verifier accepts it (the kernel signs the payload as received).
+	 */
+	readonly faceDigest?: CertFaceDigest
 	/**
 	 * @deprecated v0.2 — evicted to `brand_render_defs` (accept-on-read / never-write).
 	 * OPTIONAL from v0.2: the issuer no longer stamps it, so new envelopes omit it entirely
