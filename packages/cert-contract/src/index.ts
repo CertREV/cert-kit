@@ -36,6 +36,7 @@ export {
 	type CertDeliveryArtifact,
 	type CertDeliveryEnvelope,
 	type CertDisplayConfig,
+	type CertFaceDigest,
 	type CertLifecycle,
 	type CertPayload,
 	type CertSignature,
