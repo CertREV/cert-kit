@@ -56,6 +56,18 @@ function imagesInSource(): readonly Img[] {
 	return found
 }
 
+/**
+ * 1.2.0: the reader face paints the CertREV brand mark (an inline SVG data URI, `reader/logo.ts`), byte for byte as the
+ * Shopify snippet does. It is not an avatar and sits beside no name: in the card cap it is announced as "CertREV"
+ * (the Liquid's alt), and in the memo footer it is decorative because "Verified by CertREV" is right beside it. Its alt
+ * is the caller's argument, so the sweep above exempts only that one tag, and the test below pins the one tag's shape
+ * and every call site's literal: a new call with any other alt fails here and is a deliberate decision.
+ */
+const BRAND_MARK_FILE = 'reader/logo.ts:'
+const BRAND_MARK_ALT = `alt="\${escapeHtml(alt)}"`
+/** In source order: the banner card cap, the memo footer, the sidebar cap. */
+const BRAND_MARK_CALL_ALTS: readonly string[] = ["'CertREV'", "''", "'CertREV'"]
+
 describe('every avatar the package emits is marked decorative', () => {
 	const images = imagesInSource()
 
@@ -73,6 +85,8 @@ describe('every avatar the package emits is marked decorative', () => {
 
 	it('sets an empty alt, so the adjacent name is announced once', () => {
 		for (const { where, tag } of images) {
+			// The reader face's brand mark is the one image here that is not an avatar; see the next test.
+			if (where.startsWith(BRAND_MARK_FILE)) continue
 			expect(
 				/\balt=/.test(tag),
 				`${where}: this image sets no alt at all, so a screen reader falls back to announcing the ` +
@@ -87,5 +101,20 @@ describe('every avatar the package emits is marked decorative', () => {
 					tag,
 			).toBe(true)
 		}
+	})
+})
+
+describe('the reader face brand mark is the one image that is not an avatar', () => {
+	const images = imagesInSource().filter(({ where }) => where.startsWith(BRAND_MARK_FILE))
+
+	it("is built in exactly one place, with the caller's alt", () => {
+		expect(images).toHaveLength(1)
+		expect(images[0]?.tag).toContain(BRAND_MARK_ALT)
+	})
+
+	it("is requested with the Liquid snippets' alts and no other", () => {
+		const render = stripComments(readFileSync(join(SRC_DIR, 'reader', 'render.ts'), 'utf8'))
+		const alts = [...render.matchAll(/readerLogo\([^,]+,\s*\d+,\s*('[^']*')\)/g)].map((m) => m[1])
+		expect(alts).toEqual(BRAND_MARK_CALL_ALTS)
 	})
 })

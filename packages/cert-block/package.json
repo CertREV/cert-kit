@@ -1,6 +1,6 @@
 {
 	"name": "@certrev/cert-block",
-	"version": "1.1.1",
+	"version": "1.2.1",
 	"description": "Headless render edge for the CertREV CertDeliveryEnvelope: SSR-safe React cert components, a framework-agnostic <certrev-badge> Web Component, a schema.org JSON-LD projector, and a fail-closed verify layer over the shared VerdictKernel.",
 	"repository": {
 		"type": "git",
@@ -27,6 +27,11 @@
 			"types": "./dist/builder/envelope-face.d.ts",
 			"default": "./dist/builder/envelope-face.js"
 		},
+		"./reader": {
+			"types": "./dist/reader/index.d.ts",
+			"default": "./dist/reader/index.js"
+		},
+		"./reader.css": "./src/reader/reader.css",
 		"./webcomponent": {
 			"types": "./dist/webcomponent/certrev-badge.d.ts",
 			"default": "./dist/webcomponent/certrev-badge.js"
@@ -65,6 +70,7 @@
 	"scripts": {
 		"build": "tsc && pnpm build:modal-bundle",
 		"build:modal-bundle": "pnpm dlx esbuild@0.27.7 src/modal/certrev-cert.entry.ts --bundle --minify --target=es2020 --format=iife --legal-comments=none --tsconfig-raw='{\"compilerOptions\":{\"target\":\"ES2017\",\"module\":\"esnext\",\"strict\":true}}' --banner:js='/* biome-ignore-all format: generated cert-badge bundle, see @certrev/cert-block src/modal/ */ /* biome-ignore-all lint: generated cert-badge bundle, see @certrev/cert-block src/modal/ */' --outfile=dist/modal/certrev-cert.js",
+		"refresh:reader": "node scripts/refresh-reader.mjs",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run"
 	},

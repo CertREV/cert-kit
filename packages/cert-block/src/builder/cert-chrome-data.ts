@@ -47,6 +47,16 @@ export interface CertChromeRenderDef {
 	}
 	/** The auto-contrast bar foreground — present only on a barInk-themed face (v2). */
 	readonly barInkFg?: '#141414' | '#ffffff'
+	/**
+	 * The ink painted over the ACCENT fill, as the portal derived it (1.2.0, reader face). Only the reader face reads
+	 * it: the legacy face re-derives its own accent ink from `tokens.accentColor` and ignores this.
+	 */
+	readonly accentFg?: '#141414' | '#ffffff'
+	/**
+	 * The face the brand chose (1.2.0). `'reader'` selects the certrev.com reader face; absent, or any other value,
+	 * paints the face 1.1.1 paints (unknown faces degrade to the legacy face, never to nothing).
+	 */
+	readonly face?: string
 	/** The subtractive field-visibility hide-set. */
 	readonly hidden: readonly string[]
 	/**

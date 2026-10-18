@@ -4,7 +4,7 @@
  * call, how the def is shape-checked, and that every failure is a suppress, never a throw).
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
 	builderSubject,
 	DELIVERY_URL,
@@ -21,20 +21,28 @@ import {
 	type CachedDelivery,
 	deliveryCacheKey,
 	deliveryUrl,
+	designPinFromUrl,
 	getVerifiedDelivery,
 	invalidateDelivery,
+	parseDesignPin,
 	parseRenderDef,
 	peekVerifiedDelivery,
+	readVerifiedDelivery,
 	settleDelivery,
 } from '../get-verified-delivery.js'
 
 const BASE = 'https://staging.portal.certrev.com'
 
-function setup(first?: () => Response | Promise<Response>) {
+function setup(first?: () => Response | Promise<Response>, staleMs?: number) {
 	const issuer = makeIssuer()
 	let clock = T0
 	const delivery = scriptedDelivery(first ?? (() => json(deliveryBody(issuer.envelope()))))
-	const cache = new TtlCache<CachedDelivery>({ ttlMs: 60_000, negativeTtlMs: 5_000, now: () => clock })
+	const cache = new TtlCache<CachedDelivery>({
+		ttlMs: 60_000,
+		negativeTtlMs: 5_000,
+		...(staleMs === undefined ? {} : { staleMs }),
+		now: () => clock,
+	})
 	const opts = () => ({
 		baseUrl: BASE,
 		platform: 'builder',
@@ -166,16 +174,38 @@ describe('getVerifiedDelivery', () => {
 	})
 
 	it.each([
-		['404', 'subject_mismatch', () => json({}, 404)],
-		['410', 'subject_mismatch', () => json({}, 410)],
-		['500', 'unsupported_contract_version', () => json({}, 500)],
-		['non-JSON', 'unsupported_contract_version', () => new Response('nope')],
-		['a JSON array', 'unsupported_contract_version', () => json([])],
-		['a network error', 'unsupported_contract_version', () => Promise.reject(new TypeError('fetch failed'))],
-		['the deadline', 'unsupported_contract_version', () => new Promise<Response>(() => {})],
-	])('%s suppresses (%s) without throwing', async (_label, reason, answer) => {
+		['404', 'subject_mismatch', false, () => json({}, 404)],
+		['410', 'subject_mismatch', false, () => json({}, 410)],
+		['500', 'unsupported_contract_version', true, () => json({}, 500)],
+		['non-JSON', 'unsupported_contract_version', true, () => new Response('nope')],
+		['a JSON array', 'unsupported_contract_version', true, () => json([])],
+		['a network error', 'unsupported_contract_version', true, () => Promise.reject(new TypeError('fetch failed'))],
+		['the deadline', 'unsupported_contract_version', true, () => new Promise<Response>(() => {})],
+	])('%s suppresses (%s; CertREV not reached: %s) without throwing', async (_label, reason, notReached, answer) => {
 		const t = setup(answer as () => Response | Promise<Response>)
-		expect(await getVerifiedDelivery(t.opts())).toEqual({ verdict: { decision: 'suppress', reason }, renderDef: null })
+		expect(await getVerifiedDelivery(t.opts())).toEqual({
+			verdict: { decision: 'suppress', reason },
+			renderDef: null,
+			...(notReached ? { unreachable: true } : {}),
+		})
+	})
+
+	it('a definitive no is never marked unreachable: a tombstone, a key nobody knows, an expired artifact', async () => {
+		const t = setup()
+		const tombstone = await t.issuer.tombstone()
+		t.delivery.respond(() => json(tombstone))
+		expect((await getVerifiedDelivery(t.opts())).unreachable).toBeUndefined()
+		const u = setup(() => json(deliveryBody(makeIssuer('stranger').envelope())))
+		expect((await getVerifiedDelivery(u.opts())).unreachable).toBeUndefined()
+		const v = setup()
+		const payload = v.issuer.envelope().payload
+		const expiresAt = new Date(T0 + 10_000).toISOString()
+		v.delivery.respond(() => json(deliveryBody(v.issuer.envelope({ lifecycle: { ...payload.lifecycle, expiresAt } }))))
+		await getVerifiedDelivery(v.opts())
+		v.advance(10_000)
+		const expired = await getVerifiedDelivery(v.opts())
+		expect(expired.verdict).toEqual({ decision: 'suppress', reason: 'expired' })
+		expect(expired.unreachable).toBeUndefined()
 	})
 
 	it('a key the resolver does not know suppresses', async () => {
@@ -217,5 +247,247 @@ describe('getVerifiedDelivery', () => {
 			verdict: { decision: 'suppress', reason: 'subject_mismatch' },
 			renderDef: null,
 		})
+	})
+})
+
+describe('readVerifiedDelivery (1.2.0): the synchronous read a render makes', () => {
+	const REFRESH_WAIT = { timeout: 4_000, interval: 5 }
+
+	it('is undefined on an empty cache and starts no fetch', () => {
+		const t = setup(undefined, 300_000)
+		expect(readVerifiedDelivery(t.opts())).toBeUndefined()
+		expect(t.delivery.calls).toHaveLength(0)
+	})
+
+	it('a fresh read is settled at the render clock, as getVerifiedDelivery settles it', async () => {
+		const t = setup(undefined, 300_000)
+		const got = await getVerifiedDelivery(t.opts())
+		expect(readVerifiedDelivery(t.opts())).toEqual(got)
+		expect(t.delivery.calls).toHaveLength(1)
+	})
+
+	it('past the TTL, inside the stale window: the stale answer now, and ONE refresh replaces it', async () => {
+		const t = setup(undefined, 300_000)
+		await getVerifiedDelivery(t.opts())
+		t.advance(61_000)
+		expect(peekVerifiedDelivery(t.opts())).toBeUndefined()
+		const tombstone = await t.issuer.tombstone()
+		t.delivery.respond(() => json(tombstone))
+		expect(readVerifiedDelivery(t.opts())?.verdict.decision).toBe('render')
+		expect(readVerifiedDelivery(t.opts())?.verdict.decision).toBe('render')
+		expect(t.delivery.calls).toHaveLength(2)
+		// The refresh (the fetch, then the signature check) lands in the background, after however many ticks a loaded
+		// machine takes: wait for it, never for a fixed number of ticks. Every read meanwhile joins it.
+		await vi.waitFor(
+			() => expect(readVerifiedDelivery(t.opts())?.verdict).toEqual({ decision: 'suppress', reason: 'revoked' }),
+			REFRESH_WAIT,
+		)
+		expect(t.delivery.calls).toHaveLength(2)
+	})
+
+	it('stale-if-error: a refresh that does not reach CertREV keeps the verified read, and getVerifiedDelivery gets it too', async () => {
+		const t = setup(undefined, 300_000)
+		await getVerifiedDelivery(t.opts())
+		t.advance(61_000)
+		t.delivery.respond(() => json({}, 503))
+		expect(readVerifiedDelivery(t.opts())?.verdict.decision).toBe('render')
+		expect(t.delivery.calls).toHaveLength(2)
+		// Wait for the failed refresh to land: only then does a read start the next one (a third call), and the read
+		// that starts it still gets the verified answer, so the failure was not cached over it.
+		await vi.waitFor(() => {
+			expect(readVerifiedDelivery(t.opts())?.verdict.decision).toBe('render')
+			expect(t.delivery.calls).toHaveLength(3)
+		}, REFRESH_WAIT)
+		expect((await getVerifiedDelivery(t.opts())).verdict.decision).toBe('render')
+	})
+
+	it('past the stale window the read is gone, and a read that does not reach CertREV is what the card gets', async () => {
+		const t = setup(undefined, 300_000)
+		await getVerifiedDelivery(t.opts())
+		t.advance(361_000)
+		expect(readVerifiedDelivery(t.opts())).toBeUndefined()
+		t.delivery.respond(() => json({}, 503))
+		expect((await getVerifiedDelivery(t.opts())).unreachable).toBe(true)
+	})
+
+	it('a stale payload is still judged at the render clock: one that has expired in its own fields suppresses', async () => {
+		const t = setup(undefined, 300_000)
+		const payload = t.issuer.envelope().payload
+		const expiresAt = new Date(T0 + 90_000).toISOString()
+		t.delivery.respond(() => json(deliveryBody(t.issuer.envelope({ lifecycle: { ...payload.lifecycle, expiresAt } }))))
+		await getVerifiedDelivery(t.opts())
+		t.advance(90_000)
+		t.delivery.respond(() => new Promise<Response>(() => {}))
+		expect(readVerifiedDelivery(t.opts())?.verdict).toEqual({ decision: 'suppress', reason: 'expired' })
+	})
+})
+
+describe('the design pin (1.2.0-canary.5)', () => {
+	const ctx = { platform: 'builder', externalId: ENTRY_ID }
+	const placement = { baseUrl: BASE, platform: 'builder', externalId: ENTRY_ID, context: ctx }
+
+	it('deliveryUrl appends ?design and &designBrand; without a pin the URL is the 1.1.0 one', () => {
+		expect(deliveryUrl(BASE, 'builder', ENTRY_ID)).toBe(DELIVERY_URL)
+		expect(deliveryUrl(BASE, 'builder', ENTRY_ID, undefined)).toBe(DELIVERY_URL)
+		expect(deliveryUrl(`${BASE}/`, 'builder', ENTRY_ID, { version: 7 })).toBe(`${DELIVERY_URL}?design=7`)
+		expect(deliveryUrl(BASE, 'builder', ENTRY_ID, { version: 7, brand: 'staging-shopify-canary' })).toBe(
+			`${DELIVERY_URL}?design=7&designBrand=staging-shopify-canary`,
+		)
+		// The brand is encoded, so a brand that is not a brand key cannot add a parameter of its own.
+		expect(deliveryUrl(BASE, 'builder', ENTRY_ID, { version: 7, brand: 'a&design=9 #' })).toBe(
+			`${DELIVERY_URL}?design=7&designBrand=a%26design%3D9%20%23`,
+		)
+	})
+
+	it('deliveryCacheKey: the unpinned key is unchanged, and every pin keys its own read', () => {
+		const unpinned = deliveryCacheKey(placement)
+		expect(unpinned).toBe(`delivery:${DELIVERY_URL}|builder:${ENTRY_ID}`)
+		expect(deliveryCacheKey({ ...placement, design: undefined })).toBe(unpinned)
+		expect(deliveryCacheKey({ ...placement, design: { version: 7, brand: 'acme' } })).toBe(
+			`delivery:${DELIVERY_URL}?design=7&designBrand=acme|builder:${ENTRY_ID}`,
+		)
+		const keys = [
+			unpinned,
+			deliveryCacheKey({ ...placement, design: { version: 7 } }),
+			deliveryCacheKey({ ...placement, design: { version: 8 } }),
+			deliveryCacheKey({ ...placement, design: { version: 7, brand: 'acme' } }),
+			deliveryCacheKey({ ...placement, design: { version: 7, brand: 'other' } }),
+		]
+		expect(new Set(keys).size).toBe(5)
+	})
+
+	it('getVerifiedDelivery fetches the pinned URL and caches it apart from the unpinned read', async () => {
+		const t = setup()
+		const design = { version: 2, brand: 'staging-shopify-canary' }
+		const pinnedUrl = `${DELIVERY_URL}?design=2&designBrand=staging-shopify-canary`
+		expect((await getVerifiedDelivery({ ...t.opts(), design })).verdict.decision).toBe('render')
+		expect(t.delivery.calls).toEqual([pinnedUrl])
+		expect(peekVerifiedDelivery({ ...t.opts(), design })?.verdict.decision).toBe('render')
+		expect(peekVerifiedDelivery(t.opts())).toBeUndefined()
+		await getVerifiedDelivery(t.opts())
+		expect(t.delivery.calls).toEqual([pinnedUrl, DELIVERY_URL])
+		invalidateDelivery({ ...t.opts(), design }, t.cache)
+		expect(peekVerifiedDelivery({ ...t.opts(), design })).toBeUndefined()
+		expect(peekVerifiedDelivery(t.opts())?.verdict.decision).toBe('render')
+	})
+
+	it.each([
+		['404 no_design', 'subject_mismatch', () => json({ code: 'no_design' }, 404)],
+		['503', 'unsupported_contract_version', () => json({ error: 'unavailable' }, 503)],
+	])('a pin the API cannot honour (%s) suppresses (%s)', async (label, reason, answer) => {
+		const t = setup(answer)
+		expect(await getVerifiedDelivery({ ...t.opts(), design: { version: 3 } })).toEqual({
+			verdict: { decision: 'suppress', reason },
+			renderDef: null,
+			...(label === '503' ? { unreachable: true } : {}),
+		})
+		expect(t.delivery.calls).toEqual([`${DELIVERY_URL}?design=3`])
+	})
+})
+
+describe('parseDesignPin', () => {
+	it.each([
+		['undefined', undefined],
+		['null', null],
+	])('is undefined (no pin) only for %s', (_label, raw) => {
+		expect(parseDesignPin(raw)).toBeUndefined()
+	})
+
+	it.each([
+		['a version', { design: '1' }, { version: 1 }],
+		[
+			'a version and a brand',
+			{ design: '7', designBrand: 'staging-shopify-canary' },
+			{ version: 7, brand: 'staging-shopify-canary' },
+		],
+		['a numeric version', { design: 42 }, { version: 42 }],
+		['the largest version', { design: '999999999' }, { version: 999_999_999 }],
+		['a one-character brand', { design: '3', designBrand: 'a' }, { version: 3, brand: 'a' }],
+		[
+			'a 100-character brand',
+			{ design: '3', designBrand: `a${'b-'.repeat(49)}c` },
+			{ version: 3, brand: `a${'b-'.repeat(49)}c` },
+		],
+		['an undefined brand', { design: '3', designBrand: undefined }, { version: 3 }],
+		['an unknown key beside the pin', { design: '3', other: 'ignored' }, { version: 3 }],
+	])('reads %s', (_label, raw, pin) => {
+		expect(parseDesignPin(raw)).toStrictEqual(pin)
+	})
+
+	it.each([
+		['a bare string', '3'],
+		['a bare number', 3],
+		['true', true],
+		['an array', [{ design: '3' }]],
+		['an empty object', {}],
+		['an empty version', { design: '' }],
+		['version 0', { design: '0' }],
+		['a leading zero', { design: '07' }],
+		['ten digits', { design: '1000000000' }],
+		['a negative version', { design: '-1' }],
+		['a fractional version', { design: '1.5' }],
+		['a padded version', { design: ' 3' }],
+		['a version with a trailing newline', { design: '3\n' }],
+		['a word', { design: 'latest' }],
+		['numeric 0', { design: 0 }],
+		['a numeric fraction', { design: 1.5 }],
+		['a negative number', { design: -3 }],
+		['NaN', { design: Number.NaN }],
+		['Infinity', { design: Number.POSITIVE_INFINITY }],
+		['a number past nine digits', { design: 1e21 }],
+		['a boolean version', { design: true }],
+		['a null version', { design: null }],
+		['a brand without a version', { designBrand: 'acme' }],
+		['a brand with an empty version', { design: '', designBrand: 'acme' }],
+		['an empty brand', { design: '3', designBrand: '' }],
+		['an upper-case brand', { design: '3', designBrand: 'Acme' }],
+		['a brand with a leading hyphen', { design: '3', designBrand: '-acme' }],
+		['a brand with a trailing hyphen', { design: '3', designBrand: 'acme-' }],
+		['a brand with an underscore', { design: '3', designBrand: 'a_b' }],
+		['a brand with a space', { design: '3', designBrand: 'a b' }],
+		['a brand with a trailing newline', { design: '3', designBrand: 'acme\n' }],
+		['a 101-character brand', { design: '3', designBrand: 'a'.repeat(101) }],
+		['a null brand', { design: '3', designBrand: null }],
+		['a numeric brand', { design: '3', designBrand: 7 }],
+	])('is invalid for %s', (_label, raw) => {
+		expect(parseDesignPin(raw)).toBe('invalid')
+	})
+})
+
+describe('designPinFromUrl', () => {
+	it.each([
+		['no pin', 'https://replica.example/blog/retinol-guide', undefined],
+		['other parameters only', 'https://replica.example/blog/retinol-guide?utm_source=x', undefined],
+		['a pin in the fragment', 'https://replica.example/blog/retinol-guide#?design=7', undefined],
+		['a version', 'https://replica.example/blog/retinol-guide?design=7', { design: '7' }],
+		[
+			'a version and a brand',
+			'https://replica.example/blog/x?design=7&designBrand=staging-shopify-canary',
+			{ design: '7', designBrand: 'staging-shopify-canary' },
+		],
+		[
+			'a brand alone (design is empty)',
+			'https://replica.example/blog/x?designBrand=acme',
+			{ design: '', designBrand: 'acme' },
+		],
+		['an empty version', 'https://replica.example/blog/x?design=', { design: '' }],
+		['a raw, unjudged version', 'https://replica.example/blog/x?design=latest', { design: 'latest' }],
+		[
+			'a decoded brand',
+			'https://replica.example/blog/x?design=7&designBrand=a%26b',
+			{ design: '7', designBrand: 'a&b' },
+		],
+		['a relative URL', '/blog/x?design=7', { design: '7' }],
+		['a bare query', '?design=12&designBrand=acme', { design: '12', designBrand: 'acme' }],
+		['a URL object', new URL('https://replica.example/?design=12'), { design: '12' }],
+		['a URL that does not parse', 'http://[::1', undefined],
+	])('%s', (_label, url, expected) => {
+		expect(designPinFromUrl(url)).toStrictEqual(expected)
+	})
+
+	it('hands parseDesignPin a pin it reads, and a brand-only pin it refuses', () => {
+		expect(parseDesignPin(designPinFromUrl('/x?design=7&designBrand=acme'))).toEqual({ version: 7, brand: 'acme' })
+		expect(parseDesignPin(designPinFromUrl('/x?designBrand=acme'))).toBe('invalid')
+		expect(parseDesignPin(designPinFromUrl('/x'))).toBeUndefined()
 	})
 })
