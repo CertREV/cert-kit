@@ -70,6 +70,9 @@ export interface CertFacts {
 	 *  deterministic derivation of `certId`+year, NOT a second identity (verifyUrl is the real link).
 	 *  Same omit-when-undefined byte-neutrality as `articleTitle`. */
 	readonly displayCertId?: string | null
+	/** v0.6 — the sha256 digests of a server-rendered face for one design version. Optional +
+	 *  omit-when-undefined: a mint that does not set it stays byte-identical to a pre-v0.6 envelope. */
+	readonly faceDigest?: CertContent['faceDigest']
 }
 
 /** Everything needed to mint a payload: the stable identity binding (subject), the
@@ -104,6 +107,8 @@ export function buildPayload(input: MintPayloadInput): CertPayload {
 		// enumerated here or it is silently dropped before signing.)
 		...(input.facts.articleTitle !== undefined ? { articleTitle: input.facts.articleTitle } : {}),
 		...(input.facts.displayCertId !== undefined ? { displayCertId: input.facts.displayCertId } : {}),
+		// v0.6: the face digest, the same way (a top-level content key must be enumerated to ride).
+		...(input.facts.faceDigest !== undefined ? { faceDigest: input.facts.faceDigest } : {}),
 	}
 	return {
 		contractVersion: CONTRACT_VERSION,

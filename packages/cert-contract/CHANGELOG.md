@@ -4,6 +4,21 @@ The signed-envelope contract. Semver contract: **the canonical byte contract (RF
 the payload) and the fail-closed `VerdictKernel` semantics never change in a patch or minor**;
 payload extensions are additive (old edges suppress unknown shapes: fail-closed by design).
 
+## 0.6.0 · 2026-10-18
+
+- **An optional signed `content.faceDigest`.** `{ v: 1, defVersion, html, css }`: the lowercase hex
+  sha256 of a server-rendered face's markup and stylesheet for one saved design version. An edge handed
+  that markup beside the envelope paints it only when the bytes hash to the signed values
+  (`@certrev/cert-block` 1.2.0's Builder card; it keeps its own card otherwise). The markup never rides
+  the signed bytes: content stays facts, the digest only binds what may be painted. Exported as the
+  `CertFaceDigest` type and added to the JSON Schema.
+- **Backward compatible.** `buildPayload` threads the key omit-when-undefined, so a mint that does not
+  set it is byte-identical to a 0.5.x envelope, and `contractVersion` stays 1, so every older verifier
+  (this kernel since 0.5.0, cert-block's storefront bundle and Builder card, the WordPress plugin's PHP
+  verifier) accepts an envelope that carries it: the kernel signs the payload as received and checks no
+  key list. The shape holds integers and strings only (no empty object, no numeric keys), which the PHP
+  verifier's canonicalizer reproduces byte for byte.
+
 ## 0.5.4 · 2026-08-18
 
 - **One thrown-error string loses an em dash.** `canonicalPayloadBytes`' cross-language number

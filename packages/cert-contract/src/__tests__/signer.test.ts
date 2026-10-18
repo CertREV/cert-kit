@@ -209,6 +209,70 @@ describe('v0.5 wire-shape: top-level articleTitle/displayCertId ride the signed 
 })
 
 /**
+ * v0.6 FACE DIGEST — an optional top-level `content.faceDigest` (the sha256 of a server-rendered face's markup and
+ * stylesheet for one design version) rides the signed bytes when supplied, is OMITTED when not (byte-identical to a
+ * pre-v0.6 envelope), verifies under the unchanged kernel with `contractVersion` still 1, and a tampered digest fails.
+ */
+describe('v0.6 wire-shape: an optional faceDigest rides the signed bytes and verifies under contractVersion 1', () => {
+	const FACE_DIGEST = { v: 1, defVersion: 7, html: 'a'.repeat(64), css: 'b'.repeat(64) } as const
+
+	async function minted(withDigest: boolean) {
+		const { publicKey, privateKey } = generateKeyPairSync('ed25519')
+		const input: MintPayloadInput = {
+			...baseInput,
+			certId: 'cert_v0_6_face',
+			facts: withDigest ? { ...baseInput.facts, faceDigest: FACE_DIGEST } : baseInput.facts,
+		}
+		const envelope = await mintEnvelope(input, {
+			kid: 'local-test-key',
+			sign: localEd25519Signer(privateKey),
+			signedAt: input.lifecycle.issuedAt,
+		})
+		const spkiBase64 = publicKey.export({ format: 'der', type: 'spki' }).toString('base64')
+		const resolveKid: ResolvePublicKeyByKid = (k) =>
+			k === 'local-test-key' ? { format: 'spki-base64', base64: spkiBase64 } : null
+		return { envelope, resolveKid }
+	}
+	const context = {
+		platform: 'shopify' as const,
+		externalId: 'gid://shopify/Article/999',
+		liveContentHash: 'e'.repeat(64),
+		now: new Date('2026-06-22T00:00:00.000Z'),
+	}
+
+	it('carries faceDigest on content when supplied, in the exact signed bytes, and verifies', async () => {
+		const { envelope, resolveKid } = await minted(true)
+		expect(envelope.payload.contractVersion).toBe(1)
+		expect(envelope.payload.content.faceDigest).toEqual(FACE_DIGEST)
+		const signedCanonical = new TextDecoder().decode(canonicalPayloadBytes(envelope.payload))
+		expect(signedCanonical).toContain(
+			`"faceDigest":{"css":"${'b'.repeat(64)}","defVersion":7,"html":"${'a'.repeat(64)}","v":1}`,
+		)
+		const verdict = await verifyEnvelope(envelope, resolveKid, context)
+		expect(verdict.decision).toBe('render')
+	})
+
+	it('a tampered digest under the same signature fails closed', async () => {
+		const { envelope, resolveKid } = await minted(true)
+		const tampered = {
+			...envelope,
+			payload: {
+				...envelope.payload,
+				content: { ...envelope.payload.content, faceDigest: { ...FACE_DIGEST, html: 'c'.repeat(64) } },
+			},
+		}
+		const verdict = await verifyEnvelope(tampered, resolveKid, context)
+		expect(verdict.decision).not.toBe('render')
+	})
+
+	it('OMITS the key when not supplied: byte-identical to a pre-v0.6 envelope', () => {
+		const payload = buildPayload(baseInput)
+		expect('faceDigest' in payload.content).toBe(false)
+		expect(canonicalizeJson(payload)).not.toContain('faceDigest')
+	})
+})
+
+/**
  * v0.2 DISPLAY EVICTION — a mint with `facts.display` OMITTED produces canonical bytes carrying
  * NO `display` key, and still VERIFIES + RENDERS under the kernel. Proves the never-write behavior
  * (`buildPayload` omits the key rather than emitting `display: undefined`) end-to-end.
