@@ -9,7 +9,7 @@ payload extensions are additive (old edges suppress unknown shapes: fail-closed 
 - **An optional signed `content.faceDigest`.** `{ v: 1, defVersion, html, css }`: the lowercase hex
   sha256 of a server-rendered face's markup and stylesheet for one saved design version. An edge handed
   that markup beside the envelope paints it only when the bytes hash to the signed values
-  (`@certrev/cert-block` 1.2.0's Builder card; it keeps its own card otherwise). The markup never rides
+  (`@certrev/cert-block` 1.3.0's Builder card; it keeps its own card otherwise). The markup never rides
   the signed bytes: content stays facts, the digest only binds what may be painted. Exported as the
   `CertFaceDigest` type and added to the JSON Schema.
 - **Backward compatible.** `buildPayload` threads the key omit-when-undefined, so a mint that does not
