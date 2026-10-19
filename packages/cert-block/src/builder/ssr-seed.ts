@@ -48,13 +48,26 @@
  * server withheld. A record holds no payload, so `parseSeed` never takes one for a seed. A `'none'` record sits on a
  * `hidden` element with nothing in it.
  *
+ * A DELIVERED FACE RIDES THE SEED (1.3.0), and only when the server painted it: the seed then ends with
+ * `face: { html, css }`, the server-rendered markup and stylesheet the Delivery API served beside the envelope, whose
+ * hashes the signed `payload.content.faceDigest` binds. A browser repaints that face from the seed only after hashing
+ * it against the seed payload's digest itself (`cert-review-card.tsx`); a seed with no `face`, a malformed one, or one
+ * whose hashes fail paints what 1.2.1 paints for it. A seed with no face is byte for byte the 1.2.1 seed. The face is
+ * on the page twice (painted, and in the seed), which is its page-weight cost.
+ *
  * React-free and browser-only in effect: with no `document` (a server) `pageSeedFor` finds nothing, so a server never
  * reads or keeps a seed and a multi-tenant render process holds nothing per page.
  */
 
 import { HIDEABLE_FIELDS } from '../components/render-def.js'
 import type { CertContent, CertPayload, CertSignature } from '../contract/kernel.js'
-import { type DesignPin, parseDesignPin, parseRenderDef } from '../verify/get-verified-delivery.js'
+import {
+	type DeliveredFace,
+	type DesignPin,
+	parseDeliveredFace,
+	parseDesignPin,
+	parseRenderDef,
+} from '../verify/get-verified-delivery.js'
 import type { CertChromeRenderDef } from './cert-chrome-data.js'
 
 export const SEED_ATTRIBUTE = 'data-certrev-envelope'
@@ -72,6 +85,11 @@ export interface DeliverySeed {
 	 */
 	readonly signature?: CertSignature
 	readonly renderDef: CertChromeRenderDef | null
+	/**
+	 * 1.3.0: the delivered face the server painted (the file header); absent whenever it painted anything else. On a
+	 * seed read from the page it is UNVERIFIED until hashed against `payload.content.faceDigest`.
+	 */
+	readonly face?: DeliveredFace
 }
 
 /** A seed as read from the page: the parsed seed and the attribute's exact text (re-rendered verbatim on hydration). */
@@ -183,6 +201,8 @@ export function serializeSeed(seed: DeliverySeed): string {
 		payload: seed.payload,
 		...(seed.signature ? { signature: seed.signature } : {}),
 		renderDef: seed.renderDef,
+		// 1.3.0: last, and only with a delivered face, so a seed without one is the 1.2.1 bytes.
+		...(seed.face ? { face: { html: seed.face.html, css: seed.face.css } } : {}),
 	})
 }
 
@@ -214,7 +234,7 @@ export function parseSeed(raw: string): DeliverySeed | null {
 		return null
 	}
 	if (!isRecord(value) || value.v !== 1) return null
-	const { baseUrl, externalId, design, payload, signature, renderDef } = value
+	const { baseUrl, externalId, design, payload, signature, renderDef, face } = value
 	if (typeof baseUrl !== 'string' || typeof externalId !== 'string') return null
 	if (!isRecord(payload) || !isRecord(payload.subject) || !isRecord(payload.lifecycle) || !isRecord(payload.content)) {
 		return null
@@ -222,6 +242,8 @@ export function parseSeed(raw: string): DeliverySeed | null {
 	// A pin the seed names is judged by the same grammar the card's own pin is; one that fails it is not a seed.
 	const pin = parsedPin(design)
 	if (pin === null) return null
+	// 1.3.0: a face that is not two strings is no face; the seed is still a seed (and paints as 1.2.1 paints it).
+	const delivered = parseDeliveredFace(face)
 	return {
 		baseUrl,
 		externalId,
@@ -229,6 +251,7 @@ export function parseSeed(raw: string): DeliverySeed | null {
 		payload: payload as unknown as CertPayload,
 		...(isRecord(signature) ? { signature: signature as unknown as CertSignature } : {}),
 		renderDef: parseRenderDef(renderDef),
+		...(delivered ? { face: delivered } : {}),
 	}
 }
 

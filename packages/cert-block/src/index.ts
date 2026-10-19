@@ -106,6 +106,7 @@ export {
 	type CertCredential,
 	type CertDeliveryEnvelope,
 	type CertDisplayConfig,
+	type CertFaceDigest,
 	type CertLifecycle,
 	type CertPayload,
 	type CertSignature,
@@ -135,6 +136,7 @@ export {
 export { TtlCache, type TtlCacheOptions } from './verify/cache.js'
 export {
 	type CachedDelivery,
+	type DeliveredFace,
 	type DesignPin,
 	deliveryCacheKey,
 	deliveryUrl,
@@ -142,6 +144,7 @@ export {
 	type GetVerifiedDeliveryOptions,
 	getVerifiedDelivery,
 	invalidateDelivery,
+	parseDeliveredFace,
 	parseDesignPin,
 	parseRenderDef,
 	peekVerifiedDelivery,

@@ -15,7 +15,7 @@ importers:
   packages/cert-block:
     dependencies:
       '@certrev/cert-contract':
-        specifier: ^0.5.0
+        specifier: ^0.6.0
         version: link:../cert-contract
     devDependencies:
       '@testing-library/react':
