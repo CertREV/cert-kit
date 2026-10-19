@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
+import { DELIVERED_FACE, matchingBody } from '../../builder/__tests__/delivered-face-shapes.js'
 import {
 	builderSubject,
 	DELIVERY_URL,
@@ -24,6 +25,7 @@ import {
 	designPinFromUrl,
 	getVerifiedDelivery,
 	invalidateDelivery,
+	parseDeliveredFace,
 	parseDesignPin,
 	parseRenderDef,
 	peekVerifiedDelivery,
@@ -489,5 +491,95 @@ describe('designPinFromUrl', () => {
 		expect(parseDesignPin(designPinFromUrl('/x?design=7&designBrand=acme'))).toEqual({ version: 7, brand: 'acme' })
 		expect(parseDesignPin(designPinFromUrl('/x?designBrand=acme'))).toBe('invalid')
 		expect(parseDesignPin(designPinFromUrl('/x'))).toBeUndefined()
+	})
+})
+
+describe('parseDeliveredFace (1.3.0)', () => {
+	it('keeps exactly the two strings', () => {
+		expect(parseDeliveredFace({ html: '<p>x</p>', css: 'p{color:red}', defVersion: 4, extra: 'ignored' })).toEqual({
+			html: '<p>x</p>',
+			css: 'p{color:red}',
+		})
+		expect(parseDeliveredFace({ html: '', css: '' })).toEqual({ html: '', css: '' })
+	})
+
+	it.each([
+		['undefined', undefined],
+		['null', null],
+		['a string', '<p>x</p>'],
+		['an array', ['<p>x</p>', 'p{}']],
+		['html not a string', { html: 42, css: 'p{}' }],
+		['css not a string', { html: '<p>x</p>', css: { rules: [] } }],
+		['no html', { css: 'p{}' }],
+		['no css', { html: '<p>x</p>' }],
+	])('is null for %s', (_label, value) => {
+		expect(parseDeliveredFace(value)).toBeNull()
+	})
+})
+
+describe('getVerifiedDelivery: the face sibling (1.3.0)', () => {
+	it('parses the face beside the def and caches it with the verified payload', async () => {
+		const t = setup()
+		t.delivery.respond(() => json(matchingBody(t.issuer)))
+		const first = await getVerifiedDelivery(t.opts())
+		expect(first.verdict.decision).toBe('render')
+		expect(first.renderDef).toEqual(ELF_LIKE_DEF)
+		expect(first.face).toEqual(DELIVERED_FACE)
+		expect(t.cache.peek(deliveryCacheKey(t.opts()))).toMatchObject({ kind: 'verified', face: DELIVERED_FACE })
+		t.advance(30_000)
+		expect((await getVerifiedDelivery(t.opts())).face).toEqual(DELIVERED_FACE)
+		expect(readVerifiedDelivery(t.opts())?.face).toEqual(DELIVERED_FACE)
+		expect(peekVerifiedDelivery(t.opts())?.face).toEqual(DELIVERED_FACE)
+		expect(t.delivery.calls).toHaveLength(1)
+	})
+
+	it('carries the face unjudged: it is read even when the envelope signs no digest', async () => {
+		const t = setup(() => json({ ...deliveryBody(t.issuer.envelope()), face: DELIVERED_FACE }))
+		expect((await getVerifiedDelivery(t.opts())).face).toEqual(DELIVERED_FACE)
+	})
+
+	it('no face, or a malformed one, leaves the read exactly as 1.2.1 settled it (no face key)', async () => {
+		const t = setup()
+		const plain = await getVerifiedDelivery(t.opts())
+		expect(plain).not.toHaveProperty('face')
+		expect(t.cache.peek(deliveryCacheKey(t.opts()))).not.toHaveProperty('face')
+		const u = setup(() => json({ ...deliveryBody(u.issuer.envelope()), face: { html: DELIVERED_FACE.html } }))
+		const malformed = await getVerifiedDelivery(u.opts())
+		expect(malformed.verdict.decision).toBe('render')
+		expect(malformed).not.toHaveProperty('face')
+	})
+
+	it('a suppress verdict carries no face: a tombstone, and an expiry over a cached read', async () => {
+		const t = setup()
+		const tombstone = await t.issuer.tombstone()
+		// A tombstone carrying an extra sibling does not verify as a tombstone (the contract's rule), so the reason is
+		// `invalid_signature`; either way it suppresses, and a suppress never carries a face.
+		t.delivery.respond(() => json({ ...tombstone, face: DELIVERED_FACE }))
+		const revoked = await getVerifiedDelivery(t.opts())
+		expect(revoked.verdict.decision).toBe('suppress')
+		expect(revoked).toEqual({ verdict: revoked.verdict, renderDef: null })
+
+		const u = setup()
+		const payload = u.issuer.envelope().payload
+		const expiresAt = new Date(T0 + 10_000).toISOString()
+		u.delivery.respond(() =>
+			json({
+				...deliveryBody(u.issuer.envelope({ lifecycle: { ...payload.lifecycle, expiresAt } })),
+				face: DELIVERED_FACE,
+			}),
+		)
+		expect((await getVerifiedDelivery(u.opts())).face).toEqual(DELIVERED_FACE)
+		u.advance(10_000)
+		const later = await getVerifiedDelivery(u.opts())
+		expect(later.verdict).toEqual({ decision: 'suppress', reason: 'expired' })
+		expect(later).not.toHaveProperty('face')
+	})
+
+	it('settleDelivery reads a cached read with no face key (a hand-filled or 1.2.1-shaped cache) as no face', () => {
+		const payload = makeIssuer().envelope().payload
+		const cached: CachedDelivery = { kind: 'verified', payload, renderDef: null }
+		const settled = settleDelivery(cached, { platform: 'builder', externalId: ENTRY_ID, now: new Date(T0) })
+		expect(settled.verdict.decision).toBe('render')
+		expect(settled).not.toHaveProperty('face')
 	})
 })

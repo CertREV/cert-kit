@@ -419,6 +419,16 @@ browser hydrates from it:
   `connect-src` for the Delivery origin; where it is blocked or fails, the card **renders nothing and logs
   nothing**, never a broken card and never the host's tree unmounted. It is not a Builder input: a brand that wants
   it sets it in code, on a wrapper of the registered component.
+- **The delivered face (1.3.0).** The Delivery API may serve, beside the envelope, a face it rendered for the
+  brand's design: an unsigned `face: { html, css }`. The envelope's signed `content.faceDigest`
+  (`@certrev/cert-contract` 0.6.0) holds the sha256 of each half's UTF-8 bytes and the def version they were
+  rendered for. The card paints that face (`<style>` + css + `</style>` + html, in its usual wrapper, marked
+  `data-certrev-face="delivered"`) only for an unpinned block that shows the whole card (not a split banner's
+  `part: 'header'` or `'memo'`), when the def served is that version and both hashes, computed with WebCrypto,
+  equal the signed values. The seed then ends with the same `face`, and the browser hashes it again against the
+  seed payload's digest before it paints it; with no WebCrypto (an insecure `http:` page) or bytes that do not
+  hash, the card paints what 1.2.1 paints. Every other delivery paints exactly what 1.2.1 paints, seed included.
+  The face is on the page twice (painted, and in the seed).
 - **The server's read** waits up to 8 s (the verifier's own default stays 3 s). Its cache keeps a certificate for
   60 s, then serves it for up to 5 minutes more while one background refresh runs or while CertREV cannot be
   reached; a refusal (revoked, expired) lands as soon as its refresh does. A cold placement waits once; a warm one
@@ -850,6 +860,7 @@ alongside each modal module. The load-bearing ones:
 - **`__tests__/webcomponent.test.tsx`**: the shared `renderBadgeHtml` string renderer (hand-escaping, unsafe-URL/color dropping, compact style) and the `<certrev-badge>` custom element (idempotent registration, SSR light-DOM preservation, client-mode fail-closed without a resolver).
 - **`builder/__tests__/builder.test.tsx`** covers the PUSH card and its registration: the wire-type ⇄ inputs parity lock, the fused-credential gate, and the mistyped-option degradation.
 - **`builder/__tests__/delivery-card-hydrate.test.tsx`** + **`builder/__tests__/ssr-seed.test.tsx`** (1.2.0): a server-rendered delivery card hydrates on both faces with zero browser reads, no mismatch and the same nodes; its seed is the served envelope and still verifies; revoked and browser-clock-expired cards come down; a later client mount reuses the page's seed; the server's options and none records are kept through hydration and through React's client re-render after a hydration error, with no read; a client mount with no record makes no read and paints the options face or nothing, and only with `clientRead` reads once, or renders nothing and logs nothing when the read is refused; a reviewer photo that fails to load repaints as initials; the seed and fallback-record parsers refuse malformed records and each other's; the design pin is part of the seed's key; a hidden `reviewerPhoto` or `memo`, or `display.showExpertPhoto: false` (the photo URLs), is absent from the whole server HTML and the seed carries no signature; every server render in these files runs under jsdom with no server switch; and the card's inlined reader stylesheet names no font URL. **`builder/__tests__/delivery-card.test.tsx`** pins the unreachable cases to the 1.0.3 options face byte for byte, and the 8 s deadline and the stale window; **`verify/__tests__/cache.test.ts`** the cache's stale-while-revalidate, stale-if-error and in-flight limit. **`reader/__tests__/reader-initials.test.ts`** pins the initials bytes (honorifics, escaping, hidden and missing photos, `showExpertPhoto`, the empty name).
+- **`builder/__tests__/delivered-face.test.tsx`** + **`builder/__tests__/delivered-face-client.test.tsx`** + **`builder/__tests__/delivered-face-use.test.tsx`** (1.3.0): the delivered face paints, server and browser (hydration, a client mount over the page's record, a streamed record, `clientRead`), only when its hashes match the signed digest for the def served, on an unpinned whole-card block; every other delivery, and a browser that cannot hash, renders what the unmodified 1.2.1 card rendered for the same input, byte for byte, seed included (`__golden__/delivered-face-1.2.1.json`, `__golden__/delivered-face-client-1.2.1.json`); a tampered digest suppresses.
 - **`builder/__tests__/streamed-record-card.test.tsx`** (1.2.1): a card the client renders while the page loads paints nothing, then the record the stream adds, to the document (#421) or to the server's `<html>` after React replaced it (#423, with and without `MutationObserver`), and what a client mount paints once the page loads with none; pinned, options, none and expired records; no read; hydration, `clientRead` and a loaded page unchanged.
 - **`modal/*.test.ts`**, per module: the modal element (tombstone → `markSuppressed`), the dialog view, interactions, placement, badge revalidation, and the Delivery-API verify client. `modal/own-face-modal.test.ts` puts two faces on one page and proves each control opens its own face's modal; `modal/closed-container-face.test.ts` proves a face that loads inside a closed `<details>`, tab or accordion is left alone and renders when opened (there is no runtime disclosure guard).
 - **`__tests__/readme-version.test.ts`** + **`__tests__/readme-contract.test.ts`** pin the claims in this file that rot silently: the version stamp against `package.json`, the key id, the route-example heading, and every `exports` subpath appearing under Public API.
@@ -859,7 +870,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`1.2.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`1.3.0`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.

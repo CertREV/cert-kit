@@ -25,6 +25,7 @@ import { type CertBlockMode, renderCertBlock } from '../components/render-cert-b
 import { CERT_STRINGS_VERSION, type ResolvedBlockTheme } from '../components/render-def.js'
 import { type CertPayload, renderVerdict } from '../contract/kernel.js'
 import {
+	type DeliveredFace,
 	type DesignPin,
 	getVerifiedDelivery,
 	parseDesignPin,
@@ -34,6 +35,14 @@ import {
 import { CARD_READER_CSS } from './card-reader-css.js'
 import type { BuilderCertChromeData, CertChromeRenderDef } from './cert-chrome-data.js'
 import { BUILDER_CERT_CHROME_KEYS } from './cert-chrome-data.js'
+import {
+	type DeliveredFaceHashes,
+	deliveredFaceDigest,
+	deliveredFaceHtml,
+	deliveredFaceMatches,
+	faceHashesFor,
+	showsWholeCard,
+} from './delivered-face.js'
 import { cardDeliveryRuntime } from './delivery-runtime.js'
 import { envelopeCardHtml, envelopeCardInput, isReaderFaceDef } from './envelope-face.js'
 import {
@@ -172,9 +181,23 @@ function suspendOn(key: string, start: () => Promise<VerifiedDelivery>): Verifie
 		pending = start().finally(() => inflightReads.delete(key))
 		inflightReads.set(key, pending)
 	}
-	const use = (React as unknown as { use?: <T>(p: Promise<T>) => T }).use
+	return suspendUntil(pending)
+}
+
+/** `use` where React has it (19), else the thrown promise (18). */
+function suspendUntil<T>(pending: Promise<T>): T {
+	const use = (React as unknown as { use?: <U>(p: Promise<U>) => U }).use
 	if (typeof use === 'function') return use(pending)
 	throw pending
+}
+
+/**
+ * 1.3.0: a delivered face's two digests, suspending once while WebCrypto computes them (`faceHashesFor` memoizes them
+ * by the face's content, so every later render of the same face, server or browser, reads them at once).
+ */
+function suspendOnFaceHashes(face: DeliveredFace): DeliveredFaceHashes | null {
+	const memo = faceHashesFor(face)
+	return memo.settled ? memo.settled.hashes : suspendUntil(memo.pending)
 }
 
 /**
@@ -225,6 +248,8 @@ function EnvelopeFace(props: {
 	readonly html: string
 	readonly defVersion: number | undefined
 	readonly reader?: boolean
+	/** 1.3.0: the server-rendered face the signed digest binds (`DeliveredEnvelopeFace`); never with `reader`. */
+	readonly delivered?: boolean
 	/** The envelope seed (`ssr-seed.ts`): what a browser hydrating this face paints from, with no read of its own. */
 	readonly seed: string
 	/** 1.2.0, reader faces: told which person's photo the browser could not load (`ReaderEnvelopeFace`). */
@@ -270,8 +295,12 @@ function EnvelopeFace(props: {
 			data-certrev-strings-version={CERT_STRINGS_VERSION}
 			data-certrev-def-version={props.defVersion}
 			{...{ [SEED_ATTRIBUTE]: props.seed }}
-			{...(props.reader ? { 'data-certrev-face': 'reader', style: { display: 'flow-root' } } : {})}
-			// biome-ignore lint/security/noDangerouslySetInnerHtml: renderCertBlock is the escaping-safe SSR string renderer
+			{...(props.reader
+				? { 'data-certrev-face': 'reader', style: { display: 'flow-root' } }
+				: props.delivered
+					? { 'data-certrev-face': 'delivered' }
+					: {})}
+			// biome-ignore lint/security/noDangerouslySetInnerHtml: renderCertBlock is the escaping-safe SSR string renderer; a delivered face paints only when its bytes hash to the signed faceDigest
 			dangerouslySetInnerHTML={{ __html: props.html }}
 		/>,
 	)
@@ -338,6 +367,48 @@ function ReaderEnvelopeFace(props: {
 			onBrokenPhoto={onBrokenPhoto}
 		/>
 	)
+}
+
+/**
+ * 1.3.0: the delivered face this paint may use, or undefined (paint what 1.2.1 paints). Only for an unpinned card on a
+ * block that shows the whole card, a digest the verified content signs for the def's version, and a face whose UTF-8
+ * bytes hash to it (`delivered-face.ts`). Suspends once while WebCrypto hashes a face it has not seen.
+ */
+function deliveredFaceFor(
+	payload: CertPayload,
+	renderDef: CertChromeRenderDef | null,
+	face: DeliveredFace | undefined,
+	props: EnvelopeCardProps,
+): DeliveredFace | undefined {
+	if (!face || props.design || !showsWholeCard(props.part)) return undefined
+	const digest = deliveredFaceDigest(payload.content, renderDef, face)
+	if (!digest) return undefined
+	return deliveredFaceMatches(suspendOnFaceHashes(face), digest) ? face : undefined
+}
+
+/**
+ * 1.3.0: the delivered face, in the card's own wrapper (the same attributes as any envelope face, and
+ * `data-certrev-face="delivered"`): the server's stylesheet, then its markup. `seed` is the record that names it.
+ */
+function DeliveredEnvelopeFace(props: {
+	readonly face: DeliveredFace
+	readonly defVersion: number
+	readonly seed: string
+}) {
+	return <EnvelopeFace delivered html={deliveredFaceHtml(props.face)} defVersion={props.defVersion} seed={props.seed} />
+}
+
+/**
+ * 1.3.0: what a card hydrating a seed that names a delivered face renders when the browser's own check of that face
+ * fails (no WebCrypto: an insecure context; or bytes that do not hash to the seed's digest). The server painted the
+ * delivered face there, and the browser must not render that markup, so this adopts the server's element as it stands
+ * (no attribute or innerHTML compared: `suppressHydrationWarning`; no children hydrated: `dangerouslySetInnerHTML`)
+ * and paints nothing of its own. The render right after hydration (at the browser's clock) is another component, so
+ * React replaces this element with the face 1.2.1 paints for the seed.
+ */
+function ServerFaceUntilHydrated() {
+	// biome-ignore lint/security/noDangerouslySetInnerHtml: an empty string; it only stops React hydrating the server's children
+	return <div suppressHydrationWarning dangerouslySetInnerHTML={{ __html: '' }} />
 }
 
 /** Paint a verified payload with its def; null when the def and content give no face. */
@@ -435,7 +506,16 @@ function paintRecord(
 				return null
 			}
 		}
-		return paintEnvelope(record.seed.payload, record.seed.renderDef, props, record.raw)
+		// 1.3.0: a seed that names a delivered face repaints it only after the browser hashes it against the seed
+		// payload's own digest; otherwise the seed paints what 1.2.1 paints for it.
+		const { seed } = record
+		const delivered = deliveredFaceFor(seed.payload, seed.renderDef, seed.face, props)
+		if (delivered && seed.renderDef) {
+			return <DeliveredEnvelopeFace face={delivered} defVersion={seed.renderDef.v} seed={record.raw} />
+		}
+		// Hydrating (not `judge`) over the delivered face the server painted, which the browser could not confirm.
+		if (seed.face && !judge) return <ServerFaceUntilHydrated />
+		return paintEnvelope(seed.payload, seed.renderDef, props, record.raw)
 	}
 	const html = record.fallback.face === 'options' ? fallbackFace(props) : null
 	return html === null ? (
@@ -587,6 +667,18 @@ function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 		signature: settled.signature,
 		renderDef: settled.renderDef,
 	})
+	// 1.3.0: the server-rendered face the Delivery API served beside the envelope, when its bytes hash to the digest the
+	// verified payload signs; the seed then carries it, so the browser can repaint (and re-check) the same face.
+	const delivered = deliveredFaceFor(seed.payload, seed.renderDef, settled.face, props)
+	if (delivered && seed.renderDef) {
+		return (
+			<DeliveredEnvelopeFace
+				face={delivered}
+				defVersion={seed.renderDef.v}
+				seed={serializeSeed({ ...seed, face: delivered })}
+			/>
+		)
+	}
 	return paintEnvelope(seed.payload, seed.renderDef, props, serializeSeed(seed))
 }
 

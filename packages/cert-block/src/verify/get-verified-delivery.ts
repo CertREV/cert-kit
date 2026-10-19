@@ -36,6 +36,12 @@
  * card paints its options face instead of nothing. A definitive answer (404/410, a key or signature that does not
  * verify, a revoked, expired or mismatched artifact) is never `unreachable`. `readVerifiedDelivery` is the
  * synchronous read that also serves a stale entry while refreshing it.
+ *
+ * 1.3.0: the response may also carry a server-rendered face as a second UNSIGNED sibling, `face: { html, css }`. It is
+ * read the way `renderDef` is (shape-checked, malformed is dropped, never read unless the artifact verified) and cached
+ * beside it, and `settleDelivery` hands it out only on a `render` verdict. NOTHING HERE VOUCHES FOR IT: the signature
+ * does not cover it. What binds it is the signed `payload.content.faceDigest` (cert-contract 0.6.0), and a caller
+ * paints it only after hashing it against that digest, as the Builder card does (`src/builder/delivered-face.ts`).
  */
 
 import type { CertChromeRenderDef } from '../builder/cert-chrome-data.js'
@@ -53,6 +59,16 @@ import { TtlCache } from './cache.js'
 import { DEFAULT_FETCH_TIMEOUT_MS, fetchWithDeadline } from './fetch-with-deadline.js'
 
 /**
+ * 1.3.0: the server-rendered face the Delivery API may serve beside the artifact. UNSIGNED and UNVERIFIED as carried
+ * here: paint it only when sha256 of each half's UTF-8 bytes equals the signed `payload.content.faceDigest`, and the
+ * digest's `defVersion` is the def served with it.
+ */
+export interface DeliveredFace {
+	readonly html: string
+	readonly css: string
+}
+
+/**
  * What one Delivery read settles to, as cached: a verified payload + its def (and, from 1.2.0, the signature it
  * verified with, so a server render can hand the signed envelope to the browser), or the reason not.
  */
@@ -63,6 +79,8 @@ export type CachedDelivery =
 			readonly renderDef: CertChromeRenderDef | null
 			/** Absent only in a cache filled by hand (a test, a custom cache); a read always keeps it. */
 			readonly signature?: CertSignature
+			/** 1.3.0: the unsigned face sibling, when the response carried a well-formed one; else absent. */
+			readonly face?: DeliveredFace
 	  }
 	| {
 			readonly kind: 'suppressed'
@@ -80,6 +98,11 @@ export interface VerifiedDelivery {
 	readonly signature?: CertSignature
 	/** 1.2.0: on a suppress verdict, true when CertREV was not reached; else undefined. */
 	readonly unreachable?: true
+	/**
+	 * 1.3.0: on a `render` verdict, the server-rendered face served beside the artifact, when the response carried a
+	 * well-formed one; else undefined (never on a suppress verdict). UNVERIFIED: see `DeliveredFace`.
+	 */
+	readonly face?: DeliveredFace
 }
 
 export interface GetVerifiedDeliveryOptions {
@@ -230,6 +253,18 @@ export function parseRenderDef(value: unknown): CertChromeRenderDef | null {
 	}
 }
 
+/**
+ * 1.3.0: the face sibling, shape-checked: an object whose `html` and `css` are both strings, copied to exactly those
+ * two keys. Anything else is null, and the card paints exactly what it paints with no face. The markup is NOT judged
+ * here; the signed digest judges it at paint time.
+ */
+export function parseDeliveredFace(value: unknown): DeliveredFace | null {
+	if (!isRecord(value)) return null
+	const { html, css } = value
+	if (!isString(html) || !isString(css)) return null
+	return { html, css }
+}
+
 /** Fetch, parse and cryptographically verify one Delivery response. Never throws. */
 async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDelivery> {
 	const fetchImpl = opts.fetchImpl ?? globalThis.fetch
@@ -259,8 +294,8 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	let verdict: CertVerdict
 	try {
 		// `verifyArtifact`, so a tombstone verifies as itself and reports 'revoked'. The kernel reads
-		// `payload` + `signature` (or the tombstone's own fields); the `renderDef` sibling is not
-		// part of what is verified, and is never read unless the artifact verified.
+		// `payload` + `signature` (or the tombstone's own fields); the `renderDef` and (1.3.0) `face`
+		// siblings are not part of what is verified, and are never read unless the artifact verified.
 		verdict = await verifyArtifact(body as unknown as CertDeliveryArtifact, opts.resolveKid, { ...opts.context })
 	} catch {
 		return suppressed('unknown_key')
@@ -268,11 +303,13 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	if (verdict.decision !== 'render') return suppressed(verdict.reason)
 	// A `render` verdict came from an envelope (a tombstone never renders), so `signature` is the one just verified.
 	const signature = isRecord(body.signature) ? (body.signature as unknown as CertSignature) : undefined
+	const face = parseDeliveredFace(body.face)
 	return {
 		kind: 'verified',
 		payload: verdict.payload,
 		renderDef: parseRenderDef(body.renderDef),
 		...(signature ? { signature } : {}),
+		...(face ? { face } : {}),
 	}
 }
 
@@ -287,7 +324,12 @@ export function settleDelivery(cached: CachedDelivery, context: RenderContext): 
 	}
 	const verdict = renderVerdict(cached.payload, context)
 	if (verdict.decision !== 'render') return { verdict, renderDef: null }
-	return { verdict, renderDef: cached.renderDef, ...(cached.signature ? { signature: cached.signature } : {}) }
+	return {
+		verdict,
+		renderDef: cached.renderDef,
+		...(cached.signature ? { signature: cached.signature } : {}),
+		...(cached.face ? { face: cached.face } : {}),
+	}
 }
 
 /**

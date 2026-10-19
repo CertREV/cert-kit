@@ -18,6 +18,7 @@
 import type { ResolvePublicKeyByKid } from '../contract/kernel.js'
 import { TtlCache } from '../verify/cache.js'
 import type { CachedDelivery } from '../verify/get-verified-delivery.js'
+import { forgetFaceHashesForTests } from './delivered-face.js'
 import { CERT_ISSUER_KID, CERT_ISSUER_PUBLIC_KEY_PEM } from './issuer-key.js'
 import { forgetPageSeedsForTests } from './ssr-seed.js'
 
@@ -67,10 +68,11 @@ export function cardDeliveryRuntime(): CardDeliveryRuntime {
 
 /**
  * Test seam: replace parts of the runtime (a fresh cache unless one is given) and forget the page's envelope seeds
- * (a fresh runtime is a fresh page). Returns a restore.
+ * (a fresh runtime is a fresh page) and (1.3.0) every delivered face's memoized hashes. Returns a restore.
  */
 export function setCardDeliveryRuntimeForTests(overrides: Partial<CardDeliveryRuntime>): () => void {
 	forgetPageSeedsForTests()
+	forgetFaceHashesForTests()
 	const previous = runtime
 	const now = overrides.now ?? previous.now
 	runtime = {
