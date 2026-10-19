@@ -5,6 +5,69 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 1.3.0 · 2026-10-18
+
+Minor: **a `delivery` card can paint the face CertREV rendered for the brand's design, when the signed envelope binds
+it.** Backward compatible: **with no delivered face, or an envelope without `faceDigest`, the card renders exactly what
+1.2.1 renders, byte for byte** (the server's HTML and its seed, hydration, a streamed record, a fallback record, a
+`clientRead` read). A block without the marker and a pinned card are untouched, and no integration needs a code
+change. Like 1.1.0's marker, the new face is switched on from CertREV's side, never by the upgrade: it takes an
+envelope minted with a `faceDigest` (`@certrev/cert-contract` 0.6.0) AND a Delivery response serving the face it hashes.
+
+- **A delivered face, bound by a signed digest.** The Builder Delivery response may carry an unsigned top-level
+  `face: { html, css }` beside `payload`, `signature` and `renderDef`. The signature does not cover it; the signed
+  `payload.content.faceDigest` (`{ v: 1, defVersion, html, css }`, the lowercase hex sha256 of each half's UTF-8
+  bytes for one saved design version) binds it. The card paints the delivered face only when ALL of these hold: the
+  verdict is `render`; the card is not pinned; the block shows the whole card (below); the verified content carries a
+  `faceDigest` with `v: 1`; a well-formed face was served; a `renderDef` was served and its `v` is
+  `faceDigest.defVersion`; and sha256(html) and sha256(css), computed with WebCrypto (`crypto.subtle.digest`, the
+  global the kernel already verifies with), equal the signed values. It then paints `<style>` + css + `</style>` +
+  html inside the card's usual wrapper, which keeps `data-certrev-cert-chrome`, `data-certrev-delivery`,
+  `data-certrev-strings-version`, `data-certrev-def-version` and the seed, and gains
+  `data-certrev-face="delivered"`. It paints in place of the legacy or reader face, with no reader stylesheet and no
+  sidebar flow rules.
+- **A split banner keeps its own halves.** The delivered face is a whole design, so only a block whose `part` is
+  absent or `'full'` (or null, or a value `renderCertBlock` does not recognise, which it paints as the full card)
+  paints it. A block with `part: 'header'` or `part: 'memo'` paints its own part as 1.2.1 does, and hashes nothing.
+  The block's `mode` is not consulted: the delivered face carries the design's own layout.
+- **The browser re-checks the face before it paints it.** A server that painted the delivered face ends the seed with
+  the same `face`: `{ v: 1, baseUrl, externalId, payload, signature?, renderDef, face }`. A seed without one is the
+  1.2.1 seed byte for byte. The browser repaints the face from the seed (hydration, a later client mount, a record
+  streamed in while the page loads) only after hashing it against the seed payload's own `faceDigest`, for the
+  seed's def; a `clientRead` read is judged as the server judges it. A seed with no `face`, a malformed one, or one
+  whose hashes fail paints what 1.2.1 paints for it. While a card hydrates over the server's delivered face and the
+  browser cannot confirm it (no WebCrypto, as on an insecure `http:` page), it adopts the server's element without
+  rendering that markup, and the render right after hydration replaces it with the face 1.2.1 paints, with no
+  hydration error. A card hydrating a delivered face suspends once while WebCrypto hashes it, and keeps the server's
+  HTML on screen meanwhile; the hashes are memoized by the face's content, so one face is hashed once per process.
+- **Page weight.** The face is on the page twice: painted, and in the seed, where JSON and attribute escaping add
+  between a few percent and about 60% (more for quote- and markup-dense HTML). A face the size of the 1.2.1 reader
+  card (about 43 KB with its stylesheet) adds about 46 KB to the seed, uncompressed. The delivered face replaces the
+  card's own face, so the painted half costs about what the reader face did.
+- **Fails closed as before.** A digest rewritten in transit fails the signature, so the card renders nothing and
+  writes a `"none"` record, as for any tampering. Markup whose bytes do not hash to the signed digest is never
+  painted, and a WebCrypto failure counts as a mismatch.
+- **New API, all additive.** Root: `parseDeliveredFace` (the face sibling's shape check, as `parseRenderDef` is the
+  def's), the `DeliveredFace` type and the `CertFaceDigest` contract type. `VerifiedDelivery` and `CachedDelivery`
+  gain an optional `face`, present only on a `render` verdict whose response carried a well-formed face, so a read
+  with no face is the 1.2.1 object exactly. **`face` is carried unverified:** a `getVerifiedDelivery` caller that
+  paints it must check it against the digest first, as the card does.
+- **Dependency.** `@certrev/cert-contract` is now `^0.6.0` (was `^0.5.0`), for `CertFaceDigest`. The `^0.5.0` range
+  did not match the workspace's 0.6.0, so `pnpm -r build` on a cold tree built cert-block before cert-contract and
+  failed; it now builds in order.
+- **Unchanged:** every face 1.2.1 paints, the seed and fallback records without a face, the stale window and the
+  deadline, the pinned card, the options path (no marker), the registration and inputs, the web component, and the
+  storefront modal bundle (`src/modal/*` and `dist/modal/certrev-cert.js`: nothing it bundles changed).
+- **Tests.** `builder/__tests__/delivered-face.test.tsx` (server) and `delivered-face-client.test.tsx` (jsdom):
+  the delivered face on the server for the legacy, the legacy-without-hidden-fields and the reader defs (exact bytes,
+  the seed the 1.2.1 seed plus the face); every other case of the matrix (17 failing deliveries per def, the two
+  split-banner parts, the pinned card, a tombstone) against `__golden__/delivered-face-1.2.1.json`, rendered by the
+  unmodified 1.2.1 card; the browser's hydration (same node, no read, no error), client mount, streamed record and
+  `clientRead` with a face, and with a face the browser cannot confirm, against `__golden__/delivered-face-client-1.2.1.json`;
+  1.2.1's server HTML hydrating as served; tampering; and the seed's `face` parse and write. `delivered-face-use.test.tsx`
+  pins the one promise per face a React 19 `use` replays. `get-verified-delivery.test.ts` gains the face sibling's
+  parse, cache and settle. No existing expectation changed.
+
 ## 1.2.1 · 2026-10-09
 
 Patch, stable (dist-tag `latest`): **1.2.1-canary.0, below, as a stable release.** A card the browser renders while

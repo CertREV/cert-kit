@@ -27,7 +27,10 @@
  * for the entry it renders inside (`builderContext.content.id`) from the CertREV Delivery API on
  * `baseUrl` (an https certrev.com origin, nothing else), verifies it against the baked
  * `cert-issuer-1` key, re-judges revocation and expiry at every render, and paints the brand's
- * render def served beside it. A revoked, expired, unverifiable or unreachable cert, a marker that
+ * render def served beside it. 1.3.0: when the Delivery API also serves a server-rendered face
+ * (`face: { html, css }`, unsigned) and the verified envelope signs that face's sha256 digests for the
+ * def version served (`content.faceDigest`), an unpinned whole-card block paints that face instead;
+ * markup that does not hash to the signed digest is never painted. A revoked, expired, unverifiable or unreachable cert, a marker that
  * is not exactly that shape, or a missing entry id renders nothing. A block WITHOUT the marker
  * (every entry exported before 1.1.0) renders from its options exactly as 1.0.3 did, so the
  * paragraph above still describes it: an editor who deletes the marker gets the options face back,
