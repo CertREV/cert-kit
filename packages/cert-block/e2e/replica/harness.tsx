@@ -193,7 +193,8 @@ export function certrevSide(placements: readonly Placement[]): CertrevSide {
 		runtime,
 		cardRoute,
 		async revoke(entryId) {
-			cardRoute.set(entryId, await baked.tombstone(builderSubject(entryId)))
+			// The card route's revocation answer (S2 c78f9efcc5, the lead's decision 10): the tombstone as `envelope`, no card.
+			cardRoute.set(entryId, { envelope: await baked.tombstone(builderSubject(entryId)), card: null })
 		},
 	}
 }
