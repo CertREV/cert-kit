@@ -10,6 +10,7 @@
  */
 
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { CertContent, CertLifecycle, CertPayload } from '@certrev/cert-contract'
 import type { CardDocumentV1 } from '../card-contract.js'
 import { builderPayload, builderSubject, ENTRY_ID, type FixtureIssuer } from './delivery-harness.js'
@@ -36,7 +37,12 @@ export interface ContractFixture {
 
 /** One fixture, parsed afresh (a test may mutate its copy). */
 export function contractFixture(name: ContractCase): ContractFixture {
-	const raw = readFileSync(new URL(`./__fixtures__/contract-v1/${name}.json`, import.meta.url), 'utf8')
+	// Read from the package root (vitest's cwd), as the jsdom tests read their goldens: under jsdom `import.meta.url` is
+	// the page's URL, not the file's.
+	const raw = readFileSync(
+		join(process.cwd(), 'src/builder/__tests__/__fixtures__/contract-v1', `${name}.json`),
+		'utf8',
+	)
 	const fixture = JSON.parse(raw) as ContractFixture
 	if (fixture.card.subject.externalId !== ENTRY_ID) throw new Error(`fixture ${name} is for another entry`)
 	return fixture

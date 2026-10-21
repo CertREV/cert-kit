@@ -1,0 +1,371 @@
+{
+	"generatedFrom": "cert-block 1.3.1 (cert-kit 599d9ce), its own built dist/, before any 2.0.0 change",
+	"CERT_COMPONENT_NAME": "CertREV Cert",
+	"certRevCertComponent": {
+		"name": "CertREV Cert",
+		"description": "CertREV expert-review cert card. Options are populated by the CertREV exporter; editors choose placement (mode/part) only.",
+		"inputs": [
+			{
+				"name": "mode",
+				"type": "string",
+				"friendlyName": "Placement",
+				"helperText": "sidebar (default) · banner · floating",
+				"defaultValue": "sidebar",
+				"enum": [
+					{
+						"label": "Sidebar",
+						"value": "sidebar"
+					},
+					{
+						"label": "Banner",
+						"value": "banner"
+					},
+					{
+						"label": "Floating",
+						"value": "floating"
+					}
+				]
+			},
+			{
+				"name": "part",
+				"type": "string",
+				"friendlyName": "Banner part",
+				"helperText": "full (default) · header · memo. Banner placement only.",
+				"defaultValue": "full",
+				"enum": [
+					{
+						"label": "Full (header + memo)",
+						"value": "full"
+					},
+					{
+						"label": "Header only",
+						"value": "header"
+					},
+					{
+						"label": "Memo only",
+						"value": "memo"
+					}
+				]
+			},
+			{
+				"name": "bylineCredentialed",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "credentialVerification",
+				"type": "object",
+				"advanced": true
+			},
+			{
+				"name": "bylinePlain",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "reviewerName",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "bio",
+				"type": "longText",
+				"advanced": true
+			},
+			{
+				"name": "background",
+				"type": "longText",
+				"advanced": true
+			},
+			{
+				"name": "memo",
+				"type": "longText",
+				"advanced": true
+			},
+			{
+				"name": "compensationCue",
+				"type": "string",
+				"helperText": "System-populated by CertREV. Only its PRESENCE is read (absent = a pro-bono reviewer, so no cue renders); the cue itself is a locked constant, so editing this text changes nothing on the page, and clearing it does not remove the disclosure.",
+				"advanced": true
+			},
+			{
+				"name": "scopeLine",
+				"type": "string",
+				"helperText": "System-populated by CertREV. The FTC scope line renders byte-verbatim from a locked constant: editing this text changes nothing on the page.",
+				"advanced": true
+			},
+			{
+				"name": "reviewerPhoto",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "reviewerProfileUrl",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "verifyUrl",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "certifiedAt",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "contentModifiedAt",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "authorName",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "authorTitle",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "display",
+				"type": "object",
+				"advanced": true
+			},
+			{
+				"name": "renderDef",
+				"type": "object",
+				"advanced": true
+			},
+			{
+				"name": "stringsVersion",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "delivery",
+				"type": "object",
+				"helperText": "System-populated by CertREV. When set, the card shows the certificate CertREV serves for this entry, verified, in place of the other fields; if CertREV revokes it or it expires, the card shows nothing. If CertREV cannot be reached, or the page was not rendered on the server, the card shows the other fields. Do not edit.",
+				"advanced": true
+			}
+		],
+		"shouldReceiveBuilderProps": {
+			"builderContext": true
+		}
+	},
+	"BUILDER_REGISTRATION": {
+		"name": "CertREV Cert",
+		"inputs": [
+			{
+				"name": "mode",
+				"type": "string",
+				"friendlyName": "Placement",
+				"helperText": "sidebar (default) · banner · floating",
+				"defaultValue": "sidebar",
+				"enum": [
+					{
+						"label": "Sidebar",
+						"value": "sidebar"
+					},
+					{
+						"label": "Banner",
+						"value": "banner"
+					},
+					{
+						"label": "Floating",
+						"value": "floating"
+					}
+				]
+			},
+			{
+				"name": "part",
+				"type": "string",
+				"friendlyName": "Banner part",
+				"helperText": "full (default) · header · memo. Banner placement only.",
+				"defaultValue": "full",
+				"enum": [
+					{
+						"label": "Full (header + memo)",
+						"value": "full"
+					},
+					{
+						"label": "Header only",
+						"value": "header"
+					},
+					{
+						"label": "Memo only",
+						"value": "memo"
+					}
+				]
+			},
+			{
+				"name": "bylineCredentialed",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "credentialVerification",
+				"type": "object",
+				"advanced": true
+			},
+			{
+				"name": "bylinePlain",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "reviewerName",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "bio",
+				"type": "longText",
+				"advanced": true
+			},
+			{
+				"name": "background",
+				"type": "longText",
+				"advanced": true
+			},
+			{
+				"name": "memo",
+				"type": "longText",
+				"advanced": true
+			},
+			{
+				"name": "compensationCue",
+				"type": "string",
+				"helperText": "System-populated by CertREV. Only its PRESENCE is read (absent = a pro-bono reviewer, so no cue renders); the cue itself is a locked constant, so editing this text changes nothing on the page, and clearing it does not remove the disclosure.",
+				"advanced": true
+			},
+			{
+				"name": "scopeLine",
+				"type": "string",
+				"helperText": "System-populated by CertREV. The FTC scope line renders byte-verbatim from a locked constant: editing this text changes nothing on the page.",
+				"advanced": true
+			},
+			{
+				"name": "reviewerPhoto",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "reviewerProfileUrl",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "verifyUrl",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "certifiedAt",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "contentModifiedAt",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "authorName",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "authorTitle",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "display",
+				"type": "object",
+				"advanced": true
+			},
+			{
+				"name": "renderDef",
+				"type": "object",
+				"advanced": true
+			},
+			{
+				"name": "stringsVersion",
+				"type": "string",
+				"advanced": true
+			},
+			{
+				"name": "delivery",
+				"type": "object",
+				"helperText": "System-populated by CertREV. When set, the card shows the certificate CertREV serves for this entry, verified, in place of the other fields; if CertREV revokes it or it expires, the card shows nothing. If CertREV cannot be reached, or the page was not rendered on the server, the card shows the other fields. Do not edit.",
+				"advanced": true
+			}
+		],
+		"shouldReceiveBuilderProps": {
+			"builderContext": true
+		}
+	},
+	"componentIsCertReviewCard": true,
+	"builderExports": [
+		"BUILDER_CERT_CHROME_KEYS",
+		"BUILDER_REGISTRATION",
+		"CERT_COMPONENT_NAME",
+		"CERT_FACE_FIELDS",
+		"CertRevAnchor",
+		"CertRevEditorPlaceholder",
+		"CertRevProvider",
+		"CertReviewCard",
+		"PLACEMENT_INPUTS",
+		"READER_FACE",
+		"WIRE_INPUTS",
+		"acceptedDeliveryMarker",
+		"certRevAnchorComponent",
+		"certRevCertComponent",
+		"credentialLabel",
+		"designPinFromUrl",
+		"envelopeCardHtml",
+		"envelopeCardInput",
+		"faceFromDef",
+		"isReaderFaceDef",
+		"layoutFor",
+		"parseDesignPin",
+		"themeFromDef"
+	],
+	"BUILDER_CERT_CHROME_KEYS": [
+		"bylineCredentialed",
+		"credentialVerification",
+		"bylinePlain",
+		"reviewerName",
+		"bio",
+		"background",
+		"memo",
+		"compensationCue",
+		"scopeLine",
+		"reviewerPhoto",
+		"reviewerProfileUrl",
+		"verifyUrl",
+		"certifiedAt",
+		"contentModifiedAt",
+		"authorName",
+		"authorTitle",
+		"display",
+		"renderDef",
+		"stringsVersion",
+		"delivery"
+	],
+	"packageExports": [
+		".",
+		"./builder",
+		"./builder/face",
+		"./reader",
+		"./reader.css",
+		"./webcomponent",
+		"./fixtures",
+		"./modal",
+		"./modal/placement",
+		"./modal/certrev-cert.js"
+	]
+}
