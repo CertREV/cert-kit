@@ -53,6 +53,7 @@ export function signObject(value: unknown, signer: TestKey): string {
 export function keySetBody(keyset: unknown, signer: TestKey, kid = signer.kid): Record<string, unknown> {
 	return {
 		keyset,
-		signature: { alg: 'ed25519', kid, sig: signObject(keyset, signer), signedAt: '2026-10-21T00:00:00.000Z' },
+		// The portal's route (lead branch cert-keyset 3e803022f9, `keyset.ts`): `{ alg, kid, sig }`, no time of its own.
+		signature: { alg: 'ed25519', kid, sig: signObject(keyset, signer) },
 	}
 }

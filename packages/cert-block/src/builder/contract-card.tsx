@@ -21,6 +21,15 @@
  *    idempotent, so a page with two blocks loads it twice at most and starts it once.
  * Both run in a layout effect, before the browser paints the inserted card, so a client-mounted card never shows an
  * empty frame.
+ *
+ * ONE BUILDER RULE, for the sidebar card only. The card's rail is a right float that the article's copy flows around
+ * (the Appearance preview's layout, and every other CMS's). On a Builder page the block sits in Builder's own wrapper,
+ * a flex item of the flex column that holds the entry's blocks, and a flex item contains its floats: the block spans
+ * the column at the rail's height and no copy sits beside it. `BUILDER_CARD_FLOW_CSS` lets the float out of Builder's
+ * wrappers, as 1.2.0-canary.6 did for the reader face: in a column that holds a printed rail, above the card's own
+ * 820px breakpoint (below it the rail stacks as a block), the column lays its blocks out as blocks and still contains
+ * the float, and the rail's block and the card wrapper become plain blocks. It reaches nothing inside the card (the
+ * shadow root is out of its reach) and nothing on a page without a rail, or in a browser without `:has()`.
  */
 
 import * as React from 'react'
@@ -101,6 +110,14 @@ export function injectCardRuntime(card: CardDocumentV1): void {
 	document.head.appendChild(script)
 }
 
+/** Builder's wrappers around a printed rail let its float out (the header comment). */
+export const BUILDER_CARD_FLOW_CSS =
+	'@media not all and (max-width: 820px){' +
+	'.builder-blocks:has(> .builder-block > [data-certrev-face="card"] > certrev-card[data-certrev-part="rail"]){display:flow-root !important}' +
+	'.builder-blocks > .builder-block:has(> [data-certrev-face="card"] > certrev-card[data-certrev-part="rail"]){display:block !important}' +
+	'.builder-blocks > .builder-block > [data-certrev-face="card"]:has(> certrev-card[data-certrev-part="rail"]){display:block !important}' +
+	'}'
+
 export function ContractCardFace(props: {
 	readonly card: CardDocumentV1
 	readonly names: readonly CardPartName[]
@@ -116,7 +133,7 @@ export function ContractCardFace(props: {
 		attachCardRoots(wrapper, html)
 		injectCardRuntime(card)
 	}, [html, card])
-	return (
+	const wrapper = (
 		<div
 			ref={ref}
 			data-certrev-cert-chrome=""
@@ -128,5 +145,13 @@ export function ContractCardFace(props: {
 			// biome-ignore lint/security/noDangerouslySetInnerHtml: CertREV's card document, printed only after it hashes to the digest the verified envelope signs
 			dangerouslySetInnerHTML={{ __html: html }}
 		/>
+	)
+	if (!props.names.includes('rail')) return wrapper
+	return (
+		<>
+			{wrapper}
+			{/* biome-ignore lint/security/noDangerouslySetInnerHtml: a package constant; React would escape the `>` and `"` of its selectors */}
+			<style data-certrev-builder-flow="" dangerouslySetInnerHTML={{ __html: BUILDER_CARD_FLOW_CSS }} />
+		</>
 	)
 }
