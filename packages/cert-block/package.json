@@ -72,7 +72,8 @@
 		"build:modal-bundle": "pnpm dlx esbuild@0.27.7 src/modal/certrev-cert.entry.ts --bundle --minify --target=es2020 --format=iife --legal-comments=none --tsconfig-raw='{\"compilerOptions\":{\"target\":\"ES2017\",\"module\":\"esnext\",\"strict\":true}}' --banner:js='/* biome-ignore-all format: generated cert-badge bundle, see @certrev/cert-block src/modal/ */ /* biome-ignore-all lint: generated cert-badge bundle, see @certrev/cert-block src/modal/ */' --outfile=dist/modal/certrev-cert.js",
 		"refresh:reader": "node scripts/refresh-reader.mjs",
 		"typecheck": "tsc --noEmit",
-		"test": "vitest run"
+		"test": "vitest run",
+		"test:replica": "vitest run --config vitest.e2e.config.ts"
 	},
 	"dependencies": {
 		"@certrev/cert-contract": "^0.6.0"
@@ -90,7 +91,9 @@
 		"@types/node": "^20.0.0",
 		"@types/react": "^18.3.0",
 		"@types/react-dom": "^18.3.0",
+		"esbuild": "0.27.7",
 		"jsdom": "^25.0.0",
+		"playwright-core": "1.59.1",
 		"react": "^18.3.1",
 		"react-dom": "^18.3.1",
 		"typescript": "^6.0.3",

@@ -11,6 +11,7 @@ import { canonicalizeJson } from '@certrev/cert-contract'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CardDocumentV1, cardPartsFor } from '../card-contract.js'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
+import { BUILDER_CARD_FLOW_CSS } from '../contract-card.js'
 import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
 import { parseFallback, parseSeed, SEED_ATTRIBUTE } from '../ssr-seed.js'
 import {
@@ -80,13 +81,19 @@ const unattr = (raw: string) =>
 		.replace(/&gt;/g, '>')
 		.replace(/&amp;/g, '&')
 
-/** The card wrapper's opening tag and its inner HTML, cut from the stream. */
-function cardWrapper(html: string): { open: string; inner: string } | null {
+const FLOW = `<style data-certrev-builder-flow="">${BUILDER_CARD_FLOW_CSS}</style>`
+
+/** The card wrapper's opening tag, its inner HTML and what follows it (a rail's flow rule), cut from the stream. */
+function cardWrapper(html: string): { open: string; inner: string; after: string } | null {
 	const start = html.indexOf('<div data-certrev-cert-chrome')
 	if (start === -1) return null
 	const openEnd = html.indexOf('>', start) + 1
-	const end = html.lastIndexOf('</div><!--/$-->')
-	return { open: html.slice(start, openEnd), inner: html.slice(openEnd, end) }
+	const close = html.lastIndexOf('<!--/$-->')
+	const tail = html.slice(0, close)
+	const after = tail.endsWith(FLOW) ? FLOW : ''
+	const end = tail.length - after.length - '</div>'.length
+	expect(tail.slice(end, end + '</div>'.length)).toBe('</div>')
+	return { open: html.slice(start, openEnd), inner: html.slice(openEnd, end), after }
 }
 
 const recordOf = (html: string) => {
@@ -128,6 +135,8 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 		// SC2 at the emission boundary: the inner HTML is the document's own bytes.
 		expect(wrapper?.inner).toBe(expectedCardHtml(fixture.card, names))
 		for (const part of names) expect(wrapper?.inner).toContain(fixture.card.parts[part] as string)
+		// The one byte outside the document: a printed rail's Builder flow rule, after the wrapper (`contract-card.tsx`).
+		expect(wrapper?.after).toBe(names.includes('rail') ? FLOW : '')
 		expect(wrapper?.open).toContain('data-certrev-face="card"')
 		expect(wrapper?.open).toContain('data-certrev-contract="1"')
 		expect(wrapper?.open).toContain(`data-certrev-def-version="${fixture.card.defVersion}"`)
