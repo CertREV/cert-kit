@@ -23,6 +23,8 @@ import {
 	type CertrevSide,
 	type CspOptions,
 	certrevSide,
+	type Placement,
+	previewParity,
 	type ReplicaServer,
 	routeCertrev,
 	startReplica,
@@ -31,14 +33,20 @@ import {
 const OUT = process.env.CERT_BLOCK_E2E_OUT ?? join(process.cwd(), 'e2e/.out')
 mkdirSync(OUT, { recursive: true })
 
-const PLACEMENTS = [
+const PLACEMENTS: Placement[] = [
 	{ entryId: 'replica-banner', fixture: 'banner-elf-like' },
 	{ entryId: 'replica-sidebar', fixture: 'sidebar-elf-like' },
 	{ entryId: 'replica-floating', fixture: 'floating-elf-like' },
 	{ entryId: 'replica-toned', fixture: 'sidebar-saved-3-toned' },
 	{ entryId: 'replica-split', fixture: 'banner-elf-like' },
 	{ entryId: 'replica-next', fixture: 'sidebar-elf-like', rotated: true },
-] as const
+	{ entryId: 'replica-revoked', fixture: 'sidebar-elf-like' },
+	...Object.values(previewParity().cases).map((c) => ({
+		entryId: c.externalId,
+		fixture: 'banner-elf-like' as const,
+		painted: { card: c.builderCard, content: c.content, lifecycle: c.lifecycle, renderDef: c.renderDef },
+	})),
+]
 
 const ARTICLES: ReplicaArticle[] = [
 	{ path: '/blogs/the-elf-word/banner', title: 'Retinol, banner card', entryId: 'replica-banner' },
@@ -53,13 +61,20 @@ const ARTICLES: ReplicaArticle[] = [
 		memoBlock: true,
 	},
 	{ path: '/blogs/the-elf-word/next', title: 'Next article', entryId: 'replica-next' },
+	{ path: '/blogs/the-elf-word/revoked', title: 'Retinol, revoked', entryId: 'replica-revoked' },
+	...Object.entries(previewParity().cases).map(([name, c]) => ({
+		path: `/blogs/the-elf-word/preview-${name}`,
+		title: `Retinol, the preview's ${name}`,
+		entryId: c.externalId,
+	})),
 ]
 const VIEWPORTS = [
 	{ name: '1280', width: 1280, height: 900 },
 	{ name: '393', width: 393, height: 852 },
 ] as const
 
-const ELF_LIKE: CspOptions = { dataImages: true }
+/** The page's policy: its own baseline and exactly the four CertREV sources (no `data:` images: the logo is inline SVG). */
+const STRICT: CspOptions = { dataImages: false }
 
 let browser: Browser
 let side: CertrevSide
@@ -69,9 +84,9 @@ const evidence: Record<string, unknown> = {}
 beforeAll(async () => {
 	browser = await chromium.launch()
 	side = certrevSide(PLACEMENTS)
-	server = await startReplica(side, ARTICLES, ELF_LIKE)
+	server = await startReplica(side, ARTICLES, STRICT)
 	evidence.browser = browser.version()
-	evidence.runtime = { src: side.runtime.src, integrity: side.runtime.integrity, standIn: true }
+	evidence.runtime = { src: side.runtime.src, integrity: side.runtime.integrity, from: 'S2 c623d29a2e' }
 }, 120_000)
 
 afterAll(async () => {
@@ -136,6 +151,8 @@ async function hosts(page: Page) {
 				const root = (host as HTMLElement).shadowRoot
 				const boxes = root
 					? Array.from(root.querySelectorAll('*'))
+							// What is rendered only: a closed <details> keeps boxes for its hidden content.
+							.filter((el) => el.checkVisibility())
 							.map((el) => el.getBoundingClientRect())
 							.filter((r) => r.width > 0 && r.height > 0)
 					: []
@@ -160,6 +177,18 @@ async function hosts(page: Page) {
 			},
 		),
 	)
+}
+
+/**
+ * A pinned part (the floating pill) sits over the article, so its edges and shadow blend with whatever text is behind
+ * it; the page's own text is hidden for that capture, and the part is compared on the same white as the part alone.
+ */
+async function hidePageBehind(page: Page) {
+	await page.evaluate(() => {
+		for (const el of Array.from(document.querySelectorAll('header, h1, .builder-block p'))) {
+			;(el as HTMLElement).style.visibility = 'hidden'
+		}
+	})
 }
 
 /** Pixel difference of two PNG screenshots, decoded by the browser itself. */
@@ -298,15 +327,9 @@ async function exerciseDialogs(page: Page, entryId: string, partSelector: string
 		expect(focusOnOpen.inDialog, `${cell} ${kind}: focus moves into the dialog`).toBe(
 			part === 'dialog-expert' ? 'expert' : 'cert',
 		)
-		// The modal dialog keeps focus off the page: Tab moves through the dialog's controls, and past the last one to the
-		// browser's own UI (native <dialog>), never to the page behind. Wrapping inside the dialog is the hosted runtime's
-		// (S2); with the stand-in it is recorded, not asserted.
+		// CertREV's runtime traps focus in the open dialog: Tab cycles through the dialog's controls and never leaves it.
 		const here = `dialog:${part === 'dialog-expert' ? 'expert' : 'cert'}`
-		expect(
-			tabbed.filter((x) => x !== here && x !== 'browser'),
-			`${cell} ${kind}: Tab never reaches the page`,
-		).toEqual([])
-		expect(tabbed.filter((x) => x === here).length, `${cell} ${kind}: Tab moves within the dialog`).toBeGreaterThan(1)
+		expect(tabbed, `${cell} ${kind}: Tab stays in the dialog`).toEqual(Array(tabbed.length).fill(here))
 		expect(closed.open, `${cell} ${kind}: Escape closes`).toBe(false)
 		expect(focusAfter.modalOpen, `${cell} ${kind}: focus returns to the control`).toBe(
 			kind === 'profile' ? 'expert' : '',
@@ -372,6 +395,7 @@ describe.each(VIEWPORTS)('at $name px', (viewport) => {
 								clip.width,
 								clip.height,
 							])
+							if (h.fixed) await hidePageBehind(w.page)
 							const a = await w.page.screenshot({ clip, fullPage: !h.fixed })
 							const b = await bare.page.screenshot({ clip: bareClip, fullPage: !h.fixed })
 							pixels = await pixelDiff(a, b)
@@ -598,22 +622,111 @@ describe('JavaScript off', () => {
 	}, 120_000)
 })
 
-describe('CSP: exactly the four CertREV sources', () => {
-	it('with the brand’s policy allowing no data: images, the only violations are the card’s data: logos (a server-side fix)', async () => {
-		server.csp = { dataImages: false }
-		const w = await open(VIEWPORTS[0])
+/** A shadow tree with the placement's identity values blanked: the certificate id the card names (the preview's is
+ * `appearance-preview`, a live card's its own). Every other byte is compared. */
+const withoutIdentity = (html: string | null) =>
+	html?.replace(/data-certrev-cert-id="[^"]*"/g, 'data-certrev-cert-id=""') ?? null
+
+describe('SC2: the parts equal the Appearance preview’s own, for the same design', () => {
+	describe.each(VIEWPORTS)('at $name px', (viewport) => {
+		it.each(
+			Object.keys(previewParity().cases),
+		)('%s: every host the block prints renders the preview page’s host for the same design (shadow tree and pixels)', async (name) => {
+			const c = previewParity().cases[name]
+			const w = await open(viewport)
+			try {
+				await w.page.goto(`${server.origin}/blogs/the-elf-word/preview-${name}`)
+				await settle(w.page)
+				const printed = await hosts(w.page)
+				expect(printed.map((h) => h.part).sort()).toEqual(Object.keys(c.previewHosts).sort())
+				const cells: Record<string, unknown> = {}
+				for (const h of printed) {
+					const alone = await open(viewport)
+					try {
+						const go = async (x: number, y: number) => {
+							const q = new URLSearchParams({ x: String(x), y: String(y), w: String(h.host.width) })
+							await alone.page.goto(`${server.origin}/preview/${name}/${h.part}?${q}`)
+							await settle(alone.page)
+						}
+						await go(h.host.x, h.host.y)
+						const first = (await hosts(alone.page))[0]
+						if (first?.box && h.box && !h.fixed)
+							await go(h.host.x + (h.box.x - first.box.x), h.host.y + (h.box.y - first.box.y))
+						const own = (await hosts(alone.page))[0]
+						expect(own?.attached, `${name} ${h.part}: the preview host attaches`).toBe(true)
+						// The same shadow tree, byte for byte, but for the certificate id the preview stands in for.
+						expect(withoutIdentity(h.html), `${name}@${viewport.name} ${h.part}: shadow tree`).toBe(
+							withoutIdentity(own?.html ?? null),
+						)
+						let pixels: unknown = 'no painted box (a closed dialog)'
+						if (h.box && own?.box) {
+							const clip = { x: h.box.x, y: h.box.y, width: h.box.right - h.box.x, height: h.box.bottom - h.box.y }
+							const clipOwn = {
+								x: own.box.x,
+								y: own.box.y,
+								width: own.box.right - own.box.x,
+								height: own.box.bottom - own.box.y,
+							}
+							expect([clipOwn.width, clipOwn.height]).toEqual([clip.width, clip.height])
+							if (h.fixed) await hidePageBehind(w.page)
+							const a = await w.page.screenshot({ clip, fullPage: !h.fixed })
+							const b = await alone.page.screenshot({ clip: clipOwn, fullPage: !h.fixed })
+							pixels = await pixelDiff(a, b)
+							if ((pixels as { differing: number }).differing !== 0) {
+								writeFileSync(join(OUT, `preview-${name}-${viewport.name}-${h.part}-replica.png`), a)
+								writeFileSync(join(OUT, `preview-${name}-${viewport.name}-${h.part}-preview.png`), b)
+							}
+							expect((pixels as { differing: number }).differing, `${name}@${viewport.name} ${h.part}: pixels`).toBe(0)
+						}
+						cells[h.part] = {
+							sameShadowTreeButCertId: withoutIdentity(h.html) === withoutIdentity(own?.html ?? null),
+							rawEqual: h.html === own?.html,
+							bytes: h.html?.length,
+							pixels,
+						}
+					} finally {
+						await alone.context.close()
+					}
+				}
+				expect(w.violations).toEqual([])
+				evidence[`preview-parity ${name}@${viewport.name}`] = cells
+			} finally {
+				await w.context.close()
+			}
+		}, 120_000)
+	})
+})
+
+describe('a revoked placement (S2’s runtime revalidates against the card route)', () => {
+	it('the server-printed card is removed after revalidation, and stays removed when the block prints it again after an in-app navigation', async () => {
+		await side.revoke('replica-revoked')
+		const w = await open(VIEWPORTS[1])
 		try {
-			await w.page.goto(`${server.origin}${article('replica-banner').path}`)
+			await w.page.goto(`${server.origin}${article('replica-revoked').path}`)
+			await w.page.waitForFunction(() => document.querySelectorAll('certrev-card').length === 0, null, {
+				timeout: 10_000,
+			})
+			const afterLoad = await w.page.evaluate(() => document.querySelectorAll('certrev-card').length)
+			await w.page.locator('[data-replica-nav="/blogs/the-elf-word/banner"]').click()
+			await w.page.waitForSelector('[data-replica-entry="replica-banner"] certrev-card', { state: 'attached' })
+			await w.page.locator('[data-replica-nav="/blogs/the-elf-word/revoked"]').click()
 			await settle(w.page)
-			evidence['csp-no-data-images'] = { violations: w.violations }
-			expect(w.violations.length).toBeGreaterThan(0)
-			for (const v of w.violations) expect(v.blocked).toMatch(/data:image\/svg\+xml|img-src/)
+			const afterReturn = await w.page.evaluate(
+				() => document.querySelectorAll('[data-replica-entry="replica-revoked"] certrev-card').length,
+			)
+			const routeReads = w.requests.filter((r) => r.includes('/api/cert/v1/card/builder/replica-revoked'))
+			evidence.revoked = { afterLoad, afterReturn, routeReads }
+			expect(afterLoad).toBe(0)
+			expect(afterReturn).toBe(0)
+			expect(routeReads.length).toBeGreaterThan(0)
+			expect(w.violations).toEqual([])
 		} finally {
 			await w.context.close()
-			server.csp = ELF_LIKE
 		}
 	}, 120_000)
+})
 
+describe('CSP: exactly the four CertREV sources', () => {
 	it.each<[CertrevDirective, string]>([
 		['script-src', 'runtime'],
 		['connect-src', 'client-nav'],
@@ -622,7 +735,7 @@ describe('CSP: exactly the four CertREV sources', () => {
 	])(
 		'without %s: at least one violation (a positive control)',
 		async (directive, scenario) => {
-			server.csp = { ...ELF_LIKE, without: directive }
+			server.csp = { ...STRICT, without: directive }
 			const w = await open(VIEWPORTS[0])
 			try {
 				await w.page.goto(`${server.origin}${article('replica-banner').path}`)
@@ -635,7 +748,7 @@ describe('CSP: exactly the four CertREV sources', () => {
 				expect(w.violations.length).toBeGreaterThan(0)
 			} finally {
 				await w.context.close()
-				server.csp = ELF_LIKE
+				server.csp = STRICT
 			}
 		},
 		120_000,

@@ -83,7 +83,7 @@ for (const c of cases) {
 	})
 	if (!card) throw new Error(`case ${c.name}: the face paints nothing`)
 	const body = {
-		source: `CertREV/portal v1-core ${source} (lead mission certrev-0a99cc1c5bef), buildCardDocument`,
+		source: `CertREV/portal ${source} (lead mission certrev-0a99cc1c5bef, branch native/certrev-0a99cc1c5bef; schema-frozen-v1 shape), buildCardDocument`,
 		case: c.name,
 		now: NOW.toISOString(),
 		certId: payload.certId,

@@ -9,6 +9,12 @@
  * the entry) and re-digesting it; nothing else in it changes. The envelope binding it is signed by a fixture issuer
  * whose public key the replica bakes in (`client.tsx`); the in-app navigation's article is signed by a ROTATED kid
  * that only the origin's published key set, signed by the baked kid, vouches for.
+ *
+ * THE HOSTED RUNTIME is CertREV's own (sibling mission S2): `card-runtime.<hash>.js.txt` holds its bytes as S2 built them
+ * (`card-runtime.release.json` names the commit and the SRI integrity; `standInRuntime` refuses bytes that do not hash to
+ * it), served at its hashed URL on the portal's origin. It revalidates every placement against the card route
+ * (`/api/cert/v1/card/builder/<entry>`), which this side answers with the envelope and the card, or with a signed
+ * tombstone once a test revokes the placement (`CertrevSide.revoke`).
  */
 
 import { createHash, randomBytes } from 'node:crypto'
@@ -22,6 +28,7 @@ import type { Page, Route } from 'playwright-core'
 import { renderToReadableStream } from 'react-dom/server.browser'
 import {
 	type ContractCase,
+	type ContractFixture,
 	contractBinding,
 	contractFixture,
 	contractPayload,
@@ -72,12 +79,17 @@ export function cspFor(nonce: string, options: CspOptions): string {
 	].join('; ')
 }
 
-/** The stand-in runtime as CertREV would serve it: an immutable hashed URL and its SRI integrity. */
+/** CertREV's hosted runtime (S2's build) as the portal serves it: its immutable hashed URL and its SRI integrity. */
 export function standInRuntime(): { readonly src: string; readonly integrity: string; readonly body: string } {
-	const body = readFileSync(join(PACKAGE, 'e2e/replica/runtime-stand-in.js'), 'utf8')
-	const hash = createHash('sha256').update(body).digest('hex').slice(0, 16)
+	const release = JSON.parse(readFileSync(join(PACKAGE, 'e2e/replica/card-runtime.release.json'), 'utf8')) as {
+		name: string
+		integrity: string
+	}
+	const body = readFileSync(join(PACKAGE, `e2e/replica/${release.name}.txt`), 'utf8')
 	const integrity = `sha384-${createHash('sha384').update(body).digest('base64')}`
-	return { src: `${DELIVERY_ORIGIN}/api/cert/v1/runtime/card-runtime.${hash}.js`, integrity, body }
+	if (integrity !== release.integrity)
+		throw new Error(`runtime ${release.name}: bytes do not hash to ${release.integrity}`)
+	return { src: `${DELIVERY_ORIGIN}/api/cert/v1/runtime/${release.name}`, integrity, body }
 }
 
 const FIXTURE_ENTRY = 'entry-fixture-1'
@@ -108,6 +120,16 @@ export interface Placement {
 	readonly fixture: ContractCase
 	/** Sign with the rotated kid the origin's key set publishes, instead of the baked one. */
 	readonly rotated?: boolean
+	/**
+	 * A document painted for this entry already (the preview-parity fixture's Builder card), served as it is, with its
+	 * facts: then `fixture` is not used.
+	 */
+	readonly painted?: {
+		readonly card: CardDocumentV1
+		readonly content: Record<string, unknown>
+		readonly lifecycle: Record<string, unknown>
+		readonly renderDef: unknown
+	}
 }
 
 export interface CertrevSide {
@@ -117,6 +139,10 @@ export interface CertrevSide {
 	readonly cards: ReadonlyMap<string, CardDocumentV1>
 	readonly keySet: unknown
 	readonly runtime: ReturnType<typeof standInRuntime>
+	/** The card route's answers by entry: the envelope and the card, or a tombstone once revoked. */
+	readonly cardRoute: Map<string, unknown>
+	/** Revoke a placement: the card route answers its signed tombstone from now on (the delivery's cache is untouched). */
+	revoke(entryId: string): Promise<void>
 }
 
 function asTestKey(issuer: FixtureIssuer): TestKey {
@@ -131,15 +157,45 @@ export function certrevSide(placements: readonly Placement[]): CertrevSide {
 	const runtime = standInRuntime()
 	const bodies = new Map<string, unknown>()
 	const cards = new Map<string, CardDocumentV1>()
+	const cardRoute = new Map<string, unknown>()
 	for (const p of placements) {
-		const { fixture, card } = documentFor(p.fixture, p.entryId, runtime)
+		let fixture: ContractFixture
+		if (p.painted) {
+			const card = {
+				...p.painted.card,
+				assets: { ...p.painted.card.assets, runtime: { src: runtime.src, integrity: runtime.integrity } },
+			} as CardDocumentV1
+			fixture = {
+				...contractFixture('banner-elf-like'),
+				certId: card.certId,
+				content: p.painted.content as never,
+				lifecycle: p.painted.lifecycle as never,
+				renderDef: p.painted.renderDef as never,
+				card,
+				doc: createHash('sha256').update(canonicalizeJson(card)).digest('hex'),
+			}
+		} else {
+			fixture = documentFor(p.fixture, p.entryId, runtime).fixture
+		}
 		const payload = contractPayload(fixture, contractBinding(fixture), { subject: builderSubject(p.entryId) })
 		const envelope = (p.rotated ? rotated : baked).signPayload(payload)
-		bodies.set(p.entryId, { ...envelope, renderDef: fixture.renderDef, card })
-		cards.set(p.entryId, card)
+		bodies.set(p.entryId, { ...envelope, renderDef: fixture.renderDef, card: fixture.card })
+		cards.set(p.entryId, fixture.card)
+		cardRoute.set(p.entryId, { envelope, card: fixture.card })
 	}
 	const keySet = keySetBody(keySetObject([asTestKey(baked), asTestKey(rotated)]), asTestKey(baked))
-	return { baked, rotated, bodies, cards, keySet, runtime }
+	return {
+		baked,
+		rotated,
+		bodies,
+		cards,
+		keySet,
+		runtime,
+		cardRoute,
+		async revoke(entryId) {
+			cardRoute.set(entryId, await baked.tombstone(builderSubject(entryId)))
+		},
+	}
 }
 
 const json = (body: unknown, status = 200) =>
@@ -154,6 +210,11 @@ export function certrevFetch(side: CertrevSide): typeof fetch {
 		const url = new URL(String(input))
 		if (url.origin !== DELIVERY_ORIGIN) return json({ error: 'not_found' }, 404)
 		if (url.pathname === '/api/cert/v1/keys') return json(side.keySet)
+		const card = /^\/api\/cert\/v1\/card\/builder\/([^/]+)$/.exec(url.pathname)
+		if (card) {
+			const answer = side.cardRoute.get(decodeURIComponent(card[1]))
+			return answer ? json(answer) : json({ error: 'not_found' }, 404)
+		}
 		const delivery = /^\/api\/cert\/v1\/delivery\/builder\/([^/]+)$/.exec(url.pathname)
 		if (delivery) {
 			const body = side.bodies.get(decodeURIComponent(delivery[1]))
@@ -209,6 +270,29 @@ export async function routeCertrev(page: Page, side: CertrevSide, requests: stri
 			headers: { 'access-control-allow-origin': '*' },
 		})
 	})
+}
+
+/**
+ * The Appearance preview's contract-1 page and the Builder card for the same design and content, both painted by the
+ * portal's own code (`src/builder/__tests__/__fixtures__/contract-v1/preview-parity.json`, see its `source`).
+ */
+export interface PreviewParityCase {
+	readonly externalId: string
+	readonly previewHead: string
+	readonly previewHosts: Record<string, string>
+	readonly previewCertId: string
+	readonly builderCard: CardDocumentV1
+	readonly content: Record<string, unknown>
+	readonly lifecycle: Record<string, unknown>
+	readonly renderDef: unknown
+}
+
+let parity: { readonly cases: Record<string, PreviewParityCase> } | null = null
+export function previewParity(): { readonly cases: Record<string, PreviewParityCase> } {
+	parity ??= JSON.parse(
+		readFileSync(join(PACKAGE, 'src/builder/__tests__/__fixtures__/contract-v1/preview-parity.json'), 'utf8'),
+	) as { readonly cases: Record<string, PreviewParityCase> }
+	return parity
 }
 
 export interface ReplicaServer {
@@ -274,6 +358,23 @@ export async function startReplica(
 			if (url.pathname === '/favicon.ico') {
 				res.writeHead(404)
 				res.end()
+				return
+			}
+			const preview = /^\/preview\/([^/]+)\/([^/]+)$/.exec(url.pathname)
+			if (preview) {
+				// One part of the Appearance preview's own page (`previewParity`), printed alone the way `barePage` prints ours.
+				const found = previewParity().cases[decodeURIComponent(preview[1])]
+				if (!found) throw new Error(`no preview case ${preview[1]}`)
+				const box = {
+					x: Number(url.searchParams.get('x') ?? 0),
+					y: Number(url.searchParams.get('y') ?? 0),
+					width: Number(url.searchParams.get('w') ?? 640),
+				}
+				const host = found.previewHosts[decodeURIComponent(preview[2])] ?? ''
+				res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...headers })
+				res.end(
+					barePage({ assets: { head: found.previewHead }, parts: { only: host }, dialogs: {} } as never, 'only', box),
+				)
 				return
 			}
 			const bare = /^\/bare\/([^/]+)\/([^/]+)$/.exec(url.pathname)
