@@ -1,8 +1,9 @@
 /**
  * The banner's credential line is the demo's three leaves in ONE `<em>` (the credential, " · ", the attribution), as
  * the portal's `certrev-reader-banner` snippet prints it (M3): the line reads as one string and is never split, and
- * the spans carry no style of their own. The sidebar's is unchanged, one `<em>` holding the attribution alone, because
- * its bold name line already carries the credential.
+ * the spans carry no style of their own. The date, when there is one, is wrapped in `<span class="certrev-r-nw">` (the
+ * stylesheet never lets it break; portal hotfix of 2026-10-12, in 1.3.1). The sidebar's is one `<em>` holding the
+ * attribution alone, its date plain text, because its bold name line already carries the credential.
  *
  * Each case is held to the Liquid harness's output for the cell (`fixtures/oracle-extra.json`) as well as to the line
  * spelled out here, so the port cannot drift from either.
@@ -50,7 +51,7 @@ describe('the banner credential line: three leaves in one <em>', () => {
 		// dated; the credential is the cards' labels joined (cardLabel first, then the bare abbreviation)
 		[
 			'v9-no-hidden-photos',
-			'<em><span>RDN, LD, PhD</span> · <span>Credential verified by CertREV on May 1, 2026</span></em>',
+			'<em><span>RDN, LD, PhD</span> · <span>Credential verified by CertREV on <span class="certrev-r-nw">May 1, 2026</span></span></em>',
 		],
 		// no date, or a date that does not parse: only the undated attribution prints, never a made-up date
 		['no-cred-date', '<em><span>RDN, LD, PhD</span> · <span>Credential verified by CertREV</span></em>'],
@@ -58,11 +59,11 @@ describe('the banner credential line: three leaves in one <em>', () => {
 		// a blank label falls to the next credential; a null cardLabel to the abbreviation
 		[
 			'blank-credential-label',
-			'<em><span>PhD</span> · <span>Credential verified by CertREV on May 1, 2026</span></em>',
+			'<em><span>PhD</span> · <span>Credential verified by CertREV on <span class="certrev-r-nw">May 1, 2026</span></span></em>',
 		],
 		[
 			'cardlabel-null-falls-to-abbrev',
-			'<em><span>MD</span> · <span>Credential verified by CertREV on May 1, 2026</span></em>',
+			'<em><span>MD</span> · <span>Credential verified by CertREV on <span class="certrev-r-nw">May 1, 2026</span></span></em>',
 		],
 	] as const
 
@@ -78,10 +79,14 @@ describe('the banner credential line: three leaves in one <em>', () => {
 		expect(claims(port('x.banner.no-credential'))).toEqual([])
 	})
 
-	it('never prints the old one-string line, nor a span with a class or a style', () => {
+	it("never prints the old one-string line, nor a span with a style, nor one with a class but the date's no-break", () => {
 		const html = port('x.banner.v9-no-hidden-photos')
 		expect(html).not.toContain('<em>RDN, LD, PhD · Credential verified')
-		for (const line of claims(html)) expect(line).not.toMatch(/<span[^>]*\s(?:class|style)=/)
+		for (const line of claims(html)) {
+			expect(line).not.toMatch(/<span[^>]*\sstyle=/)
+			for (const span of line.match(/<span[^>]*>/g) ?? [])
+				expect(['<span>', '<span class="certrev-r-nw">']).toContain(span)
+		}
 	})
 })
 

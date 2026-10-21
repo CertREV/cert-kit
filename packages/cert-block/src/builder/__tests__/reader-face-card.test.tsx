@@ -123,8 +123,9 @@ describe('the reader face on the delivery card', () => {
 		expect(html.match(/<style data-certrev-reader-css>/g)).toHaveLength(1)
 		expect(html.match(/<style data-certrev-builder-flow="">/g)).toHaveLength(1)
 		expect(html).toContain(`<style data-certrev-reader-css>${CARD_READER_CSS}</style>`)
-		// The portal's own sheet is unchanged (the Shopify reader and the portal still inline all of it) ...
-		expect(sha256(READER_CSS)).toBe('7ce6f09e2f7cfb821de6b063d3585bcfc20b9a09e9db3df9b5505a9da803d10e')
+		// The portal's own sheet (the Shopify reader and the portal inline all of it; 1.3.1 = portal b49a6b933b, the same hash
+		// `fixtures/SOURCES.json` pins and `reader-sources.test.ts` re-checks) ...
+		expect(sha256(READER_CSS)).toBe('80e8b3716c4e36ea588d1ae788ba0d1357997841ef74df102ca15f1b8c2aa2fa')
 		// ... and the card's is that sheet with 40 remote `@font-face` rules cut out (44 faces -> the 4 local() fallbacks).
 		expect(READER_CSS.match(/@font-face/g)).toHaveLength(44)
 		expect(CARD_READER_CSS.match(/@font-face/g)).toHaveLength(4)
@@ -167,6 +168,35 @@ describe('the reader face on the delivery card', () => {
 		const banner = withoutStyle(await renderToHtml(card({ mode: 'banner' })))
 		expect(banner).toContain('certrev-r-bys')
 		expect(banner).not.toContain('certrev-r-side')
+	})
+
+	it('1.3.1: the sidebar card folds its bio and memo behind "Read the expert memo" on a phone, as on Shopify and WordPress', async () => {
+		const memo =
+			'I reviewed the retinol claims against current dermatology guidance and the cited trials; the concentrations, the usage cadence and the sun-protection advice are accurate and safely framed for a general reader, and the article tells anyone who is pregnant, or who has a skin condition, to ask their own clinician first.'
+		serve(RAW_DEFS['face-reader-sidebar'], { content: { ...content, memo } })
+		const html = await renderToHtml(card())
+		// the card's own pair, then the same pair inside a closed details with the toggle
+		const fold = /<details class="certrev-r-more"><summary>([^<]*)<\/summary>([\s\S]*?)<\/details>/.exec(html)
+		expect(fold?.[1]).toBe('Read the expert memo')
+		expect(fold?.[2]).toContain(`<blockquote>${memo}</blockquote>`)
+		expect(html.split(`<blockquote>${memo}</blockquote>`)).toHaveLength(3)
+		expect(html.indexOf('<blockquote>')).toBeLessThan(html.indexOf('<details'))
+		expect(html.slice(html.indexOf('</details>'))).toContain('data-ftc-disclosure data-ftc-line')
+		// the stylesheet the card inlines carries the 640px rules that hide the pair and show the fold
+		const css = /<style data-certrev-reader-css>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? ''
+		expect(css).toMatch(
+			/@media \(max-width: 640px\) \{\s*\.certrev-reader \.certrev-r-side-body > p,\s*\.certrev-reader \.certrev-r-side-body > blockquote \{\s*display: none !important;/,
+		)
+		expect(css).toMatch(/\.certrev-reader \.certrev-r-more \{\s*display: none !important;/)
+		// and it is the bytes renderReaderFace paints for the same facts
+		expect(withoutSeed(html)).toContain(
+			renderReaderFace({
+				content: { ...content, memo },
+				def: RAW_DEFS['face-reader-sidebar'],
+				layout: 'sidebar',
+				certId: 'cert_fixture_001',
+			}),
+		)
 	})
 
 	it('banner part: header is the card alone, memo is the memo card alone', async () => {

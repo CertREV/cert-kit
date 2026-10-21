@@ -374,6 +374,115 @@ add({
 	over: { expert: { displayName: '' } },
 })
 
+// ── cert-block 1.3.1: the portal's one face ─────────────────────────────────────────────────────────────────────
+// The rung (the design guide's tier). `credentialed` and `named` print no memo, bio or photo (named: no credential
+// either), the memo card is not printed, and the banner is the memo-less card; `minimal` is the band and the links
+// only; any other value is the memo rung. The pill is the same on every rung.
+const rungDef = (rung: unknown, layout: 'banner' | 'sidebar' | 'floating') =>
+	({ ...readerDef(NAVY, [], layout), rung }) as never
+const RUNG_VARIANTS: Record<string, { over?: Over; illustrative?: boolean }> = {
+	full: {},
+	'no-memo': { over: { memo: null } },
+	'no-links': { over: { expert: { profileUrl: null }, root: { verifyUrl: 'javascript:alert(1)' } } },
+	'no-profile': { over: { expert: { profileUrl: null } } },
+	'pro-bono': { over: { expert: { compensationCue: null } } },
+	'illustrative-no-cue': { over: { expert: { compensationCue: null } }, illustrative: true },
+	'illustrative-cue-wins': { illustrative: true },
+	'no-credential': { over: { expert: { credentials: [] } } },
+	'no-photo-no-bio': { over: { expert: { photoUrl: null, bio: null }, author: { photoUrl: null } } },
+	'author-same': { over: { author: { name: 'Dr. Avery Quinlan' } } },
+	'no-certified': { over: { root: { certifiedAt: '' } } },
+	hostile: { over: hostile },
+}
+for (const rung of ['credentialed', 'named', 'minimal'] as const) {
+	for (const layout of ['banner', 'sidebar'] as const) {
+		for (const [name, v] of Object.entries(RUNG_VARIANTS)) {
+			add({
+				id: `x.${layout}.rung-${rung}-${name}`,
+				layout,
+				def: rungDef(rung, layout),
+				...(v.over ? { over: v.over } : {}),
+				...(v.illustrative ? { illustrative: true } : {}),
+			})
+		}
+	}
+	add({ id: `x.floating.rung-${rung}`, layout: 'floating', def: rungDef(rung, 'floating') })
+}
+// A rung the face does not know is the memo rung; so is none, an empty string, a different case and a non-string.
+for (const [name, rung] of [
+	['memo', 'memo'],
+	['standard', 'standard'],
+	['empty', ''],
+	['upper', 'MINIMAL'],
+	['padded', ' minimal'],
+	['number', 7],
+	['null', null],
+	['array', ['minimal']],
+] as const) {
+	for (const layout of ['banner', 'sidebar'] as const) {
+		add({ id: `x.${layout}.rung-unknown-${name}`, layout, def: rungDef(rung, layout) })
+	}
+}
+for (const layout of ['banner', 'sidebar'] as const) {
+	add({ id: `x.${layout}.rung-absent`, layout, def: { ...readerDef(NAVY, [], layout), rung: undefined } as never })
+}
+
+// The sidebar's phone fold: the bio and the memo are printed twice, once as the card's own pair and once inside a closed
+// <details> ("Read the expert memo", or "About the expert" with a bio and no memo; no fold with neither).
+const side = (id: string, over: Over | undefined, tokens: Record<string, string> = NAVY, hidden: string[] = []) =>
+	add({ id: `x.sidebar.${id}`, layout: 'sidebar', def: readerDef(tokens as never, hidden as never, 'sidebar'), over })
+side('fold-memo-only', { display: { showBio: false } })
+side('fold-bio-only', { memo: null })
+side('fold-neither', { memo: null, expert: { bio: null } })
+side('fold-blank-memo-and-bio', { memo: '   ', expert: { bio: '  ' } })
+side('fold-bio-only-hidden-bio', { memo: null, display: { showBio: false } })
+side('fold-memo-no-bio', { expert: { bio: null } })
+side('fold-def-hides-bio', undefined, NAVY, ['bio'])
+side('fold-def-hides-memo', undefined, NAVY, ['memo'])
+side('fold-memo-markup', { memo: `Memo <b>"x"</b> & 'y' </details><p>`, expert: { bio: `Bio </details> & "q"` } })
+side('fold-memo-number', { memo: 42 as never })
+
+// A toned face: an ink, or a surface that is not white, adds `certrev-r-toned` to the root and --cr-sf / --cr-ink to its style.
+const TONED: Record<string, Record<string, unknown>> = {
+	surface: { surface: '#F4EFE6' },
+	ink: { inkColor: '#222222' },
+	both: { surface: '#F4EFE6', inkColor: '#222' },
+	'white-surface': { surface: '#ffffff' },
+	'white-short': { surface: '#FFF' },
+	'white-upper': { surface: '#FFFFFF' },
+	'white-with-ink': { surface: '#fff', inkColor: '#222' },
+	'short-hex': { surface: '#abc' },
+	'bad-surface': { surface: 'red', inkColor: '#abc' },
+	'bad-ink': { surface: '#F4EFE6', inkColor: 'url(x)' },
+	hostile: { surface: '#abc;--x:1', inkColor: '#abc"><script>' },
+	'number-ink': { inkColor: 123456 },
+	'surface-four-digits': { surface: '#abcd' },
+	'surface-newline': { surface: '#abc\n' },
+}
+for (const [id, tokens] of Object.entries(TONED)) {
+	for (const layout of ['banner', 'sidebar', 'floating'] as const) {
+		add({
+			id: `x.${layout}.tone-${id}`,
+			layout,
+			def: { ...rawDef({ tokens: { accentColor: '#0A1B3F', ...tokens } }), ...(layout === 'banner' ? {} : { layout }) },
+		})
+	}
+}
+
+// A face with no design: no def at all, or one that sets nothing (the design guide's memo-rung defaults paint, and a null
+// def stamps no def version). The layout is the def's own (`layout`), so a null def can only be the banner.
+add({ id: 'x.banner.no-def-null', layout: 'banner', def: null })
+for (const layout of ['banner', 'sidebar', 'floating'] as const) {
+	const lay = layout === 'banner' ? {} : { layout }
+	add({ id: `x.${layout}.def-version-only`, layout, def: { v: 3, ...lay } as never })
+	add({ id: `x.${layout}.def-layout-only`, layout, def: { ...lay } as never })
+	add({
+		id: `x.${layout}.def-empty-tokens`,
+		layout,
+		def: { ...rawDef({ tokens: {}, rung: undefined, hidden: undefined }), ...lay },
+	})
+}
+
 const SECTION = /<section class="certrev-reader[\s\S]*?<\/section>/g
 
 it('dumps the extra cell inputs and the Liquid output', async () => {
@@ -394,4 +503,5 @@ it('dumps the extra cell inputs and the Liquid output', async () => {
 		})
 	}
 	fs.writeFileSync(path.join(OUT, 'oracle-extra.json'), JSON.stringify({ cells: out }))
-})
+	// Every cell is a full Liquid embed paint (~30 ms): the default 5 s test timeout is far too short for the cell count.
+}, 300_000)

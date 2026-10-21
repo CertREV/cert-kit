@@ -308,9 +308,13 @@ function EnvelopeFace(props: {
 
 type PhotoPerson = 'expert' | 'author'
 
-/** The reader face paints the author's avatar small (`.certrev-r-face.sm`); every other avatar is the expert's. */
+/**
+ * Whose avatar a broken photo is. The banner's two bylines take the same face (1.3.1; the author's was the small
+ * `.certrev-r-face.sm` before), so the person is read from the byline: the author's carries the plain "Written by"
+ * role, the reviewer's "Reviewed by" (`.on`), and the sidebar's and the memo's reviewer has no role at all.
+ */
 function photoPerson(img: HTMLImageElement): PhotoPerson {
-	return img.parentElement?.classList.contains('sm') ? 'author' : 'expert'
+	return img.closest('.certrev-r-by')?.querySelector('.certrev-r-role:not(.on)') ? 'author' : 'expert'
 }
 
 interface EnvelopeCardProps {

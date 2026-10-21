@@ -1,7 +1,8 @@
 /**
  * The reader's token allow-list (M3): a colour is `#RGB` or `#RRGGBB`, a radius is a bare `0` or one non-negative
- * px / rem / em / % length, and anything else paints the default (navy, 14px). The portal's `certrev-reader-tokens`
- * snippet and the PHP twin's def parser hold the same list.
+ * px / rem / em / % length, and anything else paints the default (navy `#0a1b3f`, 12px: the design guide's memo-rung
+ * defaults, which a face with no design also paints; 1.3.0 painted `#0A1B3F` and 14px). The portal's
+ * `certrev-reader-tokens` snippet and the PHP twin's def parser hold the same list.
  *
  * `reader-differential.test.ts` already compares ~70 grammar cells with the Liquid harness's output; this file spells
  * the list out, so a reader of the port sees the rule rather than the cells, and pins the two inputs the harness
@@ -12,9 +13,9 @@
  * ends it and swallows the declarations after it.
  */
 import { describe, expect, it } from 'vitest'
-import { readerTokens } from '../tokens.js'
+import { isTonedStyle, readerTokens } from '../tokens.js'
 
-const NAVY = '#0A1B3F'
+const NAVY = '#0a1b3f'
 const style = (tokens: Record<string, unknown>, extra: Record<string, unknown> = {}): string =>
 	readerTokens({ tokens, ...extra }).style
 const accentOf = (value: unknown, extra: Record<string, unknown> = {}): string =>
@@ -102,7 +103,7 @@ describe('a radius is a bare 0 or a non-negative px / rem / em / % length', () =
 
 	it('reads a number as its text: 0 is the bare zero, 8 has no unit', () => {
 		expect(radiusOf(0)).toBe('0')
-		expect(radiusOf(8)).toBe('14px')
+		expect(radiusOf(8)).toBe('12px')
 	})
 
 	it.each([
@@ -138,13 +139,13 @@ describe('a radius is a bare 0 or a non-negative px / rem / em / % length', () =
 		'inherit',
 		'50% 10%',
 		'4px 8px',
-	])('paints 14px for %j', (radius) => {
-		expect(radiusOf(radius)).toBe('14px')
+	])('paints 12px for %j', (radius) => {
+		expect(radiusOf(radius)).toBe('12px')
 	})
 
-	it('reads only a string or a number: a boolean, an object, a null or an array paints 14px', () => {
+	it('reads only a string or a number: a boolean, an object, a null or an array paints 12px', () => {
 		for (const radius of [true, false, null, undefined, { a: 1 }, ['4px']]) {
-			expect(radiusOf(radius)).toBe('14px')
+			expect(radiusOf(radius)).toBe('12px')
 		}
 	})
 })
@@ -158,7 +159,50 @@ describe('the style attribute cannot be left', () => {
 			fontSlot: "serif';}",
 		})
 		expect(hostile).toBe(
-			`--cr-ba:${NAVY};--cr-ba-fg:#ffffff;--cr-br:14px;--cr-bf:'DM Sans', ui-sans-serif, system-ui, sans-serif`,
+			`--cr-ba:${NAVY};--cr-ba-fg:#ffffff;--cr-br:12px;--cr-bf:'DM Sans', ui-sans-serif, system-ui, sans-serif`,
 		)
+	})
+})
+
+describe('a face with no design paints the design guide memo-rung defaults', () => {
+	it.each([undefined, null, {}, { tokens: undefined }, { tokens: {} }, 'nope', 7])('%j', (def) => {
+		expect(readerTokens(def)).toEqual({
+			style: "--cr-ba:#0a1b3f;--cr-ba-fg:#ffffff;--cr-br:12px;--cr-bf:'DM Sans', ui-sans-serif, system-ui, sans-serif",
+			fg: '#ffffff',
+		})
+	})
+})
+
+describe('a toned face: an ink, or a surface that is not white', () => {
+	const toned = (tokens: Record<string, unknown>) => readerTokens({ tokens })
+	const BASE = `--cr-ba:${NAVY};--cr-ba-fg:#ffffff;--cr-br:12px;--cr-bf:'DM Sans', ui-sans-serif, system-ui, sans-serif`
+
+	it('writes --cr-sf and --cr-ink, in that order, for a toned def', () => {
+		expect(toned({ surface: '#f4efe6', inkColor: '#222' }).style).toBe(`${BASE};--cr-sf:#f4efe6;--cr-ink:#222`)
+		expect(toned({ surface: '#f4efe6' }).style).toBe(`${BASE};--cr-sf:#f4efe6`)
+		expect(toned({ inkColor: '#222222' }).style).toBe(`${BASE};--cr-ink:#222222`)
+	})
+
+	it('a white surface alone (#fff, #ffffff, either case) is not toned: neither variable is written', () => {
+		for (const surface of ['#fff', '#FFF', '#ffffff', '#FFFFFF', '#FfFfFf']) {
+			expect(toned({ surface }).style, surface).toBe(BASE)
+		}
+	})
+
+	it('a white surface beside an ink is toned, and the surface is written with the ink', () => {
+		expect(toned({ surface: '#ffffff', inkColor: '#222' }).style).toBe(`${BASE};--cr-sf:#ffffff;--cr-ink:#222`)
+	})
+
+	it('a surface or ink that is not a colour is no token: nothing toned is written', () => {
+		for (const bad of ['red', '#abcd', '#ggg', '', 'url(x)', '#abc;--x:1', 12, true, null, { a: 1 }, ['#abc']]) {
+			expect(toned({ surface: bad, inkColor: bad }).style, String(bad)).toBe(BASE)
+		}
+		expect(toned({ surface: 'red', inkColor: '#222' }).style).toBe(`${BASE};--cr-ink:#222`)
+	})
+
+	it('reads the toned flag from the style as the snippets do', () => {
+		expect(isTonedStyle(BASE)).toBe(false)
+		expect(isTonedStyle(`${BASE};--cr-sf:#f4efe6`)).toBe(true)
+		expect(isTonedStyle(`${BASE};--cr-ink:#222`)).toBe(true)
 	})
 })

@@ -461,7 +461,7 @@ describe('a reviewer photo the browser cannot load is repainted as their initial
 		const container = mountServerHtml(html)
 		const seed = container.querySelector(`[${SEED_ATTRIBUTE}]`)?.getAttribute(SEED_ATTRIBUTE)
 		// The server painted the reviewer's photo (twice: the byline and the memo) and the writer's initials.
-		expect(avatars(container)).toEqual(['sm:SW', ':img', 'lg:img'])
+		expect(avatars(container)).toEqual([':SW', ':img', 'lg:img'])
 		prepare(container)
 		const { recoverable, consoleErrors } = await hydrate(container)
 		expect(recoverable).toEqual([])
@@ -472,13 +472,13 @@ describe('a reviewer photo the browser cannot load is repainted as their initial
 
 	it("on the photo's error event (a CSP img-src refusal, a 404)", async () => {
 		const { container, seed } = await hydratedReaderCard()
-		expect(avatars(container)).toEqual(['sm:SW', ':img', 'lg:img'])
+		expect(avatars(container)).toEqual([':SW', ':img', 'lg:img'])
 		const photo = container.querySelector('.certrev-r-face:not(.sm) > img')
 		if (!photo) throw new Error('no reviewer photo on the hydrated card')
 		await act(async () => {
 			photo.dispatchEvent(new Event('error'))
 		})
-		expect(avatars(container)).toEqual(['sm:SW', ':JD', 'lg:JD'])
+		expect(avatars(container)).toEqual([':SW', ':JD', 'lg:JD'])
 		expect(container.querySelector('.certrev-r-face > img')).toBeNull()
 		// The seed is the server's, untouched; only the face painted from it changed.
 		expect(container.querySelector(`[${SEED_ATTRIBUTE}]`)?.getAttribute(SEED_ATTRIBUTE)).toBe(seed)
@@ -491,7 +491,7 @@ describe('a reviewer photo the browser cannot load is repainted as their initial
 				Object.defineProperty(img, 'naturalWidth', { configurable: true, get: () => 0 })
 			}
 		})
-		expect(avatars(container)).toEqual(['sm:SW', ':JD', 'lg:JD'])
+		expect(avatars(container)).toEqual([':SW', ':JD', 'lg:JD'])
 	})
 
 	it('a photo that loaded, or is still loading, stays', async () => {
@@ -501,7 +501,75 @@ describe('a reviewer photo the browser cannot load is repainted as their initial
 			Object.defineProperty(loaded, 'complete', { configurable: true, get: () => true })
 			Object.defineProperty(loaded, 'naturalWidth', { configurable: true, get: () => 640 })
 		})
-		expect(avatars(container)).toEqual(['sm:SW', ':img', 'lg:img'])
+		expect(avatars(container)).toEqual([':SW', ':img', 'lg:img'])
+	})
+})
+
+describe("a writer's photo the browser cannot load is the writer's initials, never the reviewer's (1.3.1)", () => {
+	// 1.3.1: the banner's writer takes the same plain 42px face as the reviewer (it was the `sm` face), so the person
+	// whose photo failed is read from the byline: "Written by" is the writer's, "Reviewed by" the reviewer's.
+	const WRITER_PHOTO = 'https://cdn.example.test/writer.jpg'
+	async function hydratedBothPhotos() {
+		const content = {
+			...builderPayload().content,
+			author: { name: 'Sam Writer', title: 'Senior Content Editor', photoUrl: WRITER_PHOTO },
+		}
+		const html = await serverHtml(() => json(deliveryBody(issuer.envelope({ content }), READER_DEF_WITH_PHOTOS)))
+		refusingBrowser()
+		const container = mountServerHtml(html)
+		expect(avatars(container)).toEqual([':img', ':img', 'lg:img'])
+		const { recoverable, consoleErrors } = await hydrate(container)
+		expect(recoverable).toEqual([])
+		expect(consoleErrors).toBe(0)
+		return container
+	}
+	const photoOf = (container: HTMLElement, role: string): Element => {
+		const byline = Array.from(container.querySelectorAll('.certrev-r-by')).find((by) =>
+			by.querySelector('.certrev-r-role')?.textContent?.startsWith(role),
+		)
+		const photo = byline?.querySelector('.certrev-r-face > img')
+		if (!photo) throw new Error(`no ${role} photo on the hydrated card`)
+		return photo
+	}
+
+	it("the writer's photo fails: the writer's initials, the reviewer's photo stays", async () => {
+		const container = await hydratedBothPhotos()
+		await act(async () => {
+			photoOf(container, 'Written by').dispatchEvent(new Event('error'))
+		})
+		expect(avatars(container)).toEqual([':SW', ':img', 'lg:img'])
+		// (the seed, untouched, still carries the URL; the painted face does not)
+		expect(container.querySelector(`img[src="${WRITER_PHOTO}"]`)).toBeNull()
+	})
+
+	it("the reviewer's photo fails: the reviewer's initials (card and memo), the writer's photo stays", async () => {
+		const container = await hydratedBothPhotos()
+		await act(async () => {
+			photoOf(container, 'Reviewed by').dispatchEvent(new Event('error'))
+		})
+		expect(avatars(container)).toEqual([':img', ':JD', 'lg:JD'])
+		expect(container.querySelector(`img[src="${WRITER_PHOTO}"]`)).not.toBeNull()
+	})
+
+	it('both photos fail before hydration: both repaint as initials', async () => {
+		const html = await serverHtml(() =>
+			json(
+				deliveryBody(
+					issuer.envelope({
+						content: { ...builderPayload().content, author: { name: 'Sam Writer', photoUrl: WRITER_PHOTO } },
+					}),
+					READER_DEF_WITH_PHOTOS,
+				),
+			),
+		)
+		refusingBrowser()
+		const container = mountServerHtml(html)
+		for (const img of Array.from(container.querySelectorAll('.certrev-r-face > img'))) {
+			Object.defineProperty(img, 'complete', { configurable: true, get: () => true })
+			Object.defineProperty(img, 'naturalWidth', { configurable: true, get: () => 0 })
+		}
+		await hydrate(container)
+		expect(avatars(container)).toEqual([':SW', ':JD', 'lg:JD'])
 	})
 })
 

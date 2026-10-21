@@ -2,7 +2,10 @@
  * 1.3.0, server renders: the delivery card paints the server-rendered face served beside the artifact ONLY when its
  * bytes hash to the signed `content.faceDigest` for the def served with it, on an unpinned block that shows the whole
  * card. Every other delivery renders what 1.2.1 rendered, byte for byte, seed included: the golden was rendered by the
- * unmodified 1.2.1 tree for the same deliveries (`delivered-face-shapes.ts`), not by this one.
+ * unmodified 1.2.1 tree for the same deliveries (`delivered-face-shapes.ts`), not by this one. One exception since 1.3.1:
+ * the `reader` def's entries (and `pinnedMatching`) hold 1.3.1's reader face, because 1.3.1 caught the reader face up to
+ * the portal's one face; the golden's `readerRegeneratedFrom` says how they were re-recorded, and everything outside the
+ * stylesheet and the reader sections of those entries (the wrapper, the seed) is still the 1.2.1 bytes.
  *
  * Real crypto throughout: the envelopes are signed with a fixed fixture key and the kernel runs; the face digests are
  * computed with Node's `createHash`, the card hashes with WebCrypto.
