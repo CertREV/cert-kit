@@ -5,6 +5,92 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 2.0.0 · 2026-10-21
+
+Major: **the contract-v1 Builder client. Install it once; from then on every visual, copy, layout, schema, fold and
+dialog change to the card ships from CertREV's server, with no package release and no install.** CertREV's server
+(contract v1, portal ADR 0001) paints the card as a signed CARD DOCUMENT; this release prints that document verbatim
+and computes nothing visual of its own.
+
+**What a brand does, once:** bump `@certrev/cert-block` to `^2.0.0` and add four sources to the storefront's
+Content-Security-Policy (README, "The contract-v1 card (2.0.0)"). Same import, same `certRevCertComponent`, same block
+name (`CertREV Cert`), same inputs, no new prop, no config.
+
+- **Which card a placement gets is decided by the SIGNED binding, per placement.** The Builder Delivery response may
+  carry the card document as an unsigned top-level sibling, `card`, beside `payload`, `signature`, `renderDef` and
+  `face`. The signed `payload.content.faceDigest` binds it with two keys 1.3.x ignores, `contract: 1` and `doc` (the
+  lowercase hex sha256 of the document's RFC 8785 bytes): `{ v: 1, defVersion, html, css, contract: 1, doc }`.
+  - **No `contract` key** (every brand until CertREV turns contract v1 on for it, from its side): the card paints
+    **exactly what 1.3.1 paints**, byte for byte (the delivered face, the reader face, the legacy face, the options
+    face, the records), whatever else the response carries.
+  - **`contract: 1`**: the block prints the document only when it is a well-formed contract-1 card document that hashes
+    (WebCrypto sha256 over cert-contract's `canonicalizeJson`) to the signed `doc` and names the signed design version,
+    the envelope's certificate and this Builder entry (`subject: { platform: 'builder', externalId }`). Otherwise it
+    prints **nothing** and reports why: `card_missing` (no card served), `card_verify_failed` (malformed, another
+    digest, design version, certificate or entry), `card_pin_mismatch` (CertREV's replica pinned another design
+    version). Never a broken card, and never a face of its own for such a placement.
+  - **Any other `contract` value, or a malformed contract-1 binding**: nothing, and `card_unsupported_contract`.
+- **What a block prints:** the document's head fragment (`<style data-certrev-card-head>`: the pill's fixed box and
+  the fonts), the block's part hosts in page order, CertREV's two dialog hosts (the profile and the certificate:
+  CertREV-styled, identical on every brand and CMS, blind to the brand's design) and, once CertREV serves it, the hosted
+  runtime's `<script src integrity crossorigin="anonymous" defer>`, inside the card's wrapper
+  (`data-certrev-face="card"`, `data-certrev-contract="1"`, `data-certrev-def-version`, the seed). Every byte inside the
+  wrapper but the runtime tag is the document's own. Each part is a `<certrev-card>` host with a declarative shadow root:
+  the browser's parser attaches it, so the card is complete with JavaScript off and no theme rule reaches inside it. The
+  saved design decides the layout (the block's `mode` is not read): a banner block prints the card and its memo (`part:
+  'header'` the card only, `part: 'memo'` the memo only); a sidebar or floating block prints its rail or pill, and a
+  `memo` block outside the banner prints nothing (a page that kept split blocks after the brand chose a sidebar shows one
+  card). Every block is self-sufficient: it prints its own head and dialogs.
+- **In the browser.** Hydration keeps the server's card as it stands (same node, no read). The seed (the 1.3.1 seed with
+  the card appended last) lets React's own re-renders (its recovery from a hydration error elsewhere on the page, a
+  record streamed in after the card rendered, a later mount of the same placement) print the card again with no read,
+  after the browser has re-checked the seed's card against the seed payload's binding; a seed card that fails is
+  never printed and is reported. A card React inserts (an in-app navigation, Builder's editor) gets its roots attached by
+  the card: `setHTMLUnsafe`, else `attachShadow` from each template with its mode and options. The runtime, when the
+  document names one, is injected once per page into `document.head` (React does not run a script it inserts), unless it
+  already runs (`Symbol.for('certrev.card-runtime')` on `document`).
+- **Builder's wrappers and the sidebar card.** Builder renders each block in a flex item of a flex column, which contains
+  the rail's float, so no copy could sit beside the sidebar card. `BUILDER_CARD_FLOW_CSS` (printed after the wrapper,
+  only with a rail, only above the card's 820px breakpoint, only with `:has()`) lets the float out of Builder's
+  wrappers, as 1.2.0-canary.6 did for the reader face.
+- **`clientRead` now defaults to `true` (behaviour change, no new prop).** A card the client mounts with no record on the
+  page reads the Delivery API once from the browser: it is the only way the server's card exists after an in-app
+  navigation, and it is the read the CSP's `connect-src https://portal.certrev.com` allows. A read the policy blocks did
+  not reach CertREV, so the block paints its options face exactly as 1.3.1 painted it (and reports
+  `delivery_unreachable`). `clientRead={false}` restores 1.2.0 to 1.3.1's behaviour (no browser read). A card the client
+  renders while the document is still loading first waits for a record the server may still stream (1.2.1), with or
+  without `clientRead`, and reads only if the page loads without one; through 1.3.1 an explicit `clientRead` read at
+  once and could miss that record. Every read sends no cookie (`credentials: 'omit'`).
+- **The trust root is a key SET, so a key rotation needs no reinstall.** A kid this package bakes (`cert-issuer-1`)
+  resolves as before. Any other kid makes one read of the delivery origin's published key set,
+  `GET <origin>/api/cert/v1/keys` (`credentials: 'omit'`; a browser at most once per page and origin, a server once per
+  origin per hour, a failure remembered for ten minutes), accepted only when a baked kid signs it (Ed25519 over the RFC
+  8785 bytes of `{ kind: 'certrev.keyset', v: 1, issuedAt, keys: [{ kid, crv: 'Ed25519', x }] }`), it is not older
+  than the set already accepted from that origin, and it still lists, as the same key, the kid that signed it. Anything
+  else leaves the kid unknown: `unknown_key`, nothing painted, as in 1.3.x. Today every envelope is signed by the baked
+  kid, so nothing is fetched.
+- **No silent fallback.** Each fallback is one structured report: in the browser
+  `CustomEvent('certrev:card-fallback', { detail: { reason, platform: 'builder', externalId, certId? } })` on
+  `document`, once per placement and reason per page; on a server one `console.warn` line, `[certrev] card_fallback
+  {json}`; and a contract-1 `'none'` record names its `reason`. Reported too, with nothing painted differently: the
+  options face painted because CertREV was not reached (`delivery_unreachable`) and an unknown kid (`unknown_key`). The
+  card sends nothing anywhere: no beacon, no storage, no cookie.
+- **New API, additive.** `./builder`: `acceptedCardBinding`, `parseCardDocument`, `cardDocumentDigest`, `cardPartsFor`,
+  `CardDocumentV1`, `CardBinding`, `CardPartName`, `CARD_FALLBACK_EVENT`, `CardFallbackDetail`, `CardFallbackReason`,
+  `BUILDER_CARD_FLOW_CSS`. Root: `keySetResolver`, `verifyKeySet`, `KEY_SET_PATH` and their types. `VerifiedDelivery` and
+  `CachedDelivery` gain an optional `card` (the sibling exactly as served, UNVERIFIED: check it as the card does).
+- **Unchanged:** the registration, its inputs and the props (a test compares them with 1.3.1's own build, and the
+  compiler checks the props), every 1.3.1 face and record for a placement without a contract binding (every 1.3.1
+  golden and byte test passes unmodified; the six tests of the no-browser-read default now pass `clientRead={false}`),
+  the design pin's own rules on that path, the web component, the storefront modal bundle, and
+  `@certrev/cert-contract` `^0.6.0` (the binding is two keys in the already-signed `faceDigest`).
+- **Tests.** `builder/__tests__/card-contract.test.ts` (the binding, the shape check, the digest held equal to the
+  portal's own on its five real documents, the parts, the printed bytes), `contract-card.test.tsx` (server: every
+  branch, the printed bytes, the reports), `contract-card-client.test.tsx` (jsdom: hydration, client mount, the seed's
+  re-check, root attachment, the runtime), `registration-1.x.test.ts` + `registration-props.test-d.ts` (the 1.x
+  registration and props), `verify/__tests__/key-set.test.ts` (every refusal, one read per origin, a rotation that
+  renders). `e2e/` (`pnpm test:replica`, Playwright Chromium): a Hydrogen-shaped Builder replica at 1280 and 393 px.
+
 ## 1.3.1 · 2026-10-21
 
 Patch: **a Builder card on the reader face now paints the same card as Shopify and WordPress.** The portal's reader

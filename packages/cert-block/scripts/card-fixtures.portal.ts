@@ -2,8 +2,10 @@
  * Generates cert-block 2.0's contract-1 card-document fixtures from the lead's server core (portal branch v1-core),
  * so cert-kit's tests run on the server's real bytes rather than a hand-built stand-in.
  *
- * Run from a portal checkout of v1-core (node_modules present):
- *   npx tsx <this file> <out-dir>
+ * It imports the PORTAL's modules (`@/lib/...`), so it runs inside a CertREV/portal checkout that has the card document
+ * (lead mission certrev-0a99cc1c5bef, branch v1-core), never here: copy it to the portal's `scripts/` and run
+ *   SKIP_ENV_VALIDATION=1 npx tsx scripts/card-fixtures.portal.ts <out-dir>
+ * then copy `<out-dir>/*.json` to `src/builder/__tests__/__fixtures__/contract-v1/`.
  * Writes one JSON per case: { source, case, certId, subject, content, lifecycle, renderDef, card, doc }.
  * `content` is the facts the card was painted from (no faceDigest); the cert-kit test signs a payload with this content
  * plus the Builder binding `{ v: 1, defVersion, html, css, contract: 1, doc }` under a fixture key.
