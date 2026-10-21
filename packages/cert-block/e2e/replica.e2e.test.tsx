@@ -272,6 +272,7 @@ async function dialogState(page: Page, part: 'dialog-expert' | 'dialog-certifica
 			const wrappers = Array.from(document.querySelectorAll('[data-certrev-face="card"]'))
 			const host = open ? hosts[dialogs.indexOf(open)] : null
 			return {
+				hosts: hosts.length,
 				exists: dialogs.some((d) => d !== null),
 				open: open !== null,
 				modal: open ? open.matches(':modal') : false,
@@ -282,8 +283,18 @@ async function dialogState(page: Page, part: 'dialog-expert' | 'dialog-certifica
 	)
 }
 
-/** Open a dialog from its control with the keyboard, walk Tab inside it, close it with Escape; then mouse and ×. */
-async function exerciseDialogs(page: Page, entryId: string, partSelector: string, cell: string) {
+/**
+ * Open a dialog from its control with the keyboard, walk Tab inside it, close it with Escape; then mouse and ×. The
+ * dialog that opens is the page's one dialog for the placement: in the control's own wrapper, or in `dialogWrapper` (the
+ * index of the wrapper that printed the dialogs, for a control in a block that prints its part only).
+ */
+async function exerciseDialogs(
+	page: Page,
+	entryId: string,
+	partSelector: string,
+	cell: string,
+	dialogWrapper?: number,
+) {
 	const results: Record<string, unknown> = {}
 	for (const [kind, attr, part] of [
 		['profile', '[data-certrev-modal-open="expert"]', 'dialog-expert'],
@@ -319,13 +330,15 @@ async function exerciseDialogs(page: Page, entryId: string, partSelector: string
 		const closedByButton = await dialogState(page, part, entryId)
 		results[kind] = { opened, focusOnOpen, tabbed, closed, focusAfter, reopened, closedByButton }
 		expect(opened, `${cell} ${kind}: opened`).toMatchObject({ exists: true, open: true, modal: true })
-		// The dialog that opens is the one in the control's own wrapper.
+		// The dialog that opens is the page's one dialog for this placement: in the control's own wrapper, unless the
+		// control's block prints its part only.
 		const controlWrapper = await control.evaluate((el) =>
 			Array.from(document.querySelectorAll('[data-certrev-face="card"]')).indexOf(
 				((el.getRootNode() as ShadowRoot).host as Element).parentElement as Element,
 			),
 		)
-		expect(opened.wrapper, `${cell} ${kind}: its own wrapper's dialog`).toBe(controlWrapper)
+		expect(opened.hosts, `${cell} ${kind}: one dialog host on the page`).toBe(1)
+		expect(opened.wrapper, `${cell} ${kind}: the page's dialog`).toBe(dialogWrapper ?? controlWrapper)
 		expect(focusOnOpen.inDialog, `${cell} ${kind}: focus moves into the dialog`).toBe(
 			part === 'dialog-expert' ? 'expert' : 'cert',
 		)
@@ -566,8 +579,10 @@ describe('an in-app navigation (no server render for the next article)', () => {
 })
 
 describe('a split banner (a header block and a memo block)', () => {
-	it('each block prints its own part with the head and both dialogs; the memo block’s controls open its own dialogs', async () => {
-		const w = await open(VIEWPORTS[0])
+	it.each(
+		VIEWPORTS,
+	)('at $name px the header block prints the head, its card, both dialogs and the runtime; the memo block its memo only; the memo’s controls open the page’s one dialog', async (viewport) => {
+		const w = await open(viewport)
 		try {
 			await w.page.goto(`${server.origin}${article('replica-split').path}`)
 			await settle(w.page)
@@ -576,13 +591,11 @@ describe('a split banner (a header block and a memo block)', () => {
 					Array.from(el.children).map((c) => c.getAttribute('data-certrev-part') ?? c.tagName.toLowerCase()),
 				),
 			)
-			expect(wrappers).toEqual([
-				['style', 'top', 'dialog-expert', 'dialog-certificate', 'script'],
-				['style', 'bottom', 'dialog-expert', 'dialog-certificate', 'script'],
-			])
-			const dialogs = await exerciseDialogs(w.page, 'replica-split', '[data-certrev-part="bottom"]', 'split-1280')
+			expect(wrappers).toEqual([['style', 'top', 'dialog-expert', 'dialog-certificate', 'script'], ['bottom']])
+			const cell = `split-${viewport.name}`
+			const dialogs = await exerciseDialogs(w.page, 'replica-split', '[data-certrev-part="bottom"]', cell, 0)
 			expect(w.violations).toEqual([])
-			evidence['split banner'] = { wrappers, dialogs }
+			evidence[`split banner@${viewport.name}`] = { wrappers, dialogs }
 		} finally {
 			await w.context.close()
 		}

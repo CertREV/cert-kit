@@ -1,8 +1,9 @@
 /**
  * The contract-1 card face (2.0.0): one Builder block printing CertREV's server-rendered card verbatim.
  *
- * The block's wrapper holds, as its `dangerouslySetInnerHTML`, exactly `cardHtml(card, names)`: the document's head
- * fragment, the block's part hosts in page order, both CertREV dialog hosts and the runtime's tag (`card-contract.ts`).
+ * The block's wrapper holds, as its `dangerouslySetInnerHTML`, exactly `cardHtml(card, names)`: the block's part hosts
+ * in page order and, in the block holding the document's first part, the head fragment, both CertREV dialog hosts and
+ * the runtime's tag (`card-contract.ts`).
  * Each host is a `<certrev-card>` with a declarative shadow root (`<template shadowrootmode="open">`), which the
  * browser's HTML parser attaches as it reads the server's page: the card is complete with JavaScript off, and no page
  * rule reaches inside it. React never reconciles the hosts (they are not React children), so the hosted runtime may
@@ -17,8 +18,8 @@
  *    whose roots the parser attached, is not touched.
  *  - LOAD THE RUNTIME a React-inserted `<script>` never runs: once per page, into `document.head`, with its SRI
  *    integrity and `crossorigin="anonymous"`, unless the runtime is already running (its global guard) or already
- *    injected. The server's HTML carries the same tag in the wrapper, which the parser runs; the runtime's init is
- *    idempotent, so a page with two blocks loads it twice at most and starts it once.
+ *    injected. Only the block that prints the runtime's tag loads it (`cardCarriesAssets`). The server's HTML carries
+ *    the same tag in that block's wrapper, which the parser runs; the runtime's init is idempotent, so it starts once.
  * Both run in a layout effect, before the browser paints the inserted card, so a client-mounted card never shows an
  * empty frame.
  *
@@ -33,7 +34,7 @@
  */
 
 import * as React from 'react'
-import { type CardDocumentV1, type CardPartName, cardHtml } from './card-contract.js'
+import { type CardDocumentV1, type CardPartName, cardCarriesAssets, cardHtml } from './card-contract.js'
 import { SEED_ATTRIBUTE } from './ssr-seed.js'
 
 /** The global the hosted runtime sets once it has started (`Symbol.for('certrev.card-runtime')` on `document`). */
@@ -127,12 +128,13 @@ export function ContractCardFace(props: {
 	const ref = React.useRef<HTMLDivElement>(null)
 	const html = cardHtml(props.card, props.names)
 	const { card } = props
+	const carriesAssets = cardCarriesAssets(card, props.names)
 	useBrowserLayoutEffect(() => {
 		const wrapper = ref.current
 		if (!wrapper) return
 		attachCardRoots(wrapper, html)
-		injectCardRuntime(card)
-	}, [html, card])
+		if (carriesAssets) injectCardRuntime(card)
+	}, [html, card, carriesAssets])
 	const wrapper = (
 		<div
 			ref={ref}

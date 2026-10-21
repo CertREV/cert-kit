@@ -10,8 +10,10 @@ import {
 	acceptedCardBinding,
 	type CardDocumentV1,
 	cardBinds,
+	cardCarriesAssets,
 	cardDigestFor,
 	cardDocumentDigest,
+	cardFirstPart,
 	cardHtml,
 	cardMatchesPlacement,
 	cardPartsFor,
@@ -208,7 +210,7 @@ describe('cardPartsFor: the saved design decides the layout; `part` splits a ban
 	})
 })
 
-describe('cardHtml: exactly the document’s bytes, head and both dialogs on every block', () => {
+describe('cardHtml: exactly the document’s bytes; the head and both dialogs once, with the first part', () => {
 	it.each(CONTRACT_CASES)('%s', (name) => {
 		const { card } = contractFixture(name)
 		const names = cardPartsFor(card, undefined)
@@ -222,9 +224,35 @@ describe('cardHtml: exactly the document’s bytes, head and both dialogs on eve
 		)
 	})
 
-	it('a split banner prints its part with the head and both dialogs on each block', () => {
-		expect(cardHtml(banner.card, ['bottom'])).toBe(
+	it('a split banner prints the head, both dialogs and the runtime once: in the header block; the memo block its part only', () => {
+		const card = {
+			...banner.card,
+			assets: {
+				...banner.card.assets,
+				runtime: {
+					src: 'https://portal.certrev.com/api/cert/v1/runtime/card-runtime.0123456789abcdef.js',
+					integrity: `sha384-${'A'.repeat(64)}`,
+				},
+			},
+		}
+		const tag = cardRuntimeTag(card)
+		expect(tag).not.toBe('')
+		expect(cardHtml(card, ['top'])).toBe(
+			card.assets.head + card.parts.top + card.dialogs.expert + card.dialogs.certificate + tag,
+		)
+		expect(cardHtml(card, ['bottom'])).toBe(card.parts.bottom)
+	})
+
+	it('the first part is top, else rail, else pill (bottom only when the document has none of them)', () => {
+		expect(cardFirstPart(banner.card)).toBe('top')
+		expect(cardFirstPart(contractFixture('sidebar-elf-like').card)).toBe('rail')
+		expect(cardFirstPart(contractFixture('floating-elf-like').card)).toBe('pill')
+		const memoOnly = { ...banner.card, parts: { bottom: banner.card.parts.bottom } }
+		expect(cardFirstPart(memoOnly)).toBe('bottom')
+		expect(cardHtml(memoOnly, ['bottom'])).toBe(
 			banner.card.assets.head + banner.card.parts.bottom + banner.card.dialogs.expert + banner.card.dialogs.certificate,
 		)
+		expect(cardFirstPart({ ...banner.card, parts: {} })).toBe(null)
+		expect(cardCarriesAssets({ ...banner.card, parts: {} }, [])).toBe(false)
 	})
 })

@@ -280,16 +280,35 @@ export function cardRuntimeTag(card: CardDocumentV1): string {
 	return `<script src="${escapeAttribute(runtime.src)}" integrity="${escapeAttribute(runtime.integrity)}" crossorigin="anonymous" defer></script>`
 }
 
+/** Which of the document's parts is its first, in this order: the block holding it prints the page's assets. */
+const CARD_FIRST_PART_ORDER: readonly CardPartName[] = ['top', 'rail', 'pill', 'bottom']
+
 /**
- * Exactly what a block prints inside its wrapper: the document's head fragment, the block's parts in page order, both
- * dialogs (expert, then certificate) and the runtime's tag. Every block is self-sufficient (its own head and dialogs),
- * so a page whose blocks are removed or reordered never loses the stylesheet or a dialog another block relies on.
- * Every byte but the runtime tag is the document's own.
+ * The document's first part: `top`, else `rail`, else `pill`, from the document's own parts (the lead's ruling on ADR
+ * 0001's head-once-per-page, relay 074dbd2c8ef3); `bottom` only for a document with none of those, so its head and
+ * dialogs always have a block to print them. Null for a document with no part.
+ */
+export function cardFirstPart(card: CardDocumentV1): CardPartName | null {
+	return CARD_FIRST_PART_ORDER.find((name) => typeof card.parts[name] === 'string') ?? null
+}
+
+/** Whether the block printing `names` prints the page's head fragment, dialogs and runtime: it holds the first part. */
+export function cardCarriesAssets(card: CardDocumentV1, names: readonly CardPartName[]): boolean {
+	const first = cardFirstPart(card)
+	return first !== null && names.includes(first)
+}
+
+/**
+ * Exactly what a block prints inside its wrapper: its parts in page order and, only in the block holding the document's
+ * first part (`cardCarriesAssets`), the head fragment before them and both dialogs (expert, then certificate) and the
+ * runtime's tag after. So a split banner (a header block and a memo block) prints the head, the dialogs and the runtime
+ * once, in the header block, with no coordination between the blocks and with JavaScript off; the runtime finds a
+ * control's dialog anywhere on the page by its placement. Every byte but the runtime tag is the document's own.
  */
 export function cardHtml(card: CardDocumentV1, names: readonly CardPartName[]): string {
-	let html = card.assets.head
-	for (const name of names) html += card.parts[name] ?? ''
-	html += card.dialogs.expert ?? ''
-	html += card.dialogs.certificate ?? ''
-	return html + cardRuntimeTag(card)
+	let parts = ''
+	for (const name of names) parts += card.parts[name] ?? ''
+	if (!cardCarriesAssets(card, names)) return parts
+	const dialogs = (card.dialogs.expert ?? '') + (card.dialogs.certificate ?? '')
+	return card.assets.head + parts + dialogs + cardRuntimeTag(card)
 }

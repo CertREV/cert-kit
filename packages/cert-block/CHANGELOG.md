@@ -30,25 +30,29 @@ name (`CertREV Cert`), same inputs, no new prop, no config.
     digest, design version, certificate or entry), `card_pin_mismatch` (CertREV's replica pinned another design
     version). Never a broken card, and never a face of its own for such a placement.
   - **Any other `contract` value, or a malformed contract-1 binding**: nothing, and `card_unsupported_contract`.
-- **What a block prints:** the document's head fragment (`<style data-certrev-card-head>`: the pill's fixed box and
-  the fonts), the block's part hosts in page order, CertREV's two dialog hosts (the profile and the certificate:
-  CertREV-styled, identical on every brand and CMS, blind to the brand's design) and, once CertREV serves it, the hosted
-  runtime's `<script src integrity crossorigin="anonymous" defer>`, inside the card's wrapper
+- **What a block prints:** the block's part hosts in page order and, in the block holding the document's first part
+  (`top`, else `rail`, else `pill`), the document's head fragment (`<style data-certrev-card-head>`: the pill's fixed box
+  and the fonts) before them, CertREV's two dialog hosts (the profile and the certificate: CertREV-styled, identical on
+  every brand and CMS, blind to the brand's design) and, once CertREV serves it, the hosted runtime's `<script src
+  integrity crossorigin="anonymous" defer>` after them, inside the card's wrapper
   (`data-certrev-face="card"`, `data-certrev-contract="1"`, `data-certrev-def-version`, the seed). Every byte inside the
   wrapper but the runtime tag is the document's own. Each part is a `<certrev-card>` host with a declarative shadow root:
   the browser's parser attaches it, so the card is complete with JavaScript off and no theme rule reaches inside it. The
   saved design decides the layout (the block's `mode` is not read): a banner block prints the card and its memo (`part:
   'header'` the card only, `part: 'memo'` the memo only); a sidebar or floating block prints its rail or pill, and a
   `memo` block outside the banner prints nothing (a page that kept split blocks after the brand chose a sidebar shows one
-  card). Every block is self-sufficient: it prints its own head and dialogs.
+  card). A page prints the head, the dialogs and the runtime once (ADR 0001's head once per page, as the lead ruled): a
+  split banner's header block carries them, its memo block prints the memo only, and the runtime opens a memo control's
+  dialog from the header block (it finds a dialog anywhere on the page by the placement). No block coordinates with
+  another, so this holds with JavaScript off.
 - **In the browser.** Hydration keeps the server's card as it stands (same node, no read). The seed (the 1.3.1 seed with
   the card appended last) lets React's own re-renders (its recovery from a hydration error elsewhere on the page, a
   record streamed in after the card rendered, a later mount of the same placement) print the card again with no read,
   after the browser has re-checked the seed's card against the seed payload's binding; a seed card that fails is
   never printed and is reported. A card React inserts (an in-app navigation, Builder's editor) gets its roots attached by
   the card: `setHTMLUnsafe`, else `attachShadow` from each template with its mode and options. The runtime, when the
-  document names one, is injected once per page into `document.head` (React does not run a script it inserts), unless it
-  already runs (`Symbol.for('certrev.card-runtime')` on `document`).
+  document names one, is injected once per page into `document.head` by the block that prints its tag (React does not
+  run a script it inserts), unless it already runs (`Symbol.for('certrev.card-runtime')` on `document`).
 - **Builder's wrappers and the sidebar card.** Builder renders each block in a flex item of a flex column, which contains
   the rail's float, so no copy could sit beside the sidebar card. `BUILDER_CARD_FLOW_CSS` (printed after the wrapper,
   only with a rail, only above the card's 820px breakpoint, only with `:has()`) lets the float out of Builder's

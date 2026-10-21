@@ -150,12 +150,52 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 		expect(delivery.calls).toHaveLength(1)
 	})
 
-	it('a split banner: the header block prints the card, the memo block the memo, each with the head and both dialogs', async () => {
+	it('a split banner: the header block prints the head, the card and both dialogs; the memo block the memo only', async () => {
 		const fixture = contractFixture('banner-elf-like')
 		const header = cardWrapper(await serve(contractBody(issuer, fixture), block({ part: 'header' })))
 		const memo = cardWrapper(await serve(contractBody(issuer, fixture), block({ part: 'memo' })))
 		expect(header?.inner).toBe(expectedCardHtml(fixture.card, ['top']))
-		expect(memo?.inner).toBe(expectedCardHtml(fixture.card, ['bottom']))
+		expect(memo?.inner).toBe(fixture.card.parts.bottom)
+	})
+
+	it('a two-block page (header under the hero, memo before the references) prints one head, one dialog set and one runtime (the lead’s ruling, relay 074dbd2c8ef3)', async () => {
+		const fixture = contractFixture('banner-elf-like')
+		const runtime = {
+			src: 'https://portal.certrev.com/api/cert/v1/runtime/card-runtime.0123456789abcdef.js',
+			integrity: 'sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC',
+		}
+		const card = { ...fixture.card, assets: { ...fixture.card.assets, runtime } }
+		const doc = sha256Hex(canonicalizeJson(card))
+		const page = (
+			<div>
+				<p>Hero</p>
+				{block({ part: 'header' })}
+				<p>The article.</p>
+				{block({ part: 'memo' })}
+				<ol id="references">
+					<li>Ref</li>
+				</ol>
+			</div>
+		)
+		const html = await serve(contractBody(issuer, { ...fixture, card, doc } as ContractFixture), page)
+		// Counted in the printed markup (the seeds hold the document escaped, never as tags).
+		const count = (re: RegExp) => html.match(re)?.length ?? 0
+		expect(count(/<style data-certrev-card-head>/g)).toBe(1)
+		expect(count(/<certrev-card[^>]*data-certrev-part="dialog-expert"/g)).toBe(1)
+		expect(count(/<certrev-card[^>]*data-certrev-part="dialog-certificate"/g)).toBe(1)
+		expect(count(/<dialog id="expert"/g)).toBe(1)
+		expect(count(/<dialog id="cert"/g)).toBe(1)
+		expect(count(/<script src="https:\/\/portal\.certrev\.com\/api\/cert\/v1\/runtime\//g)).toBe(1)
+		expect(count(/data-certrev-cert-chrome=""/g)).toBe(2)
+		// The page reads: head, card, dialogs, runtime (the header block); the article; the memo; the references.
+		const at = (needle: string) => html.indexOf(needle)
+		expect(at('<style data-certrev-card-head>')).toBeLessThan(at(card.parts.top))
+		expect(at(card.parts.top)).toBeLessThan(at('<p>The article.</p>'))
+		expect(at('<p>The article.</p>')).toBeLessThan(at(card.parts.bottom))
+		expect(at(card.parts.bottom)).toBeLessThan(at('<ol id="references">'))
+		expect(html.slice(at(card.parts.bottom) + card.parts.bottom.length, at('<ol id="references">'))).not.toContain(
+			'<certrev-card',
+		)
 	})
 
 	it('the block’s mode is not read: the saved design’s layout prints', async () => {
