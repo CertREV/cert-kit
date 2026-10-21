@@ -155,6 +155,17 @@ export const certRevAnchorComponent: CertRevBuilderRegistration = {
 // 1.2.0-canary.5: the design pin, for CertREV's own canary replica (`<Content context={{ certrevDesignPin }}>`).
 export { type DesignPin, designPinFromUrl, parseDesignPin } from '../verify/get-verified-delivery.js'
 
+// 2.0.0: the contract-1 card (CertREV's server-rendered card document), its fallback report and the Builder flow rule.
+export {
+	acceptedCardBinding,
+	type CardBinding,
+	type CardDocumentV1,
+	type CardPartName,
+	cardDocumentDigest,
+	cardPartsFor,
+	parseCardDocument,
+} from './card-contract.js'
+export { CARD_FALLBACK_EVENT, type CardFallbackDetail, type CardFallbackReason } from './card-report.js'
 // ── The Builder.io PUSH kit (CertReviewCard) + the single-sourced wire type ──
 export {
 	BUILDER_CERT_CHROME_KEYS,
@@ -176,6 +187,7 @@ export {
 	PLACEMENT_INPUTS,
 	WIRE_INPUTS,
 } from './cert-review-card.js'
+export { BUILDER_CARD_FLOW_CSS } from './contract-card.js'
 export {
 	CERT_FACE_FIELDS,
 	credentialLabel,

@@ -290,6 +290,74 @@ actually makes (`mode`, `part`). The component enforces the fused-credential rul
 construction (a credential is unrenderable without its dated verification) and themes to the
 brand's render-def (accent / surface / corners / font + v2 bar-ink / body-ink).
 
+### The contract-v1 card (2.0.0)
+
+**Install once.** From 2.0.0 the block prints the card CertREV's server renders (contract v1), so every later change to
+the card's design, copy, layout, schema, memo fold or dialogs ships from CertREV with no package release and no install
+on your side. The upgrade is two edits, made once:
+
+1. `@certrev/cert-block` `^2.0.0`. Keep the registration line as it is: same import, same `certRevCertComponent`,
+   same block name (`CertREV Cert`), same inputs, no new prop, no config.
+2. Four sources in the storefront's Content-Security-Policy, and nothing else from CertREV:
+
+   ```
+   script-src  https://portal.certrev.com     (the hosted card runtime: dialogs, revalidation)
+   connect-src https://portal.certrev.com     (the card's read after an in-app navigation; the runtime's revalidation)
+   font-src    https://assets.certrev.com     (the card's fonts)
+   img-src     https://assets.certrev.com     (reviewer photos)
+   ```
+
+   The card also uses inline `<style>` elements and `style` attributes, as every cert-block release has, so the policy's
+   `style-src` must keep allowing inline styles.
+
+**Turned on from CertREV's side, per brand.** Nothing changes on the page until CertREV signs a placement's envelope for
+contract v1: until then the block paints exactly what 1.3.1 paints, byte for byte. The switch is the signed
+`payload.content.faceDigest`, which then carries `contract: 1` and `doc`, the sha256 of the card document's RFC 8785
+bytes; the Delivery response carries the document as its unsigned `card` sibling.
+
+| The signed binding | What the block prints |
+|---|---|
+| no `contract` key | exactly what 1.3.1 prints for the same response |
+| `contract: 1`, and the served `card` hashes to `doc` and names the signed design version, the certificate and this Builder entry | the card, verbatim |
+| `contract: 1`, no card served | nothing; reported `card_missing` |
+| `contract: 1`, any mismatch or a malformed document | nothing; reported `card_verify_failed` |
+| any other `contract`, or a malformed binding | nothing; reported `card_unsupported_contract` |
+| CertREV's replica pins another design version | nothing; reported `card_pin_mismatch` |
+
+**What a block prints.** Inside the card's wrapper (`data-certrev-face="card"`): the document's head fragment
+(`<style data-certrev-card-head>`), the block's part hosts in page order, CertREV's profile and certificate dialog hosts
+and, once CertREV serves it, the runtime's `<script src integrity crossorigin="anonymous" defer>`. Each part is a
+`<certrev-card>` with a declarative shadow root, attached by the HTML parser: the card is complete with JavaScript off
+and no theme rule reaches inside it. The saved design decides the layout, not the block's `mode`; `part` splits a banner
+only (`'header'` the card, `'memo'` the memo), and a `'memo'` block on a sidebar or floating design prints nothing, so a
+page keeps one card when a brand changes its design. A sidebar card's float is let out of Builder's block wrappers
+(`BUILDER_CARD_FLOW_CSS`) so the article's copy flows beside it above 820px, as on every other CMS.
+
+**In the browser.** Hydration keeps the server's card as it stands, with no read. React's own later renders of the
+card print it again from the seed after re-checking it. A card the client mounts with no record on the page (an in-app
+navigation, Builder's editor) reads the Delivery API once (`clientRead`, on by default from 2.0.0; `clientRead={false}`
+restores 1.3.1's no-read behaviour), prints the card and attaches its roots (`setHTMLUnsafe`, else from each template),
+and loads the runtime once. A read your policy blocks paints the block's options face, as 1.3.1 did.
+
+**Every fallback is reported**, never silent: in the browser,
+
+```ts
+import { CARD_FALLBACK_EVENT, type CardFallbackDetail } from '@certrev/cert-block/builder'
+
+document.addEventListener(CARD_FALLBACK_EVENT, (e) => {
+	const { reason, externalId, certId } = (e as CustomEvent<CardFallbackDetail>).detail
+	// reason: card_missing | card_verify_failed | card_unsupported_contract | card_pin_mismatch | unknown_key | delivery_unreachable
+})
+```
+
+once per placement and reason per page; on a server, one `console.warn` line `[certrev] card_fallback {json}`. The card
+itself sends nothing anywhere (no beacon, no storage, no cookie: its reads use `credentials: 'omit'`).
+
+**Key rotation needs no reinstall.** The baked kid (`cert-issuer-1`) verifies as before. An envelope signed by any
+other kid makes one read of `https://portal.certrev.com/api/cert/v1/keys`, a key set the card accepts only when the baked
+kid signs it (and it is not older than one already accepted, and still lists its signer). Otherwise the kid is unknown
+and the card renders nothing, as in 1.3.x.
+
 ### The reader face (1.2.0, opt-in)
 
 certrev.com's "reader" design (a banner card plus the expert memo, a sidebar card, a floating pill) is a
@@ -882,6 +950,17 @@ alongside each modal module. The load-bearing ones:
 - **`builder/__tests__/delivered-face.test.tsx`** + **`builder/__tests__/delivered-face-client.test.tsx`** + **`builder/__tests__/delivered-face-use.test.tsx`** (1.3.0): the delivered face paints, server and browser (hydration, a client mount over the page's record, a streamed record, `clientRead`), only when its hashes match the signed digest for the def served, on an unpinned whole-card block; every other delivery, and a browser that cannot hash, renders what the unmodified 1.2.1 card rendered for the same input, byte for byte, seed included (`__golden__/delivered-face-1.2.1.json`, `__golden__/delivered-face-client-1.2.1.json`); a tampered digest suppresses.
 - **`builder/__tests__/streamed-record-card.test.tsx`** (1.2.1): a card the client renders while the page loads paints nothing, then the record the stream adds, to the document (#421) or to the server's `<html>` after React replaced it (#423, with and without `MutationObserver`), and what a client mount paints once the page loads with none; pinned, options, none and expired records; no read; hydration, `clientRead` and a loaded page unchanged.
 - **`reader/__tests__/reader-one-face.test.ts`** + **`reader-golden.test.ts`** + **`reader-differential.test.ts`** (1.3.1): the reader face is byte-equal to the portal's own Liquid harness on its 11 golden pages and 399 edge cells, among them every rung, the sidebar's phone fold, toned faces and a face with no design (`pnpm refresh:reader` re-copies them from a portal checkout).
+- **`builder/__tests__/card-contract.test.ts`**, **`contract-card.test.tsx`**, **`contract-card-client.test.tsx`** (2.0.0):
+  the contract-1 card on the portal's own card documents (`__fixtures__/contract-v1/`, painted by its
+  `buildCardDocument`; `scripts/card-fixtures.portal.ts` regenerates them): the binding, the shape check, the digest held
+  equal to the portal's own, the printed bytes (the document's own, verbatim), every fallback and its report, hydration,
+  a client mount's read, the seed's re-check, root attachment and the runtime; and every 1.3.1 path unchanged.
+  **`registration-1.x.test.ts`** + **`registration-props.test-d.ts`** hold the registration to 1.3.1's own build and the
+  props to 1.3.1's (compiler-checked). **`verify/__tests__/key-set.test.ts`**: the key set's refusal rules and reads.
+- **`e2e/`** (`pnpm test:replica`, Playwright 1.59.1 Chromium, not part of `pnpm test`): a Hydrogen-shaped Builder replica
+  (streamed SSR under a strict CSP with exactly the four sources above, document hydration, an in-app navigation) at
+  1280 and 393 px: every part's shadow tree and pixels equal the same part printed alone, the dialogs, the sidebar's memo
+  fold, JS off, and a CSP positive control for each source.
 - **`modal/*.test.ts`**, per module: the modal element (tombstone → `markSuppressed`), the dialog view, interactions, placement, badge revalidation, and the Delivery-API verify client. `modal/own-face-modal.test.ts` puts two faces on one page and proves each control opens its own face's modal; `modal/closed-container-face.test.ts` proves a face that loads inside a closed `<details>`, tab or accordion is left alone and renders when opened (there is no runtime disclosure guard).
 - **`__tests__/readme-version.test.ts`** + **`__tests__/readme-contract.test.ts`** pin the claims in this file that rot silently: the version stamp against `package.json`, the key id, the route-example heading, and every `exports` subpath appearing under Public API.
 
@@ -890,7 +969,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`1.3.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`2.0.0`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.
