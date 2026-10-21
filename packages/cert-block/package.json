@@ -71,7 +71,7 @@
 		"build": "tsc && pnpm build:modal-bundle",
 		"build:modal-bundle": "pnpm dlx esbuild@0.27.7 src/modal/certrev-cert.entry.ts --bundle --minify --target=es2020 --format=iife --legal-comments=none --tsconfig-raw='{\"compilerOptions\":{\"target\":\"ES2017\",\"module\":\"esnext\",\"strict\":true}}' --banner:js='/* biome-ignore-all format: generated cert-badge bundle, see @certrev/cert-block src/modal/ */ /* biome-ignore-all lint: generated cert-badge bundle, see @certrev/cert-block src/modal/ */' --outfile=dist/modal/certrev-cert.js",
 		"refresh:reader": "node scripts/refresh-reader.mjs",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsc --noEmit && tsc -p tsconfig.e2e.json",
 		"test": "vitest run",
 		"test:replica": "vitest run --config vitest.e2e.config.ts"
 	},
