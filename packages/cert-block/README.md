@@ -308,6 +308,8 @@ the `delivery` marker (an options-only block) never reads the envelope, so it st
   page show the same card (`src/reader/__tests__/fixtures/SOURCES.json` names the portal commit the copies came
   from; `pnpm refresh:reader` re-copies them and the golden and differential tests then say what the renderer must
   follow). 1.2.0 to 1.3.0 painted the portal's face of 2026-10-06; the differences are listed in the CHANGELOG.
+  It is the **fallback face** for sites that read the def themselves: 1.3.1 only brings it level with the portal,
+  and adds no feature of its own.
 - **The stylesheet** is the generated reader section of `certrev-cert.css`
   (`/* CERTREV-READER-GEN:BEGIN */ ... END`), copied byte for byte as `src/reader/reader.css` (`./reader.css`)
   and as `READER_CSS`. The card inlines it once, in a `<style data-certrev-reader-css>`, inside the face's
