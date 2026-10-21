@@ -104,13 +104,15 @@ export function contractBody(
 	return { ...envelope, renderDef: fixture.renderDef, ...(card === undefined ? {} : { card }) }
 }
 
-/** What one Builder block prints for a fixture: the head, the given parts in order, both dialogs. */
+/**
+ * What one Builder block prints for a fixture: the given parts in order and, when they hold the document's first part
+ * (top, else rail, else pill, else bottom: the lead's ruling, relay 074dbd2c8ef3), the head before them and both dialogs
+ * after; a block without it prints its parts only.
+ */
 export function expectedCardHtml(card: CardDocumentV1, names: readonly string[]): string {
 	const parts = card.parts as Record<string, string | undefined>
-	return (
-		card.assets.head +
-		names.map((name) => parts[name] ?? '').join('') +
-		(card.dialogs.expert ?? '') +
-		(card.dialogs.certificate ?? '')
-	)
+	const printed = names.map((name) => parts[name] ?? '').join('')
+	const first = ['top', 'rail', 'pill', 'bottom'].find((name) => typeof parts[name] === 'string')
+	if (first === undefined || !names.includes(first)) return printed
+	return card.assets.head + printed + (card.dialogs.expert ?? '') + (card.dialogs.certificate ?? '')
 }

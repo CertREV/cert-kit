@@ -326,9 +326,12 @@ bytes; the Delivery response carries the document as its unsigned `card` sibling
 | any other `contract`, or a malformed binding | nothing; reported `card_unsupported_contract` |
 | CertREV's replica pins another design version | nothing; reported `card_pin_mismatch` |
 
-**What a block prints.** Inside the card's wrapper (`data-certrev-face="card"`): the document's head fragment
-(`<style data-certrev-card-head>`), the block's part hosts in page order, CertREV's profile and certificate dialog hosts
-and, once CertREV serves it, the runtime's `<script src integrity crossorigin="anonymous" defer>`. Each part is a
+**What a block prints.** Inside the card's wrapper (`data-certrev-face="card"`): the block's part hosts in page order
+and, in the block that holds the document's first part (the card on a banner, else the rail, else the pill), the head
+fragment (`<style data-certrev-card-head>`) before them, CertREV's profile and certificate dialog hosts and, once CertREV
+serves it, the runtime's `<script src integrity crossorigin="anonymous" defer>` after them. So a page prints each of
+those once: a split banner's header block carries them and its memo block prints the memo only, whose controls open the
+page's one dialog (the runtime finds it by the placement). Keep the header block on a page that has a memo block. Each part is a
 `<certrev-card>` with a declarative shadow root, attached by the HTML parser: the card is complete with JavaScript off
 and no theme rule reaches inside it. The saved design decides the layout, not the block's `mode`; `part` splits a banner
 only (`'header'` the card, `'memo'` the memo), and a `'memo'` block on a sidebar or floating design prints nothing, so a
