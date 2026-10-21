@@ -309,6 +309,8 @@ on your side. The upgrade is two edits, made once:
 
    The card also uses inline `<style>` elements and `style` attributes, as every cert-block release has, so the policy's
    `style-src` must keep allowing inline styles.
+3. On a React 19 storefront only: pass `progressiveChunkSize: 1_000_000` to `renderToReadableStream` in the server entry
+   (Hydrogen: `app/entry.server.tsx`), once, so a reader with JavaScript off gets the card in the page (below).
 
 **Turned on from CertREV's side, per brand.** Nothing changes on the page until CertREV signs a placement's envelope for
 contract v1: until then the block paints exactly what 1.3.1 paints, byte for byte. The switch is the signed
