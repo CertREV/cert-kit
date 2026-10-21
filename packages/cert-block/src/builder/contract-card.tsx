@@ -92,9 +92,10 @@ export function injectCardRuntime(card: CardDocumentV1): void {
 		if (script.getAttribute('src') === runtime.src) return
 	}
 	const script = document.createElement('script')
-	script.src = runtime.src
-	script.integrity = runtime.integrity
-	script.crossOrigin = 'anonymous'
+	// Attributes, not IDL properties: the markup is then exactly the server's tag, wherever a property is not reflected.
+	script.setAttribute('src', runtime.src)
+	script.setAttribute('integrity', runtime.integrity)
+	script.setAttribute('crossorigin', 'anonymous')
 	script.defer = true
 	script.setAttribute(INJECTED_RUNTIME_ATTRIBUTE, '')
 	document.head.appendChild(script)

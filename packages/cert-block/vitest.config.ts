@@ -10,5 +10,7 @@ export default defineConfig({
 	test: {
 		environment: 'node',
 		include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+		// 2.0.0: type-level tests (`*.test-d.ts`, e.g. "no new prop") run through the compiler on every `vitest run`.
+		typecheck: { enabled: true, include: ['src/**/*.test-d.ts'], tsconfig: './tsconfig.typetests.json' },
 	},
 })

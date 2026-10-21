@@ -13,6 +13,14 @@ import { type CardDocumentV1, cardPartsFor } from '../card-contract.js'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
 import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
 import { parseFallback, parseSeed, SEED_ATTRIBUTE } from '../ssr-seed.js'
+import {
+	CONTRACT_CASES,
+	type ContractFixture,
+	contractBinding,
+	contractBody,
+	contractFixture,
+	expectedCardHtml,
+} from './contract-v1-shapes.js'
 import { sha256Hex } from './delivered-face-shapes.js'
 import {
 	ENTRY_ID,
@@ -24,14 +32,6 @@ import {
 	scriptedDelivery,
 	T0,
 } from './delivery-harness.js'
-import {
-	CONTRACT_CASES,
-	type ContractFixture,
-	contractBinding,
-	contractBody,
-	contractFixture,
-	expectedCardHtml,
-} from './contract-v1-shapes.js'
 import { OPTIONS_ONLY_SHAPES } from './options-only-shapes.js'
 
 const issuer = makeIssuer()
@@ -116,7 +116,9 @@ function expectNothing(html: string, reason: string | undefined) {
 }
 
 describe('a contract-1 placement prints the server’s document, byte for byte', () => {
-	it.each(CONTRACT_CASES)('%s: head, the parts in page order and both dialogs, verbatim; the seed carries the card', async (name) => {
+	it.each(
+		CONTRACT_CASES,
+	)('%s: head, the parts in page order and both dialogs, verbatim; the seed carries the card', async (name) => {
 		const fixture = contractFixture(name)
 		const html = await serve(contractBody(issuer, fixture))
 		const wrapper = cardWrapper(html)
@@ -228,7 +230,10 @@ describe('anything else on a contract-1 placement prints nothing and reports why
 	it('CertREV’s replica pins another design version: card_pin_mismatch; pinned to the signed version: the card', async () => {
 		const pinned = (design: string) =>
 			block({
-				builderContext: { content: { id: ENTRY_ID }, context: { certrevDesignPin: { design, designBrand: 'staging-builder-canary' } } },
+				builderContext: {
+					content: { id: ENTRY_ID },
+					context: { certrevDesignPin: { design, designBrand: 'staging-builder-canary' } },
+				},
 			})
 		expectNothing(await serve(contractBody(issuer, fixture), pinned('6')), 'card_pin_mismatch')
 		warn.mockClear()
