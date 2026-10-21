@@ -63,8 +63,9 @@ const optionsCard = (extra: Partial<CertReviewCardProps> = {}) => (
 	/>
 )
 /** The canary replica's card: pinned, and no options (its entry carries none). */
-const pinnedCard = (pin: { version: number; brand: string } = PIN) => (
+const pinnedCard = (pin: { version: number; brand: string } = PIN, extra: Partial<CertReviewCardProps> = {}) => (
 	<CertReviewCard
+		{...extra}
 		delivery={MARKER}
 		builderContext={{
 			content: { id: ENTRY_ID },
@@ -254,11 +255,12 @@ describe('a card the client renders while the page is still loading (1.2.1)', ()
 		expect(calls).toEqual([])
 	})
 
-	it('a pinned card takes no streamed record for another pin, and with none for its own the page loads to nothing', async () => {
+	// 2.0.0: `clientRead={false}` (1.2.0 to 1.3.1's default): with the 2.0 default the card reads once the page has loaded.
+	it('a pinned card takes no streamed record for another pin, and with none for its own the page loads to nothing (`clientRead={false}`)', async () => {
 		const html = await serverHtml(envelopeAnswer(READER_DEF), card())
 		refusingBrowser()
 		readyState = 'loading'
-		const container = await clientMount(pinnedCard())
+		const container = await clientMount(pinnedCard(PIN, { clientRead: false }))
 		streamLatePart(html)
 		await settle()
 		expect(container.innerHTML).toBe('')
@@ -266,18 +268,18 @@ describe('a card the client renders while the page is still loading (1.2.1)', ()
 		expect(container.innerHTML).toBe('')
 	})
 
-	it('the page loads with no record: the options face a client mount paints (the same bytes), or nothing for a block with no options; no read', async () => {
+	it('the page loads with no record: the options face a client mount paints (the same bytes), or nothing for a block with no options; no read (`clientRead={false}`)', async () => {
 		const calls = refusingBrowser()
 		readyState = 'loading'
-		const withOptions = await clientMount(optionsCard())
-		const withNone = await clientMount(card())
+		const withOptions = await clientMount(optionsCard({ clientRead: false }))
+		const withNone = await clientMount(card({ clientRead: false }))
 		expect(withOptions.innerHTML).toBe('')
 		expect(withNone.innerHTML).toBe('')
 		await pageLoaded()
 		expect(withOptions.textContent).toContain(OPTIONS_MEMO)
 		expect(withNone.innerHTML).toBe('')
 		// A client mount after the page loaded paints the same face at once.
-		const later = await clientMount(optionsCard())
+		const later = await clientMount(optionsCard({ clientRead: false }))
 		expect(withOptions.innerHTML).toBe(later.innerHTML)
 		expect(calls).toEqual([])
 	})
@@ -321,7 +323,13 @@ describe('a card the client renders while the page is still loading (1.2.1)', ()
 		expect(calls).toEqual([])
 	})
 
-	it('`clientRead` reads once, as before, and does not wait for the page', async () => {
+	// 2.0.0: `clientRead` (now the default) waits for a record the server may still stream, as a card without it does;
+	// a read made before the record arrived would lose it (the 1.2.1 incident). With no record by the time the page has
+	// loaded, it reads once.
+	it.each([
+		['the default', {}],
+		['`clientRead`', { clientRead: true }],
+	] as const)('%s: while the page loads it waits and reads nothing; once the page has loaded with no record, it reads once', async (_label, extra) => {
 		const browser = scriptedDelivery(envelopeAnswer(READER_DEF))
 		restore = setCardDeliveryRuntimeForTests({
 			resolveKid: issuer.resolveKid,
@@ -329,17 +337,20 @@ describe('a card the client renders while the page is still loading (1.2.1)', ()
 			now: () => T0,
 		})
 		readyState = 'loading'
-		const container = await clientMount(card({ clientRead: true }))
+		const container = await clientMount(card(extra))
+		expect(container.innerHTML).toBe('')
+		expect(browser.calls).toHaveLength(0)
+		await pageLoaded()
 		expect(chrome(container)?.getAttribute('data-certrev-def-version')).toBe(String(ELF_LIKE_DEF.v))
 		expect(browser.calls).toHaveLength(1)
 	})
 })
 
 describe('unchanged by 1.2.1', () => {
-	it('a client mount once the page has loaded paints the options face at once and starts no watch: a record added later is not taken', async () => {
+	it('a client mount once the page has loaded paints the options face at once and starts no watch: a record added later is not taken (`clientRead={false}`)', async () => {
 		const html = await serverHtml(envelopeAnswer(READER_DEF), card())
 		refusingBrowser()
-		const container = await clientMount(optionsCard())
+		const container = await clientMount(optionsCard({ clientRead: false }))
 		expect(container.textContent).toContain(OPTIONS_MEMO)
 		streamLatePart(html)
 		await settle()

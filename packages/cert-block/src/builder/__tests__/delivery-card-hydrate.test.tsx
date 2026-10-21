@@ -268,14 +268,17 @@ it('a card whose server HTML streams in after another card hydrated still finds 
 	expect(parseSeed(secondNode?.getAttribute(SEED_ATTRIBUTE) ?? '')?.externalId).toBe(SECOND)
 })
 
-it("a card mounted on the client with no record on the page makes no read: the block's options face, or nothing", async () => {
+// 2.0.0: `clientRead={false}`, 1.2.0 to 1.3.1's default; the 2.0 default reads (`contract-card-client.test.tsx`).
+it("with `clientRead={false}`, a card mounted on the client with no record on the page makes no read: the block's options face, or nothing", async () => {
 	const browserCalls = refusingBrowser()
 	const withOptions = document.createElement('div')
 	const bare = document.createElement('div')
 	document.body.append(withOptions, bare)
 	await act(async () => {
-		createRoot(withOptions).render(optionsCard())
-		createRoot(bare).render(card())
+		createRoot(withOptions).render(optionsCard({ clientRead: false }))
+		createRoot(bare).render(
+			<CertReviewCard delivery={MARKER} clientRead={false} builderContext={{ content: { id: ENTRY_ID } }} />,
+		)
 	})
 	await settle()
 	expect(browserCalls).toEqual([])
@@ -365,7 +368,7 @@ it('a card whose server could not reach CertREV hydrates the options face it pai
 	expect(container.textContent).toContain(OPTIONS_MEMO)
 })
 
-it("the canary replica's pinned card (the host's proof) gets the same options face on a 503, through hydration and on a client mount, with no browser read", async () => {
+it("the canary replica's pinned card (the host's proof) gets the same options face on a 503, through hydration and (`clientRead={false}`) on a client mount, with no browser read", async () => {
 	const pin = { certrevDesignPin: { design: '1170', designBrand: 'staging-shopify-canary' } }
 	const pinned = () => optionsCard({ builderContext: { content: { id: ENTRY_ID }, context: pin } })
 	const html = await serverHtml(() => json({ error: 'unavailable' }, 503), ENTRY_ID, pinned())
@@ -385,7 +388,9 @@ it("the canary replica's pinned card (the host's proof) gets the same options fa
 	const later = document.createElement('div')
 	document.body.appendChild(later)
 	await act(async () => {
-		createRoot(later).render(optionsCard({ builderContext: { content: { id: 'another-entry' }, context: pin } }))
+		createRoot(later).render(
+			optionsCard({ clientRead: false, builderContext: { content: { id: 'another-entry' }, context: pin } }),
+		)
 	})
 	await settle()
 	expect(later.textContent).toContain(OPTIONS_MEMO)
