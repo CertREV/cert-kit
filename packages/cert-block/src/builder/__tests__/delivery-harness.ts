@@ -63,6 +63,8 @@ export interface FixtureIssuer {
 	readonly resolveKid: ResolvePublicKeyByKid
 	readonly privateKey: KeyObject
 	envelope(overrides?: Partial<CertPayload>): CertDeliveryEnvelope
+	/** 2.0.0: sign a payload exactly as given (the contract-1 shapes build their own). */
+	signPayload(payload: CertPayload): CertDeliveryEnvelope
 	tombstone(subject?: CertPayload['subject']): Promise<CertTombstone>
 }
 
@@ -75,7 +77,9 @@ export function makeIssuer(kid = 'fixture-issuer-1'): FixtureIssuer {
 		resolveKid,
 		privateKey,
 		envelope(overrides = {}) {
-			const payload = builderPayload(overrides)
+			return this.signPayload(builderPayload(overrides))
+		},
+		signPayload(payload) {
 			const sig = signPayloadEd25519(payload, privateKey)
 			return { payload, signature: { alg: 'ed25519', kid, sig, signedAt: payload.lifecycle.issuedAt } }
 		},

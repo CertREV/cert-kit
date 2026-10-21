@@ -42,6 +42,13 @@
  * beside it, and `settleDelivery` hands it out only on a `render` verdict. NOTHING HERE VOUCHES FOR IT: the signature
  * does not cover it. What binds it is the signed `payload.content.faceDigest` (cert-contract 0.6.0), and a caller
  * paints it only after hashing it against that digest, as the Builder card does (`src/builder/delivered-face.ts`).
+ *
+ * 2.0.0: the response may also carry the contract-1 CARD DOCUMENT as a third UNSIGNED sibling, `card` (CertREV's portal
+ * serves it only for a brand on contract 1). It is kept exactly as served when it is a JSON object (any other value,
+ * `null` included, is no card), cached beside the payload, and handed out only on a `render` verdict. Like `face`,
+ * NOTHING HERE VOUCHES FOR IT: the signed `payload.content.faceDigest` binds it (`contract: 1`, `doc`), and the Builder
+ * card prints it only after its shape check and digest check pass (`src/builder/card-contract.ts`). A read with no
+ * card is the 1.3.1 object exactly. The read is made with `credentials: 'omit'`: it never sends a cookie.
  */
 
 import type { CertChromeRenderDef } from '../builder/cert-chrome-data.js'
@@ -81,6 +88,8 @@ export type CachedDelivery =
 			readonly signature?: CertSignature
 			/** 1.3.0: the unsigned face sibling, when the response carried a well-formed one; else absent. */
 			readonly face?: DeliveredFace
+			/** 2.0.0: the unsigned card-document sibling as served, when it was a JSON object; else absent. */
+			readonly card?: Readonly<Record<string, unknown>>
 	  }
 	| {
 			readonly kind: 'suppressed'
@@ -103,6 +112,12 @@ export interface VerifiedDelivery {
 	 * well-formed one; else undefined (never on a suppress verdict). UNVERIFIED: see `DeliveredFace`.
 	 */
 	readonly face?: DeliveredFace
+	/**
+	 * 2.0.0: on a `render` verdict, the card document served beside the artifact (a JSON object, exactly as served);
+	 * else undefined. UNVERIFIED: print it only after `parseCardDocument` and the digest check of
+	 * `src/builder/card-contract.ts`, against the verified payload's `faceDigest`.
+	 */
+	readonly card?: Readonly<Record<string, unknown>>
 }
 
 export interface GetVerifiedDeliveryOptions {
@@ -273,7 +288,7 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 		res = await fetchWithDeadline(
 			fetchImpl,
 			deliveryUrl(opts.baseUrl, opts.platform, opts.externalId, opts.design),
-			{ headers: { accept: 'application/json' } },
+			{ headers: { accept: 'application/json' }, credentials: 'omit' },
 			opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS,
 		)
 	} catch {
@@ -304,12 +319,14 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	// A `render` verdict came from an envelope (a tombstone never renders), so `signature` is the one just verified.
 	const signature = isRecord(body.signature) ? (body.signature as unknown as CertSignature) : undefined
 	const face = parseDeliveredFace(body.face)
+	const card = isRecord(body.card) ? body.card : undefined
 	return {
 		kind: 'verified',
 		payload: verdict.payload,
 		renderDef: parseRenderDef(body.renderDef),
 		...(signature ? { signature } : {}),
 		...(face ? { face } : {}),
+		...(card ? { card } : {}),
 	}
 }
 
@@ -329,6 +346,7 @@ export function settleDelivery(cached: CachedDelivery, context: RenderContext): 
 		renderDef: cached.renderDef,
 		...(cached.signature ? { signature: cached.signature } : {}),
 		...(cached.face ? { face: cached.face } : {}),
+		...(cached.card ? { card: cached.card } : {}),
 	}
 }
 
