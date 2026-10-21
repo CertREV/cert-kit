@@ -312,6 +312,15 @@ async function clientBundle(side: CertrevSide, articles: readonly ReplicaArticle
 		target: 'es2022',
 		jsx: 'automatic',
 		minify: false,
+		// The same React the page server renders with (`vitest.e2e.config.ts`, CERT_BLOCK_E2E_REACT).
+		...(process.env.CERT_BLOCK_E2E_REACT
+			? {
+					alias: {
+						react: `${process.env.CERT_BLOCK_E2E_REACT}/react`,
+						'react-dom': `${process.env.CERT_BLOCK_E2E_REACT}/react-dom`,
+					},
+				}
+			: {}),
 		define: {
 			'process.env.NODE_ENV': '"production"',
 			__REPLICA__: JSON.stringify({ kid: side.baked.kid, spki: asTestKey(side.baked).spki, articles }),
@@ -391,6 +400,9 @@ export async function startReplica(
 				return
 			}
 			const stream = await renderToReadableStream(<App articles={articles} path={url.pathname} />, {
+				// `?chunk=big`: a host that raises React's progressiveChunkSize (React 19 streams a boundary larger than it,
+				// the card's included, after the shell, where only a script moves it into place).
+				...(url.searchParams.get('chunk') === 'big' ? { progressiveChunkSize: 1_000_000 } : {}),
 				nonce,
 				bootstrapModules: ['/client.js'],
 				bootstrapScriptContent: 'window.__replicaRecoverable=[]',

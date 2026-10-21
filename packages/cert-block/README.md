@@ -339,6 +339,12 @@ navigation, Builder's editor) reads the Delivery API once (`clientRead`, on by d
 restores 1.3.1's no-read behaviour), prints the card and attaches its roots (`setHTMLUnsafe`, else from each template),
 and loads the runtime once. A read your policy blocks paints the block's options face, as 1.3.1 did.
 
+**React 19 hosts and readers with JavaScript off.** React 19 streams a Suspense boundary larger than its
+`progressiveChunkSize` (12,800 bytes by default) after the page's shell, even when it is ready at once, and only a script
+moves it into place; the card (its parts, dialogs and seed) is larger than that, so a reader with JavaScript off on a
+React 19 page sees no card unless the host passes a larger `progressiveChunkSize` (for example `1_000_000`) to
+`renderToReadableStream`. React 18 inlines it. Readers with JavaScript and crawlers that run it see the card either way.
+
 **Every fallback is reported**, never silent: in the browser,
 
 ```ts
@@ -966,7 +972,7 @@ alongside each modal module. The load-bearing ones:
   CertREV's hosted runtime as built, `e2e/replica/card-runtime.*.js.txt`) at 1280 and 393 px: every part's shadow tree
   and pixels equal the same part printed alone and the Appearance preview's own part, the dialogs (focus trapped, Escape,
   focus returned), the sidebar's memo fold, a revoked placement removed and kept removed, JS off, and a CSP positive
-  control for each source.
+  control for each source. `CERT_BLOCK_E2E_REACT=<a node_modules with react and react-dom 19>` runs it on React 19.
 - **`modal/*.test.ts`**, per module: the modal element (tombstone → `markSuppressed`), the dialog view, interactions, placement, badge revalidation, and the Delivery-API verify client. `modal/own-face-modal.test.ts` puts two faces on one page and proves each control opens its own face's modal; `modal/closed-container-face.test.ts` proves a face that loads inside a closed `<details>`, tab or accordion is left alone and renders when opened (there is no runtime disclosure guard).
 - **`__tests__/readme-version.test.ts`** + **`__tests__/readme-contract.test.ts`** pin the claims in this file that rot silently: the version stamp against `package.json`, the key id, the route-example heading, and every `exports` subpath appearing under Public API.
 

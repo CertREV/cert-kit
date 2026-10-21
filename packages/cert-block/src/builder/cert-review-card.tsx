@@ -403,11 +403,14 @@ function deliveredFaceFor(
 	renderDef: CertChromeRenderDef | null,
 	face: DeliveredFace | undefined,
 	props: EnvelopeCardProps,
+	/** 2.0.0: the hashes the read computed (`VerifiedDelivery.faceHashes`): then nothing suspends here. */
+	hashed?: DeliveredFaceHashes | null,
 ): DeliveredFace | undefined {
 	if (!face || props.design || !showsWholeCard(props.part)) return undefined
 	const digest = deliveredFaceDigest(payload.content, renderDef, face)
 	if (!digest) return undefined
-	return deliveredFaceMatches(suspendOnFaceHashes(face), digest) ? face : undefined
+	const hashes = hashed !== undefined ? hashed : suspendOnFaceHashes(face)
+	return deliveredFaceMatches(hashes, digest) ? face : undefined
 }
 
 /**
@@ -548,6 +551,8 @@ function contractOutcome(
 	rawCard: unknown,
 	payload: CertPayload,
 	props: EnvelopeCardProps,
+	/** The digest the read computed (`VerifiedDelivery.cardDigest`): then nothing suspends here. */
+	digested?: string | null,
 ): ContractOutcome {
 	if (binding === 'unsupported') return { kind: 'none', reason: 'card_unsupported_contract' }
 	// CertREV's replica pin: the signed card was painted for one design version; another pin gets nothing.
@@ -557,8 +562,14 @@ function contractOutcome(
 	if (!card || !cardMatchesPlacement(card, binding, payload, props.externalId)) {
 		return { kind: 'none', reason: 'card_verify_failed' }
 	}
-	const memo = cardDigestFor(card)
-	const digest = memo.settled ? memo.settled.digest : suspendUntil(memo.pending)
+	let digest: string | null
+	if (digested !== undefined) {
+		digest = digested
+	} else {
+		// A page's seed: the one suspension of this render (a render that read waits on nothing but its read).
+		const memo = cardDigestFor(card)
+		digest = memo.settled ? memo.settled.digest : suspendUntil(memo.pending)
+	}
 	if (!cardDigestMatches(digest, binding)) return { kind: 'none', reason: 'card_verify_failed' }
 	// A block with nothing of this design to print (a memo block of a memo-less card, or of a sidebar design) prints
 	// nothing, by design: not a fallback.
@@ -854,7 +865,7 @@ function readAndPaint(
 	// 2.0.0: a placement whose signed binding names a contract prints CertREV's card, or nothing; never a face of its own.
 	const binding = acceptedCardBinding(seed.payload.content)
 	if (binding !== null) {
-		const outcome = contractOutcome(binding, settled.card, seed.payload, props)
+		const outcome = contractOutcome(binding, settled.card, seed.payload, props, settled.cardDigest)
 		if (outcome.kind === 'card') {
 			return (
 				<ContractCardFace
@@ -872,7 +883,7 @@ function readAndPaint(
 	}
 	// 1.3.0: the server-rendered face the Delivery API served beside the envelope, when its bytes hash to the digest the
 	// verified payload signs; the seed then carries it, so the browser can repaint (and re-check) the same face.
-	const delivered = deliveredFaceFor(seed.payload, seed.renderDef, settled.face, props)
+	const delivered = deliveredFaceFor(seed.payload, seed.renderDef, settled.face, props, settled.faceHashes)
 	if (delivered && seed.renderDef) {
 		return (
 			<DeliveredEnvelopeFace

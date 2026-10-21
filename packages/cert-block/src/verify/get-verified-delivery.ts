@@ -51,7 +51,9 @@
  * card is the 1.3.1 object exactly. The read is made with `credentials: 'omit'`: it never sends a cookie.
  */
 
+import { cardDocumentDigest } from '../builder/card-contract.js'
 import type { CertChromeRenderDef } from '../builder/cert-chrome-data.js'
+import { type DeliveredFaceHashes, hashDeliveredFace } from '../builder/delivered-face.js'
 import type {
 	CertDeliveryArtifact,
 	CertPayload,
@@ -90,6 +92,14 @@ export type CachedDelivery =
 			readonly face?: DeliveredFace
 			/** 2.0.0: the unsigned card-document sibling as served, when it was a JSON object; else absent. */
 			readonly card?: Readonly<Record<string, unknown>>
+			/**
+			 * 2.0.0: the digest of `card` (lowercase hex sha256 of its RFC 8785 bytes; null when it cannot be computed),
+			 * computed once by the read that cached it; present whenever `card` is. UNVERIFIED like the card: the caller
+			 * compares it with the signed binding.
+			 */
+			readonly cardDigest?: string | null
+			/** 2.0.0: the two hashes of `face`, computed once by the read; present whenever `face` is (null: no WebCrypto). */
+			readonly faceHashes?: DeliveredFaceHashes | null
 	  }
 	| {
 			readonly kind: 'suppressed'
@@ -118,6 +128,10 @@ export interface VerifiedDelivery {
 	 * `src/builder/card-contract.ts`, against the verified payload's `faceDigest`.
 	 */
 	readonly card?: Readonly<Record<string, unknown>>
+	/** 2.0.0: `card`'s digest as the read computed it, beside `card`; see `CachedDelivery`. */
+	readonly cardDigest?: string | null
+	/** 2.0.0: `face`'s hashes as the read computed them, beside `face`; see `CachedDelivery`. */
+	readonly faceHashes?: DeliveredFaceHashes | null
 }
 
 export interface GetVerifiedDeliveryOptions {
@@ -320,13 +334,18 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	const signature = isRecord(body.signature) ? (body.signature as unknown as CertSignature) : undefined
 	const face = parseDeliveredFace(body.face)
 	const card = isRecord(body.card) ? body.card : undefined
+	// 2.0.0: the digests a render compares with the signed binding, computed here, once per read, so a render that waited
+	// for this read never waits a second time. Under React 19, `use` matches promises by their order in a render: a
+	// second suspension (on a digest) after the first (on this read) was handed this read's result, and the card failed.
+	const cardDigest = card ? await cardDocumentDigest(card) : undefined
+	const faceHashes = face ? await hashDeliveredFace(face) : undefined
 	return {
 		kind: 'verified',
 		payload: verdict.payload,
 		renderDef: parseRenderDef(body.renderDef),
 		...(signature ? { signature } : {}),
-		...(face ? { face } : {}),
-		...(card ? { card } : {}),
+		...(face ? { face, faceHashes } : {}),
+		...(card ? { card, cardDigest } : {}),
 	}
 }
 
@@ -346,7 +365,9 @@ export function settleDelivery(cached: CachedDelivery, context: RenderContext): 
 		renderDef: cached.renderDef,
 		...(cached.signature ? { signature: cached.signature } : {}),
 		...(cached.face ? { face: cached.face } : {}),
+		...(cached.faceHashes !== undefined ? { faceHashes: cached.faceHashes } : {}),
 		...(cached.card ? { card: cached.card } : {}),
+		...(cached.cardDigest !== undefined ? { cardDigest: cached.cardDigest } : {}),
 	}
 }
 

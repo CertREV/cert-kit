@@ -233,12 +233,16 @@ describe("every other delivery renders 1.2.1's output, byte for byte, seed inclu
 		}
 	})
 
-	it('a split banner block never hashes the face (there is nothing to decide)', async () => {
+	// 2.0.0: the read hashes a served face once, beside the read (`get-verified-delivery.ts`), so no render suspends on
+	// the hashes after suspending on the read (React 19's `use` answers a second suspension with the first one's result).
+	// A split block still decides nothing from them: it paints 1.2.1's part, byte for byte.
+	it('a split banner block paints its own part whatever the face hashes to; the read hashes the face once', async () => {
 		const digest = vi.spyOn(globalThis.crypto.subtle, 'digest')
 		try {
 			expect(await renderToHtml(card({ part: 'header' }))).toBe(golden121('legacy.partHeader'))
 			expect(await renderToHtml(card({ part: 'memo' }))).toBe(golden121('legacy.partMemo'))
-			expect(digest).not.toHaveBeenCalled()
+			// html and css, once, for the one read both blocks share (the second render is served from the cache).
+			expect(digest).toHaveBeenCalledTimes(2)
 		} finally {
 			digest.mockRestore()
 		}

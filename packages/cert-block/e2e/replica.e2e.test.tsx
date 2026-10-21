@@ -16,6 +16,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core'
+import { version } from 'react'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { ReplicaArticle } from './replica/app.js'
 import {
@@ -86,6 +87,7 @@ beforeAll(async () => {
 	side = certrevSide(PLACEMENTS)
 	server = await startReplica(side, ARTICLES, STRICT)
 	evidence.browser = browser.version()
+	evidence.react = version
 	evidence.runtime = { src: side.runtime.src, integrity: side.runtime.integrity, from: 'S2 c623d29a2e' }
 }, 120_000)
 
@@ -599,8 +601,18 @@ describe('JavaScript off', () => {
 		await settle(warm.page)
 		await warm.context.close()
 		const w = await open(viewport, { js: false })
+		// React 19 streams a Suspense boundary larger than its progressiveChunkSize (12,800 bytes by default) after the
+		// shell, so with JavaScript off the card is complete only on a host that raises it (README, "React 19 hosts").
+		const react19 = Number(version.split('.')[0]) >= 19
 		try {
-			await w.page.goto(`${server.origin}${article('replica-sidebar').path}`)
+			if (react19) {
+				await w.page.goto(`${server.origin}${article('replica-sidebar').path}`)
+				const outlined = await w.page.evaluate(
+					() => document.querySelector('certrev-card[data-certrev-part="rail"]')?.closest('[hidden]') !== null,
+				)
+				evidence[`js-off@${viewport.name} default chunk size`] = { outlinedInHiddenSegment: outlined }
+			}
+			await w.page.goto(`${server.origin}${article('replica-sidebar').path}${react19 ? '?chunk=big' : ''}`)
 			await w.page.waitForLoadState('load')
 			const rail = w.page.locator('certrev-card[data-certrev-part="rail"] .certrev-r-side')
 			await expect(rail.isVisible()).resolves.toBe(true)

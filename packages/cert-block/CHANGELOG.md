@@ -77,6 +77,13 @@ name (`CertREV Cert`), same inputs, no new prop, no config.
   event for a browser read): CertREV not reached (`delivery_unreachable`, whether the block then paints its options face
   or has none to paint) and an unknown kid (`unknown_key`). The card sends nothing anywhere: no beacon, no storage, no
   cookie.
+- **React 19.** The card suspends a server render once, on its read: the read itself computes the card's digest (and,
+  for 1.3.0's delivered face, its hashes) before it is cached. Under React 19, `use` matches promises by their order in a
+  render, so a second suspension (on the digest, after the read) was handed the read's result: the card printed nothing
+  (`card_verify_failed`), and through 1.3.1 a delivered face silently fell back to the card's own face. The replica runs
+  on React 18 and on React 19 (`CERT_BLOCK_E2E_REACT`). React 19 also streams any Suspense boundary larger than its
+  `progressiveChunkSize` (12,800 bytes by default) after the shell; a host that wants the card complete for readers with
+  JavaScript off raises it (README, "React 19 hosts").
 - **Found and fixed before release (a break-it pass).** A page with more cards than the digest memo held (32 documents;
   64 delivered faces in 1.3.0's memo, which had the same flaw) never finished rendering, because a retry found its
   pending digest evicted: both memos now drop only settled entries. A split header and memo pair whose memo block had
