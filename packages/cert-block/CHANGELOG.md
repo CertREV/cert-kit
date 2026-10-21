@@ -14,8 +14,15 @@ never change the rendered cert output: **this one does, on purpose, for the read
 says `face: 'reader'`), by bringing it to the bytes the portal's Shopify snippets paint today. **No integration
 change is needed** (same exports, types, registration, inputs and seed), and **the delivered-face path of 1.3.0 is
 unchanged**: its gate, hashes, seed, wrapper and the 1.2.1 fallbacks work as before. The legacy face
-(`renderCertBlock`), the options-only block, a pinned card, the web component and the storefront modal bundle are
-untouched. A card that paints a delivered face (1.3.0) paints the server's markup and is not affected at all.
+(`renderCertBlock`), the options-only block, the web component and the storefront modal bundle are untouched; a
+pinned card keeps its pin rules and paints the caught-up face for its pinned reader def. A card that paints a
+delivered face (1.3.0) paints the server's markup and is not affected at all.
+
+**This is the fallback face**, for sites that still read the render def themselves and paint the reader face from it
+in their own page. It is a catch-up and nothing more: no new feature of the own face comes with it (the face's "View
+Profile" and "View Certificate" controls are the same links carrying `data-certrev-modal-open` as before, opened by the
+host's modal script as in 1.3.0). The next release is planned to be the contract-v1 client, which prints the server's
+signed card document instead of painting a face of its own.
 
 What a reader sees now, on a reader-face card:
 
