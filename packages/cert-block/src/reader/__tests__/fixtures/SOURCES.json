@@ -1,14 +1,14 @@
 {
 	"note": "Written by scripts/refresh-reader.mjs; reader-sources.test.ts re-hashes every file named here.",
 	"portal": {
-		"head": "2e35e014a5f29fdafe31f8d716c65c7fc2c295fd",
+		"head": "d62ae100b3fd0db41c07ef0043294e804ca072e8",
 		"cssAndGoldensCommitted": true
 	},
 	"css": {
 		"source": "shopify/extensions/certrev-schema/assets/certrev-cert.css (the lines from /* CERTREV-READER-GEN:BEGIN */ through /* CERTREV-READER-GEN:END */, markers included)",
 		"file": "src/reader/reader.css",
-		"bytes": 31558,
-		"sha256": "7ce6f09e2f7cfb821de6b063d3585bcfc20b9a09e9db3df9b5505a9da803d10e"
+		"bytes": 42901,
+		"sha256": "80e8b3716c4e36ea588d1ae788ba0d1357997841ef74df102ca15f1b8c2aa2fa"
 	},
 	"logos": {
 		"note": "The demo's own logo files (the theme extension's copies, equal to the site snapshot's), whose bytes src/reader/logo-assets.generated.ts carries as base64 data URIs.",
@@ -31,48 +31,48 @@
 		"dir": "src/reader/__tests__/fixtures/golden",
 		"files": {
 			"banner.burgundy-mono-pill-nophoto.html": {
-				"bytes": 34791,
-				"sha256": "374330c112941f9690cc60b74e2a7d25377b669b71c3dca17cbfc1eb85b81957"
+				"bytes": 49866,
+				"sha256": "ccaffca2f7464f51a86968fba558c7a31e8b86e917fcb3189bb2c7b468a7c595"
 			},
 			"banner.gold-serif-sharp-full.html": {
-				"bytes": 34610,
-				"sha256": "0ae94f11f775d7725963e625baceb235bbf0d0a086c766df438caa8532ea2235"
+				"bytes": 49685,
+				"sha256": "26d0f34515c36927ac427643684d05743f5014b0a227999287f52b3f64b5f5eb"
 			},
 			"banner.navy-full.html": {
-				"bytes": 34618,
-				"sha256": "b1756e6f60f87a4bb3e2c560554289e01596d65ab9f9f9b9eb6d478f35bb525d"
+				"bytes": 49693,
+				"sha256": "f722161346825da8a53e011787ce46c95296addef1dbbc77128a79f6a2895131"
 			},
 			"banner.navy-sparse.html": {
-				"bytes": 20593,
-				"sha256": "232eab491de25edcfa13519fedc1d813122caa2140238b38d3b846a0738b64a4"
+				"bytes": 35634,
+				"sha256": "eb2fc0fa8b5af96c9df03fff219eb0ba153fe779fe92d37357b82e7e8b4ed520"
 			},
 			"floating.burgundy-mono-pill.html": {
-				"bytes": 3965,
-				"sha256": "615d201f9198242d3358007e4ef1078ba9ace622392aeb618c6b117e6c34df83"
+				"bytes": 22379,
+				"sha256": "dd1efb3d6c0a03ff7c32bddf0e07e56b87efccf15fe0a98458efa29dd19ddd6a"
 			},
 			"floating.gold-serif-sharp.html": {
-				"bytes": 3967,
-				"sha256": "a37dd3e89871e26dde4ff50b3766add344e9e47941af8deb4260782168eaa924"
+				"bytes": 22381,
+				"sha256": "2420f88b4b9959454970541e309afac957daf2e34c456392d3a9c02085a7bea5"
 			},
 			"floating.navy.html": {
-				"bytes": 3971,
-				"sha256": "331e0c82b6e6bcdd95086df2037724d06cd8d3e7653a01f8324cfedd01d214f3"
+				"bytes": 22385,
+				"sha256": "25b6bc84362bd4767916cd1ac67d18d0be9013e327928b1ea9a48c29740fdef3"
 			},
 			"sidebar.burgundy-mono-pill-nophoto.html": {
-				"bytes": 17313,
-				"sha256": "35047f1895869fa75f2c3bb4a9721c56e1e7c058c141ee329b88d7cd0ad23139"
+				"bytes": 35910,
+				"sha256": "7073cffe4ee4557f260da87ca40e1496b60b0360baf7786fd84c34f1cdaa7a44"
 			},
 			"sidebar.gold-serif-sharp-full.html": {
-				"bytes": 17254,
-				"sha256": "4d020679117ea04e1ac6813c001f2c6ce581ea0296505f779884799226fbe64d"
+				"bytes": 35851,
+				"sha256": "bf59ee6334b9a1f74118ac75fd1b2dfdb2e999826f3cef1dac747a51bedb7091"
 			},
 			"sidebar.navy-full.html": {
-				"bytes": 17258,
-				"sha256": "2d4598d5213d44eef2d9adf6519c3b4283904c2a5bebb056b86cd64bfa38b8a9"
+				"bytes": 35855,
+				"sha256": "df28666e45f8de7a932e9f0e54110ddd1f2c1fc81fb234bd398d1fdb649c758a"
 			},
 			"sidebar.navy-sparse.html": {
-				"bytes": 16560,
-				"sha256": "a3f1f081422809dec3b79bbc7bea473543e4067820b53d472cf83a6002f27bd2"
+				"bytes": 34974,
+				"sha256": "1e7d57332dcfb5284d7c9fb0a1d02a987cf0d7c337dd131bc0f777eca56ccdb4"
 			}
 		}
 	},
@@ -85,8 +85,8 @@
 				"sha256": "146efd62bde30ad57d5fe2965efd8283213becff7a2bab75f4ea0030604dea94"
 			},
 			"oracle-extra.json": {
-				"bytes": 3628185,
-				"sha256": "6782c4f748ddfc23f7fbe9c4eb569fab406a4192a06372794f4e30aa2485b985"
+				"bytes": 6155932,
+				"sha256": "9f707897e7b9c34a5e838a514c0af425ee0e6d8e7b76c23d69aaaeb26d9b7362"
 			}
 		}
 	}

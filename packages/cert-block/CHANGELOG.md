@@ -5,6 +5,62 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 1.3.1 · 2026-10-21
+
+Patch: **a Builder card on the reader face now paints the same card as Shopify and WordPress.** The portal's reader
+face moved on after 1.2.0 (the face this package copied was the portal's of 2026-10-06); 1.3.1 copies its current
+state, so the card's design and behaviour are uniform across CMSs. The sentence at the top of this file says patches
+never change the rendered cert output: **this one does, on purpose, for the reader face only** (a render def that
+says `face: 'reader'`), by bringing it to the bytes the portal's Shopify snippets paint today. **No integration
+change is needed** (same exports, types, registration, inputs and seed), and **the delivered-face path of 1.3.0 is
+unchanged**: its gate, hashes, seed, wrapper and the 1.2.1 fallbacks work as before. The legacy face
+(`renderCertBlock`), the options-only block, a pinned card, the web component and the storefront modal bundle are
+untouched. A card that paints a delivered face (1.3.0) paints the server's markup and is not affected at all.
+
+What a reader sees now, on a reader-face card:
+
+- **The sidebar card folds on a phone.** At 640px and under, its bio and memo are hidden and shown again inside a
+  closed `<details class="certrev-r-more">` behind "Read the expert memo" ("About the expert" when there is a bio and
+  no memo; no fold with neither), exactly as the Shopify extension and the WordPress plugin (1.8.3) paint it; wider
+  than 640px the card is as before. The scope line, the compensation cue and both links stay outside the fold. A
+  469-character memo no longer shows in full on a 375px phone. (`sidebar()` in `reader/render.ts`.)
+- **The rung is honoured** (banner, memo card, sidebar): `credentialed` prints no memo, bio or photo (so no memo card;
+  the banner is the memo-less card with the scope line and the profile and certificate row), `named` also drops the
+  credential, `minimal` is the accent band and the links only, and any other value is the full card (the memo
+  rung), as before. The floating pill is the same on every rung. (`readFacts`, `bannerCard`, `bannerMemo`,
+  `sidebar`.)
+- **A toned face.** A def with an ink (`tokens.inkColor`) or a surface that is not white (`tokens.surface`) writes
+  `--cr-sf` and `--cr-ink` on the card and adds the class `certrev-r-toned` to every section root; the stylesheet
+  paints the surface and ink from them. (`readerTokens`, `isTonedStyle` in `reader/tokens.ts`; `sectionOpen`.)
+- **A def with no design paints the memo-rung defaults**: accent `#0a1b3f` and corner `12px` (it was `#0A1B3F` and
+  `14px`). A def that sets its own accent and corner is unchanged. (`reader/tokens.ts`.)
+- **The banner's writer takes the same 42px face as the reviewer**, photo or initials, at every width (it was the
+  36px `sm` face). A photo the browser cannot load is still repainted as its person's initials: the person is now
+  read from the byline ("Written by" or "Reviewed by"), not from the face's size class. (`bannerCard`;
+  `photoPerson` in `builder/cert-review-card.tsx`.)
+- **The banner's credential date never breaks**: it sits in `<span class="certrev-r-nw">`, and the credential line
+  breaks only between its parts. (`verifiedLine` in `reader/render.ts`.)
+- **The stylesheet is the portal's current one** (`reader/reader.css` and `READER_CSS`, 42.9 KB, from portal
+  `d62ae100b3`; was 31.6 KB): the banner card splits evenly between the writer and the reviewer on a shared
+  baseline (821px and up), the certified date and the cue sit on one full-width row, left-justified, under a hairline a
+  theme cannot hide, and the footer stacks at 560px and under; the expert memo card on a phone puts the avatar and
+  name on one row with a full-width quote and one links row, and a theme's `blockquote` rules cannot bleed into
+  it; the sidebar fold and its 44px toggle survive a theme's `details` rules; a toned face's border resets hold.
+  The sheet the card inlines (without the 40 remote font faces) grows from 14.8 KB to 26.2 KB before compression.
+- **Unchanged:** the profile and certificate links (`rel` stays `CERTREV_LINK_REL`, the one byte the face does not
+  share with the Liquid), the floating pill's markup, the compensation cue and scope line wording, the avatars' 46px
+  reviewer face on the memo card and the sidebar, the seed and the wrapper, and every non-reader face.
+- **Tests.** `scripts/refresh-reader.mjs --portal <portal> --oracle` re-copied the stylesheet, the 11 golden pages and
+  the Liquid harness's output; the golden, differential and link-rel tests pass byte for byte on all of it. The
+  harness now also paints 155 more edge cells (every rung, the sidebar fold's variants, toned faces, a face with no
+  design: 399 cells in all, was 244), and `reader/__tests__/reader-one-face.test.ts` spells those rules out.
+  Hand-written expectations that pinned the 2026-10-06 face were brought to the portal's current Liquid (the
+  writer's `sm` avatar, the credential date's span, the default accent and corner, the stylesheet's hash). The
+  reader entries of `__golden__/delivered-face-1.2.1.json` and `delivered-face-client-1.2.1.json` were re-recorded
+  from this version; everything in them outside the stylesheet and the reader sections (the wrapper and the seed) is
+  still 1.2.1's bytes, and the legacy entries are untouched. New: a failed writer photo repaints the writer, not the
+  reviewer (`delivery-card-hydrate.test.tsx`).
+
 ## 1.3.0 · 2026-10-18
 
 Minor: **a `delivery` card can paint the face CertREV rendered for the brand's design, when the signed envelope binds

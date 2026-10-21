@@ -1,8 +1,9 @@
 /**
  * The reader face against the portal's Liquid harness, on the edge cases the goldens do not reach.
  *
- * `fixtures/oracle-extra.json` holds 236 cells (hostile text, missing and blank facts, unsafe and lookalike URLs,
- * honorifics, every token guard, hidden fields, the illustrative label, a cue-less pro-bono expert …) with the sections
+ * `fixtures/oracle-extra.json` holds 399 cells (hostile text, missing and blank facts, unsafe and lookalike URLs,
+ * honorifics, every token guard, hidden fields, the illustrative label, a cue-less pro-bono expert, and since 1.3.1 the
+ * portal's one face: every rung, the sidebar's phone fold, toned faces, a face with no design …) with the sections
  * the portal's own Liquid harness (the engine that writes the portal goldens) produced for each. They are written by
  * `scripts/refresh-reader.mjs --oracle` from the portal checkout; nothing in them was typed by hand. A cell passing here
  * means the TypeScript port and the Liquid snippets agree on that input.
@@ -38,7 +39,7 @@ const shopifyEscape = (html: string): string => html.replaceAll('&#34;', '&quot;
 
 describe('the harness cells are present', () => {
 	it('keeps the breadth the differential was written with', () => {
-		expect(cells.length).toBeGreaterThanOrEqual(230)
+		expect(cells.length).toBeGreaterThanOrEqual(390)
 		for (const layout of ['banner', 'sidebar', 'floating'] as const) {
 			expect(cells.filter((cell) => cell.layout === layout).length).toBeGreaterThan(10)
 		}
