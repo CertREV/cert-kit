@@ -957,10 +957,16 @@ alongside each modal module. The load-bearing ones:
   a client mount's read, the seed's re-check, root attachment and the runtime; and every 1.3.1 path unchanged.
   **`registration-1.x.test.ts`** + **`registration-props.test-d.ts`** hold the registration to 1.3.1's own build and the
   props to 1.3.1's (compiler-checked). **`verify/__tests__/key-set.test.ts`**: the key set's refusal rules and reads.
+  **`preview-parity.test.tsx`**: against the portal's own Appearance preview page for a contract-1 brand, the block
+  prints the preview's head byte for byte and each host's shadow tree byte for byte but the certificate id.
+  **`contract-wire.test.tsx`**: a Builder Delivery 200 exactly as the portal's route answered it.
+  **`break-it-regressions*.test.tsx`**: the pre-release break-it findings, each failing on the code before its fix.
 - **`e2e/`** (`pnpm test:replica`, Playwright 1.59.1 Chromium, not part of `pnpm test`): a Hydrogen-shaped Builder replica
-  (streamed SSR under a strict CSP with exactly the four sources above, document hydration, an in-app navigation) at
-  1280 and 393 px: every part's shadow tree and pixels equal the same part printed alone, the dialogs, the sidebar's memo
-  fold, JS off, and a CSP positive control for each source.
+  (streamed SSR under a strict CSP with exactly the four sources above, document hydration, an in-app navigation, and
+  CertREV's hosted runtime as built, `e2e/replica/card-runtime.*.js.txt`) at 1280 and 393 px: every part's shadow tree
+  and pixels equal the same part printed alone and the Appearance preview's own part, the dialogs (focus trapped, Escape,
+  focus returned), the sidebar's memo fold, a revoked placement removed and kept removed, JS off, and a CSP positive
+  control for each source.
 - **`modal/*.test.ts`**, per module: the modal element (tombstone → `markSuppressed`), the dialog view, interactions, placement, badge revalidation, and the Delivery-API verify client. `modal/own-face-modal.test.ts` puts two faces on one page and proves each control opens its own face's modal; `modal/closed-container-face.test.ts` proves a face that loads inside a closed `<details>`, tab or accordion is left alone and renders when opened (there is no runtime disclosure guard).
 - **`__tests__/readme-version.test.ts`** + **`__tests__/readme-contract.test.ts`** pin the claims in this file that rot silently: the version stamp against `package.json`, the key id, the route-example heading, and every `exports` subpath appearing under Public API.
 
