@@ -102,6 +102,17 @@ describe('parseCardDocument', () => {
 		expect(parseCardDocument(make())).toBeNull()
 	})
 
+	it.each([
+		['another host', 'https://evil.example/x.js'],
+		['a look-alike host', 'https://certrev.com.evil.example/x.js'],
+		['a port', 'https://portal.certrev.com:8443/x.js'],
+		['credentials', 'https://user:pw@portal.certrev.com/x.js'],
+		['http', 'http://portal.certrev.com/x.js'],
+	])('B7: a runtime on %s is not a document (only CertREV serves the runtime)', (_label, src) => {
+		const doc = mutate((d) => (d.assets = { head: '', runtime: { src, integrity: 'sha384-AbC+/1=' } }))
+		expect(parseCardDocument(doc)).toBeNull()
+	})
+
 	it('a runtime the portal serves (https, SRI) is accepted, and its tag escapes both attributes', () => {
 		const doc = mutate((d) => {
 			d.assets = {

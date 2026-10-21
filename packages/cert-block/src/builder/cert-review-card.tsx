@@ -611,6 +611,8 @@ function settleWithoutEnvelope(
 		)
 	}
 	const none = <NoFace record={record} />
+	// A block with no options to paint when CertREV was not reached is reported too (break-it B5).
+	if (verdict.unreachable) return withReport(none, 'delivery_unreachable', props, server)
 	return verdict.reason === 'unknown_key' ? withReport(none, 'unknown_key', props, server) : none
 }
 
@@ -644,6 +646,8 @@ function paintRecord(
 			// server's element; the render right after hydration prints nothing in its place.
 			if (!judge && outcome.reason === 'card_verify_failed' && seed.card !== undefined)
 				return <ServerFaceUntilHydrated />
+			// Nothing of this design for this block (a memo block of a sidebar card): nothing, and no record of its own.
+			if (outcome.reason === undefined) return null
 			return contractNone(props, outcome.reason, false, seed.payload.certId)
 		}
 		// 1.3.0: a seed that names a delivered face repaints it only after the browser hashes it against the seed
@@ -860,6 +864,10 @@ function readAndPaint(
 				/>
 			)
 		}
+		// Nothing of this design for this block, by design: nothing at all, and NO record. A record here would sit under the
+		// same placement as the block that printed the card (a split header and memo pair) and, read last on hydration,
+		// would take that block's card down (break-it B2).
+		if (outcome.reason === undefined) return null
 		return contractNone(props, outcome.reason, !inBrowser, seed.payload.certId)
 	}
 	// 1.3.0: the server-rendered face the Delivery API served beside the envelope, when its bytes hash to the digest the

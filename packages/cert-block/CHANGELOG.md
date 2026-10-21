@@ -64,7 +64,7 @@ name (`CertREV Cert`), same inputs, no new prop, no config.
 - **The trust root is a key SET, so a key rotation needs no reinstall.** A kid this package bakes (`cert-issuer-1`)
   resolves as before. Any other kid makes one read of the delivery origin's published key set,
   `GET <origin>/api/cert/v1/keys` (`credentials: 'omit'`; a browser at most once per page and origin, a server once per
-  origin per hour, a failure remembered for ten minutes), accepted only when a baked kid signs it (Ed25519 over the RFC
+  origin per hour, a failure remembered for ten minutes; in a browser a failed read is not retried on that page), accepted only when a baked kid signs it (Ed25519 over the RFC
   8785 bytes of `{ kind: 'certrev.keyset', v: 1, issuedAt, keys: [{ kid, crv: 'Ed25519', x }] }`), it is not older
   than the set already accepted from that origin, and it still lists, as the same key, the kid that signed it. Anything
   else leaves the kid unknown: `unknown_key`, nothing painted, as in 1.3.x. Today every envelope is signed by the baked
@@ -72,9 +72,16 @@ name (`CertREV Cert`), same inputs, no new prop, no config.
 - **No silent fallback.** Each fallback is one structured report: in the browser
   `CustomEvent('certrev:card-fallback', { detail: { reason, platform: 'builder', externalId, certId? } })` on
   `document`, once per placement and reason per page; on a server one `console.warn` line, `[certrev] card_fallback
-  {json}`; and a contract-1 `'none'` record names its `reason`. Reported too, with nothing painted differently: the
-  options face painted because CertREV was not reached (`delivery_unreachable`) and an unknown kid (`unknown_key`). The
-  card sends nothing anywhere: no beacon, no storage, no cookie.
+  {json}`; and a contract-1 `'none'` record names its `reason`, so a browser hydrating it reports it too. Reported as
+  well, with nothing painted differently, where the read that met them ran (the server's log for a server render, the
+  event for a browser read): CertREV not reached (`delivery_unreachable`, whether the block then paints its options face
+  or has none to paint) and an unknown kid (`unknown_key`). The card sends nothing anywhere: no beacon, no storage, no
+  cookie.
+- **Found and fixed before release (a break-it pass).** A page with more cards than the digest memo held (32 documents;
+  64 delivered faces in 1.3.0's memo, which had the same flaw) never finished rendering, because a retry found its
+  pending digest evicted: both memos now drop only settled entries. A split header and memo pair whose memo block had
+  nothing to print wrote a record that took the header block's card down on hydration: such a block now prints nothing
+  and writes no record. `Object.hasOwn` was replaced (Safari before 15.4). A runtime `src` must be on `certrev.com`.
 - **New API, additive.** `./builder`: `acceptedCardBinding`, `parseCardDocument`, `cardDocumentDigest`, `cardPartsFor`,
   `CardDocumentV1`, `CardBinding`, `CardPartName`, `CARD_FALLBACK_EVENT`, `CardFallbackDetail`, `CardFallbackReason`,
   `BUILDER_CARD_FLOW_CSS`. Root: `keySetResolver`, `verifyKeySet`, `KEY_SET_PATH` and their types. `VerifiedDelivery` and

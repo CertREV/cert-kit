@@ -164,9 +164,12 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 		expect(cardWrapper(html)?.inner).toBe(expectedCardHtml(fixture.card, ['rail']))
 	})
 
-	it('a memo block on a sidebar design prints nothing, by design: no card twice, no fallback reported', async () => {
+	it('a memo block on a sidebar design prints nothing, by design: no card twice, no record, no fallback reported', async () => {
 		const fixture = contractFixture('sidebar-elf-like')
-		expectNothing(await serve(contractBody(issuer, fixture), block({ part: 'memo' })), undefined)
+		// No record either: one here would share the placement with the header block's seed and, read last on hydration,
+		// take that block's card down (break-it B2, `break-it-regressions-client.test.tsx`).
+		expect(await serve(contractBody(issuer, fixture), block({ part: 'memo' }))).toBe('<!--$--><!--/$-->')
+		expect(warn).not.toHaveBeenCalled()
 	})
 
 	it('the runtime, once the portal serves it, is in the block’s HTML after the dialogs', async () => {

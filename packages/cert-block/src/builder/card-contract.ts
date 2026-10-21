@@ -30,7 +30,7 @@
  */
 
 import { type CertContent, type CertPayload, canonicalizeJson } from '../contract/kernel.js'
-import { sha256HexUtf8 } from './delivered-face.js'
+import { evictOldestSettled, sha256HexUtf8 } from './delivered-face.js'
 
 /** The contract this client prints. */
 export const CARD_CONTRACT_VERSION = 1
@@ -89,7 +89,9 @@ const isString = (v: unknown): v is string => typeof v === 'string'
  */
 export function acceptedCardBinding(content: CertContent | null | undefined): CardBinding | 'unsupported' | null {
 	const digest: unknown = (content as { faceDigest?: unknown } | null | undefined)?.faceDigest
-	if (!isRecord(digest) || !Object.hasOwn(digest, 'contract')) return null
+	// Own keys via `Object.keys`, not `Object.hasOwn`: this runs for every verified placement, in browsers 1.3.1 painted in
+	// (Safari before 15.4 has no `Object.hasOwn`; break-it B3).
+	if (!isRecord(digest) || !Object.keys(digest).includes('contract')) return null
 	const { v, contract, defVersion, doc } = digest
 	if (v !== 1 || contract !== CARD_CONTRACT_VERSION) return 'unsupported'
 	if (typeof defVersion !== 'number' || !Number.isSafeInteger(defVersion) || defVersion < 0) return 'unsupported'
@@ -97,12 +99,23 @@ export function acceptedCardBinding(content: CertContent | null | undefined): Ca
 	return { contract: CARD_CONTRACT_VERSION, defVersion, doc }
 }
 
-/** An `https:` URL with no credentials, as the runtime's `src` must be; anything else is not a runtime. */
-function isHttpsUrl(value: unknown): boolean {
+/**
+ * The runtime's `src` must be CertREV's: an `https:` URL on `certrev.com` or one of its subdomains, with no credentials
+ * and no port (the rule the delivery marker's origin follows). Anything else is not a runtime, so no document, even one
+ * planted in a page's record, can make the card load a script from elsewhere (break-it B7).
+ */
+function isCertrevRuntimeUrl(value: unknown): boolean {
 	if (!isString(value)) return false
 	try {
 		const url = new URL(value)
-		return url.protocol === 'https:' && !url.username && !url.password
+		const host = url.hostname.toLowerCase()
+		return (
+			url.protocol === 'https:' &&
+			!url.username &&
+			!url.password &&
+			!url.port &&
+			(host === 'certrev.com' || host.endsWith('.certrev.com'))
+		)
 	} catch {
 		return false
 	}
@@ -130,7 +143,7 @@ export function parseCardDocument(value: unknown): CardDocumentV1 | null {
 		const runtime = assets.runtime
 		if (
 			!isRecord(runtime) ||
-			!isHttpsUrl(runtime.src) ||
+			!isCertrevRuntimeUrl(runtime.src) ||
 			!isString(runtime.integrity) ||
 			!SRI.test(runtime.integrity)
 		) {
@@ -192,10 +205,7 @@ export function cardDigestFor(card: unknown): CardDigestMemo {
 			},
 		),
 	}
-	if (cardDigestMemo.size >= CARD_DIGEST_MEMO_MAX) {
-		const oldest = cardDigestMemo.keys().next().value
-		if (oldest !== undefined) cardDigestMemo.delete(oldest)
-	}
+	evictOldestSettled(cardDigestMemo, CARD_DIGEST_MEMO_MAX)
 	cardDigestMemo.set(key, fresh)
 	return fresh
 }
