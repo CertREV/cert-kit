@@ -88,7 +88,7 @@ beforeAll(async () => {
 	server = await startReplica(side, ARTICLES, STRICT)
 	evidence.browser = browser.version()
 	evidence.react = version
-	evidence.runtime = { src: side.runtime.src, integrity: side.runtime.integrity, from: 'S2 c623d29a2e' }
+	evidence.runtime = { src: side.runtime.src, integrity: side.runtime.integrity, from: 'S2 c78f9efcc5' }
 }, 120_000)
 
 afterAll(async () => {
