@@ -1,5 +1,5 @@
 {
-	"name": "card-runtime.df2e41ad391b8b60.js",
-	"integrity": "sha384-owgMDLy5nh2SMbD7kuUkCv5T5FuGjG4UbSg42i82rdiw9tt4nii0Ae+J0KeShUcI",
-	"source": "CertREV/portal mission certrev-a90901614bc2 (S2) branch native/certrev-a90901614bc2 c78f9efcc5, src/lib/cert-render/runtime/runtime-releases.json, byte for byte"
+	"name": "card-runtime.e522e893fba5993c.js",
+	"integrity": "sha384-ybPCENMII3oHaprYliBiuuq4cgcye5WEPcDIdSdpem7B9r8xvnWkm6zI1SwtKWxO",
+	"source": "CertREV/portal mission certrev-a90901614bc2 (S2a, PR #8352) 9d8f844e5c, src/lib/cert-render/runtime/runtime-releases.json, byte for byte"
 }
