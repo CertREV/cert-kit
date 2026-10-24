@@ -21,7 +21,18 @@
  *    injected. Only the block that prints the runtime's tag loads it (`cardCarriesAssets`). The server's HTML carries
  *    the same tag in that block's wrapper, which the parser runs; the runtime's init is idempotent, so it starts once.
  * Both run in a layout effect, before the browser paints the inserted card, so a client-mounted card never shows an
- * empty frame.
+ * empty frame; the roots are checked after every commit of the block, whatever React wrote. React writes the card only
+ * when its HTML changes: the `dangerouslySetInnerHTML` object is kept per string, since React 19 rewrites `innerHTML`
+ * for every new object (2.0.0 on React 19 rebuilt the card on each re-render, and the hosted runtime re-attached it).
+ *
+ * NO CONSOLE NOISE (2.0.1). In a browser that parses declarative roots, the HTML React itself writes names each
+ * template's mode `data-certrev-shadowrootmode` instead of `shadowrootmode` (`clientCardHtml`): Chrome warns ("Found
+ * declarative shadowrootmode attribute on a template, but declarative Shadow DOM is not being parsed") for every such
+ * template `innerHTML` meets, and the layout effect re-parses the card's exact bytes anyway. The wrapper carries
+ * `suppressHydrationWarning` (React never prints it): the server's wrapper holds attached roots where React expects
+ * templates, which React's development build reported as a hydration mismatch on every page. React does not patch a
+ * hydrated element's HTML, so the server's card stays as the parser built it. A server, and a DOM without declarative
+ * roots (jsdom, an old browser), print the card's bytes unchanged.
  *
  * ONE BUILDER RULE, for the sidebar card only. The card's rail is a right float that the article's copy flows around
  * (the Appearance preview's layout, and every other CMS's). On a Builder page the block sits in Builder's own wrapper,
@@ -47,18 +58,36 @@ const INJECTED_RUNTIME_ATTRIBUTE = 'data-certrev-card-runtime'
 /** A layout effect in a browser; nothing on a server (where React would only warn about it). */
 const useBrowserLayoutEffect = typeof document === 'undefined' ? () => {} : React.useLayoutEffect
 
+/** What a client render prints in place of a template's `shadowrootmode` (the header comment). */
+export const INERT_MODE_ATTRIBUTE = 'data-certrev-shadowrootmode'
+
+/** Whether this DOM parses declarative shadow roots (a browser does; a server and jsdom do not). */
+function parsesDeclarativeRoots(): boolean {
+	return typeof HTMLTemplateElement === 'function' && 'shadowRootMode' in HTMLTemplateElement.prototype
+}
+
+/** The card's HTML as React writes it in such a browser: each template's mode under `INERT_MODE_ATTRIBUTE`. */
+export function clientCardHtml(html: string): string {
+	return html.replace(/<template\b([^>]*?)\sshadowrootmode=/gi, `<template$1 ${INERT_MODE_ATTRIBUTE}=`)
+}
+
+/** The template's declared mode, under either name. */
+function declaredMode(template: Element): string | null {
+	return template.getAttribute('shadowrootmode') ?? template.getAttribute(INERT_MODE_ATTRIBUTE)
+}
+
 /** Whether this host still holds an unattached declarative root. */
 function pendingTemplate(host: Element): HTMLTemplateElement | null {
 	if ((host as HTMLElement).shadowRoot) return null
 	for (const child of Array.from(host.children)) {
-		if (child instanceof HTMLTemplateElement && child.hasAttribute('shadowrootmode')) return child
+		if (child instanceof HTMLTemplateElement && declaredMode(child) !== null) return child
 	}
 	return null
 }
 
 /** Attach one host's root from its template, as the parser would have: its mode, its options, its content. */
 function attachFromTemplate(host: HTMLElement, template: HTMLTemplateElement): void {
-	const mode = template.getAttribute('shadowrootmode') === 'closed' ? 'closed' : 'open'
+	const mode = declaredMode(template) === 'closed' ? 'closed' : 'open'
 	const init: ShadowRootInit & { clonable?: boolean; serializable?: boolean } = {
 		mode,
 		delegatesFocus: template.hasAttribute('shadowrootdelegatesfocus'),
@@ -121,6 +150,9 @@ export const BUILDER_CARD_FLOW_CSS =
 	'.builder-blocks > .builder-block > [data-certrev-face="card"]:has(> certrev-card[data-certrev-part="rail"]){display:block !important}' +
 	'}'
 
+/** One object for the flow rule's element, so React 19 never rewrites it on a re-render. */
+const BUILDER_CARD_FLOW_HTML = { __html: BUILDER_CARD_FLOW_CSS }
+
 export function ContractCardFace(props: {
 	readonly card: CardDocumentV1
 	readonly names: readonly CardPartName[]
@@ -131,14 +163,20 @@ export function ContractCardFace(props: {
 }) {
 	const ref = React.useRef<HTMLDivElement>(null)
 	const html = cardHtml(props.card, props.names)
+	const printed = typeof document !== 'undefined' && parsesDeclarativeRoots() ? clientCardHtml(html) : html
+	// One object per printed string: React 19 rewrites `innerHTML` whenever this prop is a new object (React 18 compared
+	// the strings), which would replace the attached card on every re-render.
+	const inner = React.useMemo(() => ({ __html: printed }), [printed])
 	const { card } = props
 	const carriesAssets = cardCarriesAssets(card, props.names)
+	// After every commit of this block (a no-op while every root is attached): whatever React wrote, the card has its roots
+	// before the browser paints.
 	useBrowserLayoutEffect(() => {
-		const wrapper = ref.current
-		if (!wrapper) return
-		attachCardRoots(wrapper, html)
-		if (carriesAssets) injectCardRuntime(card)
-	}, [html, card, carriesAssets])
+		if (ref.current) attachCardRoots(ref.current, html)
+	})
+	useBrowserLayoutEffect(() => {
+		if (ref.current && carriesAssets) injectCardRuntime(card)
+	}, [card, carriesAssets])
 	const { origin } = props
 	React.useEffect(() => {
 		maybeSendBrowserHealth(origin, card.subject.externalId)
@@ -162,8 +200,9 @@ export function ContractCardFace(props: {
 			data-certrev-contract={String(props.card.contract)}
 			data-certrev-def-version={props.card.defVersion}
 			{...{ [SEED_ATTRIBUTE]: props.seed }}
+			suppressHydrationWarning
 			// biome-ignore lint/security/noDangerouslySetInnerHtml: CertREV's card document, printed only after it hashes to the digest the verified envelope signs
-			dangerouslySetInnerHTML={{ __html: html }}
+			dangerouslySetInnerHTML={inner}
 		/>
 	)
 	if (!props.names.includes('rail')) return wrapper
@@ -171,7 +210,7 @@ export function ContractCardFace(props: {
 		<>
 			{wrapper}
 			{/* biome-ignore lint/security/noDangerouslySetInnerHtml: a package constant; React would escape the `>` and `"` of its selectors */}
-			<style data-certrev-builder-flow="" dangerouslySetInnerHTML={{ __html: BUILDER_CARD_FLOW_CSS }} />
+			<style data-certrev-builder-flow="" dangerouslySetInnerHTML={BUILDER_CARD_FLOW_HTML} />
 		</>
 	)
 }

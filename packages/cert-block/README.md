@@ -398,6 +398,9 @@ A drop-in on 2.0.0 (same package, export, registration, inputs and CSP). What ch
   `[itemprop="author"]`, `.byline`, `[class*="byline"]` or `address` in the entry is taken. An anchor the page lacks,
   or one this client does not know, leaves the part where the editor put it, as JavaScript off and Builder's visual
   editor and preview do. Rails and pills never move.
+- **Nothing in the console**: no hydration mismatch in React's development build, and no "declarative Shadow DOM is
+  not being parsed" warning when React writes the card itself (an in-app navigation). The server's bytes are
+  unchanged.
 - **The page's CertREV graph**: when the document carries `jsonld.graph` (resolved by CertREV's server for the
   placement), the block that carries the page's assets prints it once as `<script type="application/ld+json"
   data-certrev-graph>`; without it, no graph. The block never builds the graph (the "card emits no structured data" rule
