@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest'
 import type { CardDocumentV1 } from '../card-contract.js'
-import { afterPageSettles, applyCardPlacement } from '../card-placement.js'
+import { afterPageSettles, applyCardPlacement, inBuilderEditor } from '../card-placement.js'
 
 afterEach(() => {
 	document.body.innerHTML = ''
@@ -190,5 +190,17 @@ describe('afterPageSettles: never during a render or hydration', () => {
 		expect(applied).toBe(1)
 		cancelLate()
 		expect(undone).toBe(1)
+	})
+})
+
+describe('Builder’s editor and preview: nothing moves', () => {
+	it.each([
+		['?builder.frameEditing=blog-article', true],
+		['?builder.preview=blog-article&builder.space=x', true],
+		['?__builder_editing__=true', true],
+		['?utm_source=mail', false],
+		['', false],
+	])('%s', (search, editing) => {
+		expect(inBuilderEditor(search)).toBe(editing)
 	})
 })
