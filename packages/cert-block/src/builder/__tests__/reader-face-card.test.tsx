@@ -14,7 +14,7 @@
 
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CERTREV_LINK_REL } from '../../components/rel.js'
 import { READER_CSS } from '../../reader/reader-css.generated.js'
 import { renderReaderFace } from '../../reader/render.js'
@@ -295,16 +295,23 @@ describe('the reader face on the delivery card', () => {
 		})
 	})
 
-	it("unreachable (1.2.0): the block's own options face, with nothing of the reader and an options record", async () => {
+	it("unreachable: nothing (2.0.1; through 2.0.0 the block's own options face), with nothing of the reader and a none record", async () => {
 		delivery.respond(() => new Response('nope', { status: 503 }))
-		const html = await renderToHtml(card())
-		expect(chromeRoot(html)).not.toBeNull()
-		// The block's memo, not the envelope's (the block names the same reviewer).
-		expect(html).toContain((OPTIONS_ONLY_SHAPES.todaysExport as { memo: string }).memo)
-		expect(html).not.toContain('certrev-reader')
-		expect(html).not.toContain('data-certrev-reader-css')
-		expect(html).not.toContain('data-certrev-delivery')
-		expect(seedOf(html)).toMatchObject({ v: 1, externalId: ENTRY_ID, face: 'options' })
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+		try {
+			const html = await renderToHtml(card())
+			expect(chromeRoot(html)).toBeNull()
+			// Neither the block's memo nor anything else of its export-time options.
+			expect(html).not.toContain((OPTIONS_ONLY_SHAPES.todaysExport as { memo: string }).memo)
+			expect(html).not.toContain('Dr. Jane Doe')
+			expect(html).not.toContain('certrev-reader')
+			expect(html).not.toContain('data-certrev-reader-css')
+			expect(html).not.toContain('data-certrev-delivery')
+			expect(seedOf(html)).toMatchObject({ v: 1, externalId: ENTRY_ID, face: 'none', reason: 'delivery_unreachable' })
+			expect(String(warn.mock.calls[0]?.[0])).toContain('"reason":"delivery_unreachable"')
+		} finally {
+			warn.mockRestore()
+		}
 	})
 })
 

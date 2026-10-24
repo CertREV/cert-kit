@@ -12,7 +12,7 @@
  *   • the registration is ZERO-input: the editor cannot choose or forge which credential renders.
  */
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeMockPayload } from '../../contract/fixtures.js'
 import type { CertVerdict } from '../../contract/kernel.js'
 import { CertRevAnchor, CertRevProvider, type CurrentCredential, certRevAnchorComponent } from '../index.js'
@@ -108,7 +108,19 @@ describe('certRevCertComponent (the drop-in gen2 registration)', () => {
 	})
 })
 
-describe('CertReviewCard render + the fused-credential R1 gate', () => {
+/**
+ * 2.0.1: a `CertReviewCard` with no delivery marker prints NOTHING, whatever its options say. Through 2.0.0 such a block
+ * painted its export-time options (the reviewer, a credential, a memo, a verify link) as the 1.0.3 face, facts nobody
+ * had signed; the face, its fused-credential gate and its `mode` bridge are gone with it. What a reader sees comes from
+ * the signed envelope only (`delivery-card.test.tsx`), and the block reports `no_marker` instead.
+ */
+describe('CertReviewCard without the delivery marker (2.0.1): nothing, whatever its options say', () => {
+	let warn: ReturnType<typeof vi.spyOn>
+	beforeEach(() => {
+		warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+	})
+	afterEach(() => warn.mockRestore())
+
 	const base: Partial<BuilderCertChromeData> = {
 		reviewerName: 'Dr. Jane Doe',
 		verifyUrl: 'https://certrev.com/verify/abc',
@@ -119,39 +131,25 @@ describe('CertReviewCard render + the fused-credential R1 gate', () => {
 		renderDef: null,
 		stringsVersion: '2026-07',
 	}
-	it('renders a certified face (the reviewer name)', () => {
-		expect(renderToStaticMarkup(<CertReviewCard {...base} />)).toContain('Dr. Jane Doe')
-	})
-	it('name-only when credentialVerification is null — a credential never leaks without its date', () => {
-		expect(renderToStaticMarkup(<CertReviewCard {...base} credentialVerification={null} />)).not.toContain('FAAAAI')
-	})
-	it('renders the credential ONLY as the fused (credential + verifiedAt) pair', () => {
-		const html = renderToStaticMarkup(
-			<CertReviewCard {...base} credentialVerification={{ credential: 'FAAAAI', verifiedAt: '2026-03-01' }} />,
-		)
-		expect(html).toContain('FAAAAI')
-	})
-	it('showCredentials:false collapses to name-only even with the pair present', () => {
-		const html = renderToStaticMarkup(
+	it('a certified-looking block prints nothing: no reviewer, no credential, no memo, no verify link', () => {
+		const withMemo = { ...base, memo: 'Checked the claims against current guidance; accurate.' }
+		for (const element of [
+			<CertReviewCard key="plain" {...base} />,
 			<CertReviewCard
+				key="pair"
 				{...base}
-				display={{ showExpertPhoto: true, showCredentials: false }}
 				credentialVerification={{ credential: 'FAAAAI', verifiedAt: '2026-03-01' }}
 			/>,
-		)
-		expect(html).not.toContain('FAAAAI')
+			<CertReviewCard key="header" {...withMemo} mode="banner" part="header" />,
+			<CertReviewCard key="memo" {...withMemo} mode="banner" part="memo" />,
+		]) {
+			expect(renderToStaticMarkup(element)).toBe('')
+		}
+		expect(warn).toHaveBeenCalledTimes(4)
+		for (const call of warn.mock.calls) expect(String(call[0])).toContain('"reason":"no_marker"')
 	})
 	it('returns nothing pre-cert (no reviewerName / verifyUrl)', () => {
 		expect(renderToStaticMarkup(<CertReviewCard />)).toBe('')
-	})
-	it('passes `part` through to renderCertBlock (header excludes the memo, memo excludes the header)', () => {
-		const withMemo = { ...base, memo: 'Checked the claims against current guidance; accurate.' }
-		const header = renderToStaticMarkup(<CertReviewCard {...withMemo} mode="banner" part="header" />)
-		const memo = renderToStaticMarkup(<CertReviewCard {...withMemo} mode="banner" part="memo" />)
-		expect(header).toContain('Expert reviewed')
-		expect(header).not.toContain('Checked the claims against current guidance; accurate.')
-		expect(memo).toContain('Checked the claims against current guidance; accurate.')
-		expect(memo).not.toContain('Expert reviewed')
 	})
 })
 
@@ -189,51 +187,23 @@ const cardBase: Partial<BuilderCertChromeData> = {
 }
 
 /**
- * THE COMPATIBILITY BRIDGE FOR PRE-EXISTING ENTRIES. Delete this block only together with the
- * `?? 'banner'` in `CertReviewCard`, once the exporter emits an explicit `mode` AND existing
- * entries have been backfilled. Until both are true, this is a live customer contract.
- *
- * WHAT IT PINS, AND WHY IT IS A DIFFERENT KIND OF TEST
- *   Not the presence of text on a rendered surface, and not a string in shipped source: a
- *   BEHAVIOUR UNDER A MISSING INPUT. `mode` is a PLACEMENT input, never one of the 19 wire keys,
- *   and the exporter emits only the wire projection (`options: { ...certData }`), so every entry
- *   exported to date has no `mode` key at all. What such an entry paints is therefore decided
- *   entirely by a fallback, and a fallback is invisible to any check that looks at what IS there.
- *
- * WHAT IT COST TO LEARN THIS
- *   1.0.0 removed the card's `?? 'banner'` so the renderer would own the single default. Every
- *   gate stayed green, because the sidebar face renders perfectly — it is simply not the face
- *   those entries had rendered since they were created. Consumers install unpinned, so the
- *   repaint reached live pages with no entry edit and no version bump on their side.
- *
- * The sidebar default is NOT reverted: it is still what a direct `renderCertBlock` caller gets
- * and still the registered `defaultValue`, asserted immediately below, so every block created in
- * the editor from now on carries an explicit `mode` and never reaches the fallback at all.
+ * The pre-exporter-`mode` bridge (an exported entry with no `mode` painted the BANNER options face, 1.0.1 to 2.0.0) went
+ * with the options face in 2.0.1: such an entry prints nothing whatever its `mode`. The renderer's own default stands.
  */
-describe('the pre-exporter-`mode` bridge — an entry with no `mode` still paints BANNER', () => {
-	it('renders the banner face when `mode` is absent entirely (the exported-entry shape)', () => {
-		const html = renderToStaticMarkup(<CertReviewCard {...cardBase} />)
-		expect(html).toContain('data-certrev-mode="banner"')
-		expect(html).toContain('certrev-cert--banner')
-		expect(html).not.toContain('certrev-cert--sidebar')
+describe('the pre-exporter-`mode` bridge is gone with the options face (2.0.1)', () => {
+	let warn: ReturnType<typeof vi.spyOn>
+	beforeEach(() => {
+		warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 	})
-	it('renders the banner face when `mode` is present-but-nullish, which is the same absence', () => {
-		// A CMS round-trip can turn a missing key into an explicit null; both are "the editor
-		// chose nothing", so both must land on the same face.
-		for (const mode of [undefined, null] as const) {
-			const html = renderToStaticMarkup(<CertReviewCard {...cardBase} mode={mode} />)
-			expect(html, `mode={${String(mode)}} must be treated as absent`).toContain('data-certrev-mode="banner"')
-		}
-	})
-	it('the bridge is a fallback, never an override — an explicit mode still wins', () => {
-		for (const mode of ['sidebar', 'floating'] as const) {
-			const html = renderToStaticMarkup(<CertReviewCard {...cardBase} mode={mode} />)
-			expect(html).toContain(`data-certrev-mode="${mode}"`)
+	afterEach(() => warn.mockRestore())
+
+	it('an entry with no marker prints nothing, with `mode` absent, nullish or chosen', () => {
+		for (const mode of [undefined, null, 'banner', 'sidebar', 'floating'] as const) {
+			expect(renderToStaticMarkup(<CertReviewCard {...cardBase} mode={mode} />), `mode={${String(mode)}}`).toBe('')
 		}
 	})
 	it('the renderer itself is untouched: a DIRECT caller omitting mode still gets sidebar', () => {
-		// The bridge lives in the Builder card only. This is what proves the 1.0.0 decision stands
-		// and that the fix was scoped to the path that actually regressed.
+		// What proves the 1.0.0 decision stands: the one placement default is the renderer's.
 		expect(renderCertBlock({ facts: directFacts })).toContain('data-certrev-mode="sidebar"')
 	})
 })
@@ -261,8 +231,15 @@ describe('S2 — one placement default, owned by renderCertBlock alone', () => {
 })
 
 describe('C4 — untyped CMS JSON can never take SSR down (the editor is not type-checked)', () => {
+	let warn: ReturnType<typeof vi.spyOn>
+	beforeEach(() => {
+		warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+	})
+	afterEach(() => warn.mockRestore())
+
 	// Everything below is what a visual editor can actually put in the option — the props type
-	// is ERASED at runtime, so each of these reaches the renderer as-is.
+	// is ERASED at runtime, so each of these reaches the card as-is. 2.0.1: a block without the marker prints nothing
+	// whatever it carries, and must still never throw.
 	const malformed: ReadonlyArray<readonly [string, unknown]> = [
 		['a credential with no verification date', { credential: 'FAAAAI' }],
 		['a verification date with no credential', { verifiedAt: '2026-03-01' }],
@@ -272,17 +249,16 @@ describe('C4 — untyped CMS JSON can never take SSR down (the editor is not typ
 		['a number where verifiedAt belongs', { credential: 'FAAAAI', verifiedAt: 20260301 }],
 		['an object where credential belongs', { credential: { abbr: 'FAAAAI' }, verifiedAt: '2026-03-01' }],
 	]
-	for (const [label, value] of malformed) {
-		it(`credentialVerification as ${label} degrades to the name-only face instead of throwing`, () => {
+	it('a malformed credentialVerification in any shape prints nothing and never throws', () => {
+		for (const [label, value] of malformed) {
 			const props = { ...cardBase, credentialVerification: value } as CertReviewCardProps
-			let html = ''
+			let html = 'unset'
 			expect(() => {
 				html = renderToStaticMarkup(<CertReviewCard {...props} />)
-			}).not.toThrow()
-			expect(html).toContain('Dr. Jane Doe')
-			expect(html).not.toContain('FAAAAI')
-		})
-	}
+			}, label).not.toThrow()
+			expect(html, label).toBe('')
+		}
+	})
 
 	it('a wrong-TYPE value in every other forwarded option renders instead of throwing', () => {
 		const junk = {
@@ -304,23 +280,31 @@ describe('C4 — untyped CMS JSON can never take SSR down (the editor is not typ
 		const junk = { ...cardBase, reviewerName: 42, verifyUrl: {} } as unknown as CertReviewCardProps
 		expect(renderToStaticMarkup(<CertReviewCard {...junk} />)).toBe('')
 	})
+
+	it('a wrong-TYPE builderContext or entry id prints nothing and never throws', () => {
+		for (const builderContext of [42, 'x', [], { content: 42 }, { content: { id: {} } }]) {
+			const props = { ...cardBase, builderContext } as unknown as CertReviewCardProps
+			expect(() => renderToStaticMarkup(<CertReviewCard {...props} />)).not.toThrow()
+		}
+	})
 })
 
+/**
+ * D7: the compliance disclosures are constants of the renderer, not editor copy. 2.0.1: the card no longer paints from
+ * the block's options at all, so the lock is held where it still applies, the renderer the signed envelope face uses.
+ */
 describe('D7 — the compliance disclosures are constants, not editor copy', () => {
 	it('a pro-bono delivery (compensationCue: null) renders NO compensation claim', () => {
-		const html = renderToStaticMarkup(<CertReviewCard {...cardBase} compensationCue={null} />)
+		const html = renderCertBlock({ facts: { ...directFacts, compensationCue: null } })
 		expect(html).not.toContain(COMPENSATED_EXPERT_CUE)
 	})
 	it('a REWRITTEN cue is ignored — the locked constant is what renders', () => {
-		const html = renderToStaticMarkup(<CertReviewCard {...cardBase} compensationCue="Independent expert" />)
+		const html = renderCertBlock({ facts: { ...directFacts, compensationCue: 'Independent expert' } })
 		expect(html).toContain(COMPENSATED_EXPERT_CUE)
 		expect(html).not.toContain('Independent expert')
 	})
-	it('a REWRITTEN scope line never reaches the face — the card forwards no scopeLine at all', () => {
-		const html = renderToStaticMarkup(
-			<CertReviewCard {...cardBase} scopeLine="We checked every claim and guarantee it." />,
-		)
-		expect(html).not.toContain('We checked every claim and guarantee it.')
+	it('the scope line is the locked constant: the renderer takes no scope line from anyone', () => {
+		const html = renderCertBlock({ facts: directFacts })
 		expect(html).toContain('Not a product endorsement')
 	})
 	it('both stay REGISTERED inputs — the wire type and its parity lock are unchanged — but say so', () => {

@@ -31,10 +31,10 @@
  * (`face: { html, css }`, unsigned) and the verified envelope signs that face's sha256 digests for the
  * def version served (`content.faceDigest`), an unpinned whole-card block paints that face instead;
  * markup that does not hash to the signed digest is never painted. A revoked, expired, unverifiable or unreachable cert, a marker that
- * is not exactly that shape, or a missing entry id renders nothing. A block WITHOUT the marker
- * (every entry exported before 1.1.0) renders from its options exactly as 1.0.3 did, so the
- * paragraph above still describes it: an editor who deletes the marker gets the options face back,
- * which is the 1.0.3 trust boundary, not a new one.
+ * is not exactly that shape, or a missing entry id renders nothing. 2.0.1: a block WITHOUT the marker
+ * (every entry exported before 1.1.0) renders nothing too, and reports `no_marker`: through 2.0.0 it
+ * painted its options as 1.0.3 did, unsigned export-time claims an editor could change. So deleting the
+ * marker no longer brings any face back.
  *
  * Three things the card DOES enforce, and they are the limit of it: no chrome at all without a
  * `reviewerName` and a `verifyUrl`; a credential renders only welded to its dated verification
