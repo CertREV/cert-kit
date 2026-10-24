@@ -40,8 +40,8 @@ CertREV's server.
   `after: 'leading-media'`), `after-byline` (an element marked `data-certrev-anchor="byline"`, else the first
   `[rel~="author"]`, `[itemprop="author"]`, `.byline`, `[class*="byline"]` or `address`), `before-references` (else
   `content-end`), `content-end`. An unknown anchor, `pinned`, or an anchor the page does not have leaves the part where
-  the editor put it; with JavaScript off every part is where the editor put it. A sidebar's rail and a floating pill
-  never move. So CertREV can put the reviewer right after the byline and the memo at the end of the article with no
+  the editor put it; with JavaScript off every part is where the editor put it, and in Builder's visual editor and
+  preview nothing moves. A sidebar's rail and a floating pill never move. So CertREV can put the reviewer right after the byline and the memo at the end of the article with no
   install.
 - **The page's CertREV graph.** When the document carries `jsonld.graph` (a complete JSON-LD object CertREV's server
   resolved for the placement: the Certification, its reviewer and CertREV, and the page's WebPage and Article; an

@@ -21,7 +21,8 @@
  * among the top-level blocks; the block itself stays where it was, with the card's head, dialogs and runtime.
  *
  * WHEN: in the browser only, after the page has loaded and React has hydrated (two frames after `load`), never during
- * a render or a hydration. With JavaScript off, and until then, every part is where the editor put it. A card React
+ * a render or a hydration, and never in Builder's visual editor or preview (`builder.frameEditing`,
+ * `builder.preview`, `__builder_editing__` in the address): an editor sees each block where it placed it. With JavaScript off, and until then, every part is where the editor put it. A card React
  * prints again (a new document) or unmounts takes its moved parts with it first, so a part is never printed twice.
  */
 
@@ -172,11 +173,21 @@ export function applyCardPlacement(wrapper: Element, card: CardDocumentV1, names
 	}
 }
 
+/** Builder's visual editor and preview load the page with one of these in its address. */
+const EDITOR_PARAMS = ['builder.frameEditing', 'builder.preview', '__builder_editing__']
+
+/** True in Builder's visual editor or preview, where blocks stay where the editor placed them. */
+export function inBuilderEditor(search: string = typeof location === 'undefined' ? '' : location.search): boolean {
+	const params = new URLSearchParams(search)
+	return EDITOR_PARAMS.some((name) => params.has(name))
+}
+
 /**
  * Run `apply` once the page has loaded and hydrated (two frames after `load`); returns a cancel that also undoes what
- * `apply` did.
+ * `apply` did. Never runs in Builder's editor or preview.
  */
 export function afterPageSettles(apply: () => () => void): () => void {
+	if (inBuilderEditor()) return () => {}
 	let undo: (() => void) | null = null
 	let cancelled = false
 	const run = () => {
