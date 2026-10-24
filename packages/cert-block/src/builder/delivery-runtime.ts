@@ -24,6 +24,7 @@ import type { ResolvePublicKeyByKid } from '../contract/kernel.js'
 import { TtlCache } from '../verify/cache.js'
 import type { CachedDelivery } from '../verify/get-verified-delivery.js'
 import { forgetKeySetsForTests, keySetResolver } from '../verify/key-set.js'
+import { setCardBeaconForTests } from './card-beacon.js'
 import { forgetCardDigestsForTests } from './card-contract.js'
 import { forgetCardReportsForTests } from './card-report.js'
 import { forgetFaceHashesForTests } from './delivered-face.js'
@@ -32,8 +33,17 @@ import { forgetPageSeedsForTests } from './ssr-seed.js'
 
 /** The card's server read deadline. A brand's server waits this long once per cold placement. */
 export const CARD_DELIVERY_TIMEOUT_MS = 8_000
-/** How long past its 60s TTL a certificate may still paint while it is refreshed or CertREV is down. */
-export const CARD_DELIVERY_STALE_MS = 300_000
+/**
+ * 2.0.1: how long a verified answer is fresh. With the stale window below, a card adds at most one minute to the Delivery
+ * API's own cache (`max-age=60, stale-while-revalidate=240`), so a revoked card is gone within ADR 0001 §7's five to
+ * six minutes (2.0.0's 60 s + 300 s here stacked to about twelve).
+ */
+export const CARD_DELIVERY_TTL_MS = 30_000
+/**
+ * How long past its TTL a certificate may still paint while it is refreshed or CertREV is down (2.0.1: 30 s; 2.0.0:
+ * 300 s). Never longer: past it, a read that cannot reach CertREV prints nothing.
+ */
+export const CARD_DELIVERY_STALE_MS = 30_000
 
 export interface CardDeliveryRuntime {
 	/** The baked kids: the package's own trust root (and the only keys that may sign a published key set). */
@@ -54,7 +64,7 @@ const bakedResolveKid: ResolvePublicKeyByKid = (kid) =>
 
 function newCardCache(now?: () => number): TtlCache<CachedDelivery> {
 	return new TtlCache<CachedDelivery>({
-		ttlMs: 60_000,
+		ttlMs: CARD_DELIVERY_TTL_MS,
 		negativeTtlMs: 5_000,
 		staleMs: CARD_DELIVERY_STALE_MS,
 		// A refresh the host runtime abandoned (workerd cancels a finished request's I/O) never
@@ -94,7 +104,8 @@ export function cardResolveKidFor(rt: CardDeliveryRuntime, baseUrl: string): Res
 /**
  * Test seam: replace parts of the runtime (a fresh cache unless one is given) and forget the page's envelope seeds
  * (a fresh runtime is a fresh page), (1.3.0) every delivered face's memoized hashes and (2.0.0) every card
- * document's digest and every published key set. Returns a restore.
+ * document's digest and every published key set. 2.0.1: beacons go nowhere (a test that wants them sets its own
+ * transport with `setCardBeaconForTests` after this). Returns a restore.
  */
 export function setCardDeliveryRuntimeForTests(overrides: Partial<CardDeliveryRuntime>): () => void {
 	forgetPageSeedsForTests()
@@ -102,6 +113,7 @@ export function setCardDeliveryRuntimeForTests(overrides: Partial<CardDeliveryRu
 	forgetCardDigestsForTests()
 	forgetKeySetsForTests()
 	forgetCardReportsForTests()
+	const restoreBeacon = setCardBeaconForTests()
 	const previous = runtime
 	const now = overrides.now ?? previous.now
 	runtime = {
@@ -111,5 +123,6 @@ export function setCardDeliveryRuntimeForTests(overrides: Partial<CardDeliveryRu
 	}
 	return () => {
 		runtime = previous
+		restoreBeacon()
 	}
 }

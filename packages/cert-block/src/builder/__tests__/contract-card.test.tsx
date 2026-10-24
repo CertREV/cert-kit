@@ -317,10 +317,13 @@ describe('a placement whose signed binding has no `contract` key prints what 1.3
 })
 
 describe('the two 1.2.0 fallbacks, now reported', () => {
-	it('CertREV not reached: the options face (unchanged) and one delivery_unreachable line', async () => {
+	it('CertREV not reached: nothing (2.0.1; through 2.0.0 the options face) and one delivery_unreachable line', async () => {
 		delivery.respond(() => json({ error: 'unavailable' }, 503))
 		const html = await renderToHtml(block())
-		expect(html).toContain('data-certrev-cert-chrome')
+		expect(html).not.toContain('data-certrev-cert-chrome')
+		expect(html).not.toContain('<certrev-card')
+		expect(recordOf(html)).not.toBeNull()
+		expect(parseFallback(recordOf(html) ?? '')).toMatchObject({ face: 'none', reason: 'delivery_unreachable' })
 		expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([
 			`[certrev] card_fallback ${JSON.stringify({ reason: 'delivery_unreachable', platform: 'builder', externalId: ENTRY_ID })}`,
 		])

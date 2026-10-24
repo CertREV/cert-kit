@@ -41,9 +41,10 @@
  * page carried for another version.
  *
  * WHEN THE SERVER HAD NO ENVELOPE TO PAINT (1.2.0) the same attribute carries a fallback record instead of a seed:
- * `{ v: 1, baseUrl, externalId, design?, face }`, where `face` is `'options'` (CertREV could not be reached, so the
- * server painted the block's own options face) or `'none'` (the server painted nothing: revoked, expired, unverifiable,
- * for another entry). A browser that renders the card again (hydration, or React's client re-render after a hydration
+ * `{ v: 1, baseUrl, externalId, design?, face, reason? }`, where `face` is `'none'` (the server painted nothing:
+ * revoked, expired, unverifiable, for another entry, or, 2.0.1, CertREV not reached, with `reason` naming why) or, on a
+ * page a 2.0.0 server rendered, `'options'` (CertREV could not be reached and that server painted the block's options
+ * face; 2.0.1 prints nothing for it). A browser that renders the card again (hydration, or React's client re-render after a hydration
  * error elsewhere on the page) paints what the record says, so it neither reads the Delivery API nor shows a card the
  * server withheld. A record holds no payload, so `parseSeed` never takes one for a seed. A `'none'` record sits on a
  * `hidden` element with nothing in it.
@@ -114,7 +115,7 @@ export interface PageSeed {
 	readonly raw: string
 }
 
-/** What the server painted with no verified envelope: the block's options face, or nothing. */
+/** What the server painted with no verified envelope: nothing (2.0.1 never writes `'options'`; a 2.0.0 page may hold one). */
 export type FallbackFace = 'options' | 'none'
 
 /** The record a server writes where it had no envelope to paint (the file header). */

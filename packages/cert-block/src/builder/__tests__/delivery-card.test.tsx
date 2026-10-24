@@ -1,18 +1,17 @@
 /**
  * 1.1.0: `CertReviewCard` with and without the `delivery` marker.
  *
- *  - Without it, every options-only shape paints what 1.0.3 painted, byte for byte (the golden
- *    was rendered by the 1.0.3 tarball source, not by this tree).
+ *  - 2.0.1: without it, nothing at all (1.0.3 to 2.0.0 painted the block's export-time options, facts nobody signed),
+ *    and one `no_marker` report.
  *  - With it, the card paints the VERIFIED envelope for its own Builder entry with the brand's
  *    def, and renders nothing for every definitive no (revoked, expired, unverifiable, for another
  *    entry, not found).
- *  - 1.2.0: where CertREV cannot be reached (a 5xx, a body that is not JSON, a network error, the
- *    deadline), it paints the block's own options face, as 0.5.x did, rather than nothing. The
- *    server's read waits up to 8s, and a cached certificate is served up to 5 minutes past its TTL
- *    while one refresh runs or while CertREV is down.
+ *  - 2.0.1: where CertREV cannot be reached (a 5xx, a body that is not JSON, a network error, the deadline), nothing
+ *    either, with a `'none'` record naming `delivery_unreachable` and one report (1.2.0 to 2.0.0 painted the block's
+ *    options face). The server's read waits up to 8s; a cached certificate is fresh for 30 s and served at most 30 s
+ *    past that while one refresh runs or while CertREV is down, then nothing.
  */
 
-import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderCertBlock } from '../../components/render-cert-block.js'
@@ -30,6 +29,7 @@ import {
 import {
 	CARD_DELIVERY_STALE_MS,
 	CARD_DELIVERY_TIMEOUT_MS,
+	CARD_DELIVERY_TTL_MS,
 	cardDeliveryRuntime,
 	setCardDeliveryRuntimeForTests,
 } from '../delivery-runtime.js'
@@ -50,44 +50,58 @@ import {
 	scriptedDelivery,
 	seedOf,
 	T0,
-	withoutSeed,
 } from './delivery-harness.js'
 import { OPTIONS_ONLY_SHAPES } from './options-only-shapes.js'
 
-const GOLDEN = JSON.parse(readFileSync(new URL('./__golden__/options-only-1.0.3.json', import.meta.url), 'utf8')) as {
-	golden: Record<string, string>
-}
-
 /** The memo the fixture block's OPTIONS carry; the envelope's memo is another sentence, so this tells the faces apart. */
 const OPTIONS_MEMO = 'The retinol guidance and usage cadence are accurate and safely framed.'
-/** The record a server writes beside a face it did not paint from an envelope. */
-const fallbackRecord = (face: 'options' | 'none') => ({ v: 1, baseUrl: BASE, externalId: ENTRY_ID, face })
-/** Server HTML less React's Suspense boundary comments, so it compares with a `renderToStaticMarkup` paint. */
-const withoutBoundaries = (html: string) => html.replace(/<!--\/?\$-->/g, '')
+/** The record a server writes beside a face it did not paint from an envelope (2.0.1: always `'none'`). */
+const fallbackRecord = (reason?: 'delivery_unreachable' | 'unknown_key') => ({
+	v: 1,
+	baseUrl: BASE,
+	externalId: ENTRY_ID,
+	face: 'none',
+	...(reason ? { reason } : {}),
+})
+/** The server's one-line reports in `warn`'s calls, parsed. */
+const reports = (warn: ReturnType<typeof vi.spyOn>) =>
+	warn.mock.calls
+		.map((call) => String(call[0]))
+		.filter((line) => line.startsWith('[certrev] card_fallback '))
+		.map((line) => JSON.parse(line.slice('[certrev] card_fallback '.length)) as { reason: string; externalId: string })
 
-describe('no delivery marker: the 1.0.3 options face, unchanged', () => {
+/** None of the block's export-time facts (the options beside the marker) is in `html`. */
+function expectNoExportTimeFact(html: string) {
+	for (const fact of ['Dr. Jane Doe', 'MD, FAAD', OPTIONS_MEMO, 'certrev.com/verify/', 'Sam Writer']) {
+		expect(html).not.toContain(fact)
+	}
+}
+
+describe('no delivery marker: nothing at all (2.0.1), and one no_marker report', () => {
+	let warn: ReturnType<typeof vi.spyOn>
+	beforeEach(() => {
+		warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+	})
+	afterEach(() => warn.mockRestore())
+
 	for (const [name, props] of Object.entries(OPTIONS_ONLY_SHAPES)) {
-		it(`${name} paints exactly what 1.0.3 painted`, () => {
-			expect(GOLDEN.golden[name]).toBeTypeOf('string')
-			expect(renderToStaticMarkup(<CertReviewCard {...(props as CertReviewCardProps)} />)).toBe(GOLDEN.golden[name])
+		it(`${name} prints nothing, never its export-time options`, () => {
+			const html = renderToStaticMarkup(<CertReviewCard {...(props as CertReviewCardProps)} />)
+			expect(html).toBe('')
+			expect(reports(warn)).toEqual([{ reason: 'no_marker', platform: 'builder', externalId: '' }])
 		})
 	}
 
-	it("today's export, with no builderContext, paints the options face (the transition)", () => {
-		const html = renderToStaticMarkup(<CertReviewCard {...(OPTIONS_ONLY_SHAPES.todaysExport as CertReviewCardProps)} />)
-		expect(html).toContain('data-certrev-cert-chrome')
-		expect(html).not.toContain('data-certrev-delivery')
-		expect(html).toContain('Dr. Jane Doe')
-	})
-
-	it('an options-only block never fetches, even with builderContext present', async () => {
+	it('a block with no marker but a Builder entry names the entry in its report, and never fetches', async () => {
 		const delivery = scriptedDelivery(() => json({}))
 		const restore = setCardDeliveryRuntimeForTests({ fetchImpl: () => delivery.fetch })
 		try {
 			const props = { ...OPTIONS_ONLY_SHAPES.todaysExport, builderContext: { content: { id: ENTRY_ID } } }
 			const html = await renderToHtml(<CertReviewCard {...(props as CertReviewCardProps)} />)
-			expect(html).toBe(GOLDEN.golden.todaysExport)
+			expect(chromeRoot(html)).toBeNull()
+			expectNoExportTimeFact(html)
 			expect(delivery.calls).toEqual([])
+			expect(reports(warn)).toEqual([{ reason: 'no_marker', platform: 'builder', externalId: ENTRY_ID }])
 		} finally {
 			restore()
 		}
@@ -155,6 +169,7 @@ describe('with the delivery marker: the envelope face', () => {
 	let delivery: ScriptedDelivery
 	let clock: number
 	let restore: () => void
+	let warn: ReturnType<typeof vi.spyOn>
 
 	const card = (overrides: Partial<CertReviewCardProps> = {}) => (
 		<CertReviewCard
@@ -212,9 +227,13 @@ describe('with the delivery marker: the envelope face', () => {
 			now: () => clock,
 			timeoutMs: 200,
 		})
+		warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 	})
 
-	afterEach(() => restore())
+	afterEach(() => {
+		restore()
+		warn.mockRestore()
+	})
 
 	it('reads the Delivery API for its own entry and paints the verified facts with the def', async () => {
 		const html = await renderToHtml(card())
@@ -347,7 +366,9 @@ describe('with the delivery marker: the envelope face', () => {
 			const html = await expectNothing()
 			// An empty hidden element carries the server's "nothing", so a client re-render keeps it (1.2.0).
 			expect(html).toMatch(/<div hidden="" data-certrev-envelope="/)
-			expect(seedOf(html)).toEqual(fallbackRecord('none'))
+			expect(seedOf(html)).toEqual(fallbackRecord())
+			// A definitive no is not a fallback: nothing is reported.
+			expect(reports(warn)).toEqual([])
 		})
 
 		it('revoked inside the envelope (revokedAt set)', async () => {
@@ -408,20 +429,21 @@ describe('with the delivery marker: the envelope face', () => {
 			['410 (gone)', 410],
 		])('%s', async (_label, status) => {
 			delivery.respond(() => json({ error: 'not_found' }, status))
-			expect(seedOf(await expectNothing())).toEqual(fallbackRecord('none'))
+			expect(seedOf(await expectNothing())).toEqual(fallbackRecord())
 		})
 
 		it('an envelope for another entry carries the none record too (it is a definitive no, not an outage)', async () => {
 			delivery.respond(() => json(deliveryBody(issuer.envelope({ subject: builderSubject('another-entry') }))))
-			expect(seedOf(await expectNothing())).toEqual(fallbackRecord('none'))
+			expect(seedOf(await expectNothing())).toEqual(fallbackRecord())
 		})
 
-		it('no builderContext, or no content id: never fetches', async () => {
+		it('no builderContext, or no content id: never fetches, and reports marker_invalid', async () => {
 			await expectNothing(card({ builderContext: undefined }))
 			await expectNothing(card({ builderContext: { content: null } }))
 			await expectNothing(card({ builderContext: { content: { id: '' } } }))
 			await expectNothing(card({ builderContext: { content: { id: 42 } } }))
 			expect(delivery.calls).toEqual([])
+			expect(reports(warn).map((r) => r.reason)).toEqual(Array(4).fill('marker_invalid'))
 		})
 
 		it.each([
@@ -430,9 +452,10 @@ describe('with the delivery marker: the envelope face', () => {
 			['v 2', { v: 2, baseUrl: BASE }],
 			['a bare string', BASE],
 			['true', true],
-		])('a marker that is %s: never fetches, never falls back to the options', async (_label, marker) => {
-			await expectNothing(card({ delivery: marker as never }))
+		])('a marker that is %s: never fetches, never falls back to the options, reports marker_invalid', async (_label, marker) => {
+			expectNoExportTimeFact(await expectNothing(card({ delivery: marker as never })))
 			expect(delivery.calls).toEqual([])
+			expect(reports(warn)).toEqual([{ reason: 'marker_invalid', platform: 'builder', externalId: ENTRY_ID }])
 		})
 
 		it('uses the baked trust root when no test resolver is installed', async () => {
@@ -446,13 +469,14 @@ describe('with the delivery marker: the envelope face', () => {
 		})
 	})
 
-	describe("CertREV not reached: the block's own options face (1.2.0)", () => {
-		const expectOptionsFace = async (element = card()) => {
+	describe('CertREV not reached: nothing, a delivery_unreachable record and one report (2.0.1)', () => {
+		/** Nothing printed, none of the block's export-time facts, the `'none'` record naming the outage, one report. */
+		const expectUnreachable = async (element = card()) => {
 			const html = await renderToHtml(element)
-			expect(chromeRoot(html)).not.toBeNull()
-			expect(html).toContain(OPTIONS_MEMO)
+			expect(chromeRoot(html)).toBeNull()
+			expectNoExportTimeFact(html)
 			expect(html).not.toContain('I reviewed the retinol claims')
-			expect(seedOf(html)).toEqual(fallbackRecord('options'))
+			expect(reports(warn)).toEqual([{ reason: 'delivery_unreachable', platform: 'builder', externalId: ENTRY_ID }])
 			return html
 		}
 
@@ -463,48 +487,31 @@ describe('with the delivery marker: the envelope face', () => {
 			['a JSON body that is not an object', () => json([1, 2])],
 			['a network error', () => Promise.reject(new TypeError('fetch failed'))],
 			['the fetch deadline', () => new Promise<Response>(() => {})],
-		])('%s: the options face 0.5.x painted, byte for byte, with an options record', async (_label, answer) => {
+		])('%s: nothing, never the options face', async (_label, answer) => {
 			delivery.respond(answer)
-			const html = await expectOptionsFace()
-			expect(withoutBoundaries(withoutSeed(html))).toBe(GOLDEN.golden.todaysExport)
+			const html = await expectUnreachable()
+			expect(seedOf(html)).toEqual(fallbackRecord('delivery_unreachable'))
+			expect(html).toMatch(/^<!--\$--><div hidden="" data-certrev-envelope="[^"]*"><\/div><!--\/\$-->$/)
 			expect(delivery.calls).toEqual([DELIVERY_URL])
 		})
 
-		it("paints in the def layout the block carries, and an editor's mode wins over it", async () => {
+		it('whatever layout the block carries or an editor chose, nothing', async () => {
 			delivery.respond(() => json({ error: 'boom' }, 500))
 			const sidebarDef = { ...(OPTIONS_ONLY_SHAPES.todaysExportWithDef.renderDef as object), layout: 'sidebar' }
-			const byDef = await expectOptionsFace(card({ renderDef: sidebarDef as never }))
-			expect(withoutBoundaries(withoutSeed(byDef))).toBe(
-				renderToStaticMarkup(
-					<CertReviewCard
-						{...(OPTIONS_ONLY_SHAPES.todaysExport as CertReviewCardProps)}
-						renderDef={sidebarDef as never}
-						mode="sidebar"
-					/>,
-				),
-			)
-			const byEditor = await expectOptionsFace(card({ renderDef: sidebarDef as never, mode: 'banner' }))
-			expect(withoutBoundaries(withoutSeed(byEditor))).toBe(
-				renderToStaticMarkup(
-					<CertReviewCard
-						{...(OPTIONS_ONLY_SHAPES.todaysExport as CertReviewCardProps)}
-						renderDef={sidebarDef as never}
-						mode="banner"
-					/>,
-				),
-			)
+			await expectUnreachable(card({ renderDef: sidebarDef as never }))
+			warn.mockClear()
+			await expectUnreachable(card({ renderDef: sidebarDef as never, mode: 'banner' }))
 		})
 
-		it('a block whose options cannot paint (no reviewer) still renders nothing, with a none record', async () => {
+		it('a block with no reviewer in its options: the same nothing and the same record', async () => {
 			delivery.respond(() => json({ error: 'boom' }, 500))
-			const html = await renderToHtml(card({ reviewerName: null as never }))
-			expect(chromeRoot(html)).toBeNull()
-			expect(seedOf(html)).toEqual(fallbackRecord('none'))
+			const html = await expectUnreachable(card({ reviewerName: null as never }))
+			expect(seedOf(html)).toEqual(fallbackRecord('delivery_unreachable'))
 		})
 
-		it('a pinned card (the canary replica) paints the options face too, with an options record that names its pin', async () => {
+		it('a pinned card (the canary replica): nothing, with a record that names its pin and the outage', async () => {
 			delivery.respond(() => json({ error: 'boom' }, 500))
-			const html = await renderToHtml(
+			const html = await expectUnreachable(
 				card({
 					builderContext: {
 						content: { id: ENTRY_ID },
@@ -512,19 +519,18 @@ describe('with the delivery marker: the envelope face', () => {
 					},
 				}),
 			)
-			expect(chromeRoot(html)).not.toBeNull()
-			expect(html).toContain(OPTIONS_MEMO)
 			expect(seedOf(html)).toEqual({
-				...fallbackRecord('options'),
+				...fallbackRecord('delivery_unreachable'),
 				design: { version: 4, brand: 'staging-shopify-canary' },
 			})
 			expect(delivery.calls).toEqual([`${DELIVERY_URL}?design=4&designBrand=staging-shopify-canary`])
 		})
 
-		it('the card runtime waits 8s (the verifier defaults to 3s), and serves a certificate 5 minutes past its TTL', () => {
+		it('the card runtime waits 8s (the verifier defaults to 3s); a certificate is fresh 30 s and served 30 s past that', () => {
 			restore()
 			expect(CARD_DELIVERY_TIMEOUT_MS).toBe(8_000)
-			expect(CARD_DELIVERY_STALE_MS).toBe(300_000)
+			expect(CARD_DELIVERY_TTL_MS).toBe(30_000)
+			expect(CARD_DELIVERY_STALE_MS).toBe(30_000)
 			expect(cardDeliveryRuntime().timeoutMs).toBe(CARD_DELIVERY_TIMEOUT_MS)
 			restore = setCardDeliveryRuntimeForTests({ fetchImpl: () => delivery.fetch })
 			expect(cardDeliveryRuntime().timeoutMs).toBe(CARD_DELIVERY_TIMEOUT_MS)
@@ -559,10 +565,11 @@ describe('with the delivery marker: the envelope face', () => {
 
 		it('an expiry lands at expiresAt without a refetch', async () => {
 			const payload = issuer.envelope().payload
-			const expiresAt = new Date(T0 + 30_000).toISOString()
+			// Inside the cached read's TTL, so the expiry is the payload's own, judged at the render's clock.
+			const expiresAt = new Date(T0 + CARD_DELIVERY_TTL_MS - 10_000).toISOString()
 			delivery.respond(() => json(deliveryBody(issuer.envelope({ lifecycle: { ...payload.lifecycle, expiresAt } }))))
 			expect(chromeRoot(await renderToHtml(card()))).not.toBeNull()
-			clock = T0 + 31_000
+			clock = T0 + CARD_DELIVERY_TTL_MS - 9_000
 			expect(chromeRoot(await renderToHtml(card()))).toBeNull()
 			expect(delivery.calls).toHaveLength(1)
 		})
@@ -571,11 +578,11 @@ describe('with the delivery marker: the envelope face', () => {
 			expect(chromeRoot(await renderToHtml(card()))).not.toBeNull()
 			const tombstone = await issuer.tombstone()
 			delivery.respond(() => json(tombstone))
-			clock = T0 + 30_000
+			clock = T0 + CARD_DELIVERY_TTL_MS - 1_000
 			expect(chromeRoot(await renderToHtml(card()))).not.toBeNull()
 			expect(delivery.calls).toHaveLength(1)
 			// Past the TTL the cached certificate paints once more, at once, while ONE refresh reads the tombstone.
-			clock = T0 + 61_000
+			clock = T0 + CARD_DELIVERY_TTL_MS + 1_000
 			expect(chromeRoot(await renderToHtml(card()))).not.toBeNull()
 			expect(delivery.calls).toHaveLength(2)
 			await eventually((html) => expect(chromeRoot(html)).toBeNull())
@@ -587,7 +594,7 @@ describe('with the delivery marker: the envelope face', () => {
 			delivery.respond(() =>
 				json(deliveryBody(issuer.envelope(), { ...ELF_LIKE_DEF, v: 5, tokens: { accentColor: '#e6007e' } })),
 			)
-			clock = T0 + 61_000
+			clock = T0 + CARD_DELIVERY_TTL_MS + 1_000
 			expect(await renderToHtml(card())).toContain('--ba:#000000')
 			await eventually((after) => {
 				expect(after).toContain('--ba:#e6007e')
@@ -595,26 +602,31 @@ describe('with the delivery marker: the envelope face', () => {
 			})
 		})
 
-		it('CertREV down past the TTL: the verified card keeps painting for up to 5 minutes, then the options face', async () => {
+		it('CertREV down past the TTL: the verified card keeps painting 30 s more, then nothing (never stale forever)', async () => {
 			expect(await renderToHtml(card())).toContain('I reviewed the retinol claims')
 			delivery.respond(() => json({ error: 'boom' }, 500))
-			clock = T0 + 61_000
+			clock = T0 + CARD_DELIVERY_TTL_MS + 1_000
 			expect(await renderToHtml(card())).toContain('I reviewed the retinol claims')
+			// The failed refreshes keep the stale entry, but never move its end.
 			await eventually((html) => expect(html).toContain('I reviewed the retinol claims'))
-			clock = T0 + 60_000 + 299_000
+			clock = T0 + CARD_DELIVERY_TTL_MS + CARD_DELIVERY_STALE_MS - 1_000
 			expect(await renderToHtml(card())).toContain('I reviewed the retinol claims')
-			clock = T0 + 60_000 + 300_000
+			clock = T0 + CARD_DELIVERY_TTL_MS + CARD_DELIVERY_STALE_MS
 			const after = await renderToHtml(card())
-			expect(after).toContain(OPTIONS_MEMO)
-			expect(seedOf(after)).toEqual(fallbackRecord('options'))
+			expect(chromeRoot(after)).toBeNull()
+			expectNoExportTimeFact(after)
+			expect(seedOf(after)).toEqual(fallbackRecord('delivery_unreachable'))
+			// And it stays nothing while CertREV stays down, however long.
+			clock = T0 + 3_600_000
+			expect(chromeRoot(await renderToHtml(card()))).toBeNull()
 		})
 
-		it('a failed read paints the options face, and is retried after the short negative TTL', async () => {
+		it('a failed read prints nothing, and is retried after the short negative TTL', async () => {
 			delivery.respond(() => json({ error: 'boom' }, 500))
-			expect(seedOf(await renderToHtml(card()))).toEqual(fallbackRecord('options'))
+			expect(seedOf(await renderToHtml(card()))).toEqual(fallbackRecord('delivery_unreachable'))
 			delivery.respond(() => json(deliveryBody(issuer.envelope())))
 			clock = T0 + 4_000
-			expect(seedOf(await renderToHtml(card()))).toEqual(fallbackRecord('options'))
+			expect(seedOf(await renderToHtml(card()))).toEqual(fallbackRecord('delivery_unreachable'))
 			expect(delivery.calls).toHaveLength(1)
 			clock = T0 + 6_000
 			expect(await renderToHtml(card())).toContain('I reviewed the retinol claims')

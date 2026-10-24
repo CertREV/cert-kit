@@ -296,13 +296,14 @@ brand's render-def (accent / surface / corners / font + v2 bar-ink / body-ink).
 the card's design, copy, layout, schema, memo fold or dialogs ships from CertREV with no package release and no install
 on your side. The upgrade is two edits, made once:
 
-1. `@certrev/cert-block` `^2.0.0`. Keep the registration line as it is: same import, same `certRevCertComponent`,
-   same block name (`CertREV Cert`), same inputs, no new prop, no config.
+1. `@certrev/cert-block` `^2.0.1` (2.0.1 is a drop-in on 2.0.0: see "2.0.1" below). Keep the registration line as it
+   is: same import, same `certRevCertComponent`, same block name (`CertREV Cert`), same inputs, no new prop, no config.
 2. Four sources in the storefront's Content-Security-Policy, and nothing else from CertREV:
 
    ```
    script-src  https://portal.certrev.com     (the hosted card runtime: dialogs, revalidation)
-   connect-src https://portal.certrev.com     (the card's read after an in-app navigation; the runtime's revalidation)
+   connect-src https://portal.certrev.com     (the card's read after an in-app navigation; the runtime's revalidation;
+                                              2.0.1: the card's beacon)
    font-src    https://assets.certrev.com     (the card's fonts)
    img-src     https://assets.certrev.com     (reviewer photos)
    ```
@@ -342,7 +343,8 @@ page keeps one card when a brand changes its design. A sidebar card's float is l
 card print it again from the seed after re-checking it. A card the client mounts with no record on the page (an in-app
 navigation, Builder's editor) reads the Delivery API once (`clientRead`, on by default from 2.0.0; `clientRead={false}`
 restores 1.3.1's no-read behaviour), prints the card and attaches its roots (`setHTMLUnsafe`, else from each template),
-and loads the runtime once. A read your policy blocks paints the block's options face, as 1.3.1 did.
+and loads the runtime once. A read your policy blocks prints nothing and reports `delivery_unreachable` (2.0.1; 2.0.0
+painted the block's options face, as 1.3.1 did).
 
 **React 19 hosts and readers with JavaScript off.** React 19 streams a Suspense boundary larger than its
 `progressiveChunkSize` (12,800 bytes by default) after the page's shell, even when it is ready at once, and only a script
@@ -357,17 +359,45 @@ import { CARD_FALLBACK_EVENT, type CardFallbackDetail } from '@certrev/cert-bloc
 
 document.addEventListener(CARD_FALLBACK_EVENT, (e) => {
 	const { reason, externalId, certId } = (e as CustomEvent<CardFallbackDetail>).detail
-	// reason: card_missing | card_verify_failed | card_unsupported_contract | card_pin_mismatch | unknown_key | delivery_unreachable
+	// reason: card_missing | card_verify_failed | card_unsupported_contract | card_pin_mismatch | unknown_key
+	//       | delivery_unreachable | no_marker | marker_invalid | client_read_off (the last three: 2.0.1)
 })
 ```
 
-once per placement and reason per page; on a server, one `console.warn` line `[certrev] card_fallback {json}`. The card
-itself sends nothing anywhere (no beacon, no storage, no cookie: its reads use `credentials: 'omit'`).
+once per placement and reason per page; on a server, one `console.warn` line `[certrev] card_fallback {json}`. 2.0.1:
+each report is also a beacon to CertREV (below); the card stores nothing and sends no cookie (`credentials: 'omit'`).
 
 **Key rotation needs no reinstall.** The baked kid (`cert-issuer-1`) verifies as before. An envelope signed by any
 other kid makes one read of `https://portal.certrev.com/api/cert/v1/keys`, a key set the card accepts only when the baked
 kid signs it (and it is not older than one already accepted, and still lists its signer). Otherwise the kid is unknown
 and the card renders nothing, as in 1.3.x.
+
+### 2.0.1: e.l.f.'s one install
+
+A drop-in on 2.0.0 (same package, export, registration, inputs and CSP). What changes on a page:
+
+- **Nothing, never unsigned facts.** A block with no delivery marker (`no_marker`), a marker this client does not
+  accept (`marker_invalid`), CertREV not reached with no verified answer inside the stale window
+  (`delivery_unreachable`), and a client mount with `clientRead={false}` (`client_read_off`) print **nothing** and
+  report it. Through 2.0.0 those painted the block's export-time options (a reviewer name, a credential, a memo, a
+  verify link that nobody signed); that face is gone. Every section below that still describes "the options face"
+  describes 1.x to 2.0.0; 2.0.1 prints nothing there. The signed paths are unchanged.
+- **Stale window: 30 s fresh, 30 s stale** (2.0.0: 60 s and 300 s): with the Delivery API's own cache a revoked card is
+  gone within five to six minutes (ADR 0001 §7); past the window a read that cannot reach CertREV prints nothing.
+- **A beacon to CertREV**: each fallback, and one health event on one page view in a hundred, as a `POST <delivery
+  origin>/api/cert/v1/beacon` `text/plain` JSON body `{v:1, client:'cert-block', clientVersion, contract,
+  platform:'builder', externalId, family, events:[{kind, reason, outcome}]}`. No cookies, no page address or text, no
+  user agent beyond a family. At most three per page; on a server, each placement and reason once an hour per process.
+  It goes to the delivery origin, already in `connect-src`: no new CSP source.
+- **Forward compatible**: unknown parts, unknown fields and new keys under contract 1 are ignored; a newer major prints
+  nothing (`card_unsupported_contract`) and the page renders around it.
+- **Placement hints**: once the page has loaded, each banner part moves to the place the document's `placement` names
+  among the Builder entry's top-level blocks: `content-start` (after a leading image with `after: 'leading-media'`),
+  `after-byline`, `before-references` (else `content-end`), `content-end`. Mark your byline with
+  `data-certrev-anchor="byline"` to make `after-byline` exact; otherwise the first `[rel~="author"]`,
+  `[itemprop="author"]`, `.byline`, `[class*="byline"]` or `address` in the entry is taken. An anchor the page lacks,
+  or one this client does not know, leaves the part where the editor put it, as JavaScript off does. Rails and pills
+  never move.
 
 ### The reader face (1.2.0, opt-in)
 
@@ -986,7 +1016,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`2.0.0`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`2.0.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.

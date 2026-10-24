@@ -34,7 +34,9 @@
  */
 
 import * as React from 'react'
+import { maybeSendBrowserHealth } from './card-beacon.js'
 import { type CardDocumentV1, type CardPartName, cardCarriesAssets, cardHtml } from './card-contract.js'
+import { afterPageSettles, applyCardPlacement } from './card-placement.js'
 import { SEED_ATTRIBUTE } from './ssr-seed.js'
 
 /** The global the hosted runtime sets once it has started (`Symbol.for('certrev.card-runtime')` on `document`). */
@@ -124,6 +126,8 @@ export function ContractCardFace(props: {
 	readonly names: readonly CardPartName[]
 	/** The record that names this card (`ssr-seed.ts`): the browser repaints it from here with no read. */
 	readonly seed: string
+	/** 2.0.1: the delivery origin the block read, where its sampled health beacon goes (`card-beacon.ts`). */
+	readonly origin?: string
 }) {
 	const ref = React.useRef<HTMLDivElement>(null)
 	const html = cardHtml(props.card, props.names)
@@ -135,6 +139,20 @@ export function ContractCardFace(props: {
 		attachCardRoots(wrapper, html)
 		if (carriesAssets) injectCardRuntime(card)
 	}, [html, card, carriesAssets])
+	const { origin } = props
+	React.useEffect(() => {
+		maybeSendBrowserHealth(origin, card.subject.externalId)
+	}, [origin, card])
+	// 2.0.1: the document's placement hints, once the page has settled (`card-placement.ts`). Keyed on the printed HTML,
+	// which the document and the parts decide, so a re-render that prints the same card moves nothing again.
+	const placing = React.useRef({ card, names: props.names })
+	placing.current = { card, names: props.names }
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `html` is the trigger on purpose; the document and parts are read from the ref
+	React.useEffect(() => {
+		const wrapper = ref.current
+		if (!wrapper) return
+		return afterPageSettles(() => applyCardPlacement(wrapper, placing.current.card, placing.current.names))
+	}, [html])
 	const wrapper = (
 		<div
 			ref={ref}

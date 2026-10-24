@@ -5,6 +5,47 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 2.0.1 · 2026-10-25
+
+**e.l.f.'s one install.** A drop-in on 2.0.0: same package, same `certRevCertComponent` and registration (`CertREV
+Cert`, the same 22 inputs), no new prop, no new peer dependency, and the same four Content-Security-Policy sources (the
+beacon below goes to the delivery origin `connect-src` already allows). Everything that can change later comes from
+CertREV's server.
+
+- **Nothing, never unsigned facts.** Every path that painted the block's export-time options (a reviewer name, a
+  credential, a memo, a verify link nobody signed) now prints **nothing** and reports why: a block with no delivery
+  marker (`no_marker`), a marker this client does not accept or a block with no Builder entry (`marker_invalid`),
+  CertREV not reached with no verified answer inside the stale window (`delivery_unreachable`, also for a page whose
+  2.0.0 server wrote an `'options'` record), and a client mount with `clientRead={false}` and no server answer
+  (`client_read_off`). The signed paths are unchanged: a contract-1 card prints CertREV's document; an envelope with
+  no `contract` key paints the 1.3.x face from its SIGNED facts, as 2.0.0 did. The options-face renderer is gone; the
+  inputs stay registered (an entry that carries them still loads) and are not read.
+- **A stale window inside the revocation SLA.** A verified answer is fresh for 30 s and may still paint for 30 s more
+  while it is refreshed or CertREV is down (2.0.0: 60 s and 300 s), so the card adds at most a minute to the Delivery
+  API's own cache and a revoked card is gone within ADR 0001 §7's five to six minutes (2.0.0 stacked to about twelve).
+  Past the window a read that cannot reach CertREV prints nothing; stale is never served indefinitely.
+- **A beacon to CertREV** (`card-beacon.ts`). Each fallback, and one health event on one page view in a hundred, is a
+  `POST <delivery origin>/api/cert/v1/beacon` with a `text/plain` JSON body: `{v:1, client:'cert-block',
+  clientVersion, contract, platform:'builder', externalId, family, events:[{kind, reason, outcome}]}`. No cookies
+  (`credentials: 'omit'`), no page address or text, no user agent beyond a family (chromium, webkit, gecko, other,
+  server). At most three per page in the browser (`fetch`, `no-cors`, `keepalive`); on a server, each placement and
+  reason at most once an hour per process, with a 1.5 s deadline, never awaited. A beacon that fails is dropped; it
+  never changes what prints. The same shape serves the WordPress plugin 2.0.1 and the hosted runtime.
+- **Forward compatible.** Unknown parts, unknown fields and new keys in known objects (how CertREV ships a minor change
+  under contract 1) are ignored and the card prints as before; a newer major (`contract` 2 or later in the signed
+  binding) prints nothing and reports `card_unsupported_contract` (beacon outcome `unsupported`); the page around it
+  always renders.
+- **Placement hints** (`card-placement.ts`). After the page has loaded, the block moves each banner part to the place
+  `card.placement` names among the Builder entry's top-level blocks: `content-start` (after a leading image when
+  `after: 'leading-media'`), `after-byline` (an element marked `data-certrev-anchor="byline"`, else the first
+  `[rel~="author"]`, `[itemprop="author"]`, `.byline`, `[class*="byline"]` or `address`), `before-references` (else
+  `content-end`), `content-end`. An unknown anchor, `pinned`, or an anchor the page does not have leaves the part where
+  the editor put it; with JavaScript off every part is where the editor put it. A sidebar's rail and a floating pill
+  never move. So CertREV can put the reviewer right after the byline and the memo at the end of the article with no
+  install.
+- Dialogs are the document's own (`card.dialogs`): nothing in the package draws, styles or names them, so a redesign
+  of CertREV's profile and certificate dialogs needs no client change.
+
 ## 2.0.0 · 2026-10-21
 
 Major: **the contract-v1 Builder client. Install it once; from then on every visual, copy, layout, schema, fold and

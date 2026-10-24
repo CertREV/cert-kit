@@ -203,11 +203,13 @@ describe('a client mount with no record on the page (an in-app navigation)', () 
 		}
 	})
 
-	it('a read the page’s policy blocks: the options face, as 1.3.1 paints it, and delivery_unreachable reported once', async () => {
+	it('a read the page’s policy blocks: nothing (2.0.1; through 2.0.0 the options face), and delivery_unreachable reported once', async () => {
 		browser()
 		const container = await clientMount(block())
 		expect(container.querySelector('certrev-card')).toBeNull()
-		expect(container.querySelector('[data-certrev-cert-chrome]')).not.toBeNull()
+		expect(container.querySelector('[data-certrev-cert-chrome]')).toBeNull()
+		const record = parseFallback(container.querySelector(`[${SEED_ATTRIBUTE}]`)?.getAttribute(SEED_ATTRIBUTE) ?? '')
+		expect(record).toMatchObject({ face: 'none', reason: 'delivery_unreachable' })
 		expect(events.map((e) => e.detail)).toEqual([
 			{ reason: 'delivery_unreachable', platform: 'builder', externalId: ENTRY_ID },
 		])
@@ -226,12 +228,15 @@ describe('a client mount with no record on the page (an in-app navigation)', () 
 		])
 	})
 
-	it('`clientRead={false}` keeps 1.3.1’s behaviour: no read, the options face', async () => {
+	it('`clientRead={false}`: no read, and nothing (2.0.1; through 2.0.0 the options face), client_read_off reported once', async () => {
 		const calls = browser(contractBody(issuer, contractFixture('banner-elf-like')))
 		const container = await clientMount(block({ clientRead: false }))
 		expect(calls).toEqual([])
 		expect(container.querySelector('certrev-card')).toBeNull()
-		expect(container.querySelector('[data-certrev-cert-chrome]')).not.toBeNull()
+		expect(container.innerHTML).toBe('')
+		expect(events.map((e) => e.detail)).toEqual([
+			{ reason: 'client_read_off', platform: 'builder', externalId: ENTRY_ID },
+		])
 	})
 })
 

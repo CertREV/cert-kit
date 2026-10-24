@@ -6,15 +6,14 @@
  * `delivery-card.test.tsx` does. What is pinned:
  *  - a pinned card reads the pinned Delivery URL and paints ONLY a reader def at exactly the pinned version;
  *  - every other answer (another version, no def, another face, a 404) paints nothing, never the live design;
- *  - a 503 (CertREV not reached) paints the block's own options face, as an unpinned card does since 1.2.0, with a
- *    record that names the pin and says `options`, never the live design;
+ *  - a 503 (CertREV not reached) prints nothing (2.0.1; 1.2.0 to 2.0.0 painted the block's options face), as an
+ *    unpinned card does, with a record that names the pin and the outage, never the live design;
  *  - a pin that cannot be read paints nothing and never fetches, and so does a pin on a block without the marker;
  *  - no pin (no context, an empty context, a null pin) is the unpinned card, byte for byte.
  */
 
-import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
 import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
 import {
@@ -37,10 +36,6 @@ import {
 import { RAW_DEFS } from './legacy-face-cases.js'
 import { OPTIONS_ONLY_SHAPES } from './options-only-shapes.js'
 
-const GOLDEN = JSON.parse(readFileSync(new URL('./__golden__/options-only-1.0.3.json', import.meta.url), 'utf8')) as {
-	golden: Record<string, string>
-}
-
 /** The reader def the harness serves: `face: 'reader'` at v 2. */
 const READER_DEF = RAW_DEFS['face-reader'] as { v: number }
 const BRAND = 'staging-shopify-canary'
@@ -50,6 +45,7 @@ describe('the design pin on the delivery card', () => {
 	let issuer: FixtureIssuer
 	let delivery: ScriptedDelivery
 	let restore: () => void
+	let warn: ReturnType<typeof vi.spyOn>
 
 	const card = (pin?: unknown, overrides: Partial<CertReviewCardProps> = {}) => (
 		<CertReviewCard
@@ -80,8 +76,13 @@ describe('the design pin on the delivery card', () => {
 			now: () => T0,
 			timeoutMs: 200,
 		})
+		// The server's one-line fallback reports (2.0.1: a block with no marker and CertREV not reached are reported).
+		warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 	})
-	afterEach(() => restore())
+	afterEach(() => {
+		restore()
+		warn.mockRestore()
+	})
 
 	it('a pinned card reads the pinned URL and paints the reader def at that version', async () => {
 		const html = await renderToHtml(card({ design: '2', designBrand: BRAND }))
@@ -168,7 +169,8 @@ describe('the design pin on the delivery card', () => {
 			)
 			expect(renderToStaticMarkup(pinned({ design: '2' }))).toBe('')
 			expect(renderToStaticMarkup(pinned({ designBrand: BRAND }))).toBe('')
-			expect(renderToStaticMarkup(<CertReviewCard {...props} />)).toBe(GOLDEN.golden.todaysExport)
+			// 2.0.1: and without a pin, the same block prints nothing too (no export-time options face).
+			expect(renderToStaticMarkup(<CertReviewCard {...props} />)).toBe('')
 			expect(delivery.calls).toEqual([])
 		})
 
@@ -178,13 +180,17 @@ describe('the design pin on the delivery card', () => {
 		})
 	})
 
-	it('a 503 (CertREV not reached) paints the options face, as the unpinned card does, with a record naming the pin', async () => {
+	it('a 503 (CertREV not reached) prints nothing, as the unpinned card does, with a record naming the pin and the outage', async () => {
 		delivery.respond(() => json({ error: 'unavailable' }, 503))
 		const pinned = await renderToHtml(card({ design: '2', designBrand: BRAND }))
-		expect(chromeRoot(pinned)).not.toBeNull()
-		expect(pinned).toContain('Dr. Jane Doe')
+		expect(chromeRoot(pinned)).toBeNull()
+		expect(pinned).not.toContain('Dr. Jane Doe')
 		expect(pinned).not.toContain('data-certrev-face="reader"')
-		expect(seedOf(pinned)).toMatchObject({ face: 'options', design: { version: 2, brand: BRAND } })
+		expect(seedOf(pinned)).toMatchObject({
+			face: 'none',
+			reason: 'delivery_unreachable',
+			design: { version: 2, brand: BRAND },
+		})
 		serve(READER_DEF)
 		delivery.respond(() => json({ error: 'unavailable' }, 503))
 		const unpinned = await renderToHtml(card(undefined))
@@ -212,11 +218,9 @@ describe('the design pin on the delivery card', () => {
 			expect(await renderToHtml(card(undefined))).toContain('data-certrev-def-version="9"')
 		})
 
-		it('an options-only block with an empty context paints the 1.0.3 face', () => {
+		it('an options-only block with an empty context prints nothing (2.0.1: no export-time options face)', () => {
 			const props = { ...OPTIONS_ONLY_SHAPES.todaysExport, builderContext: { content: { id: ENTRY_ID }, context: {} } }
-			expect(renderToStaticMarkup(<CertReviewCard {...(props as CertReviewCardProps)} />)).toBe(
-				GOLDEN.golden.todaysExport,
-			)
+			expect(renderToStaticMarkup(<CertReviewCard {...(props as CertReviewCardProps)} />)).toBe('')
 		})
 	})
 

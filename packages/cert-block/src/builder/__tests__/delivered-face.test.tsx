@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CERT_STRINGS_VERSION } from '../../components/render-def.js'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
 import { acceptedFaceDigest, sha256HexUtf8, showsWholeCard } from '../delivered-face.js'
-import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
+import { CARD_DELIVERY_TTL_MS, setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
 import { parseSeed, serializeSeed } from '../ssr-seed.js'
 import {
 	type CaseProps,
@@ -189,8 +189,9 @@ describe('the matching delivery paints the delivered face', () => {
 		delivery.respond(() =>
 			json({ ...issuer.envelope(withFaceDigest(faceDigestFor(next, 5))), renderDef: def, face: next }),
 		)
-		clock = T0 + 61_000
-		// Past the TTL the cached face paints while one refresh runs (1.2.0's stale window); the refresh brings the new one.
+		clock = T0 + CARD_DELIVERY_TTL_MS + 1_000
+		// Past the TTL the cached face paints while one refresh runs (1.2.0's stale window, 2.0.1's 30 s); the refresh brings
+		// the new one.
 		expect(await renderToHtml(card())).toBe(deliveredOutput(CLIENT.seedsWithFace.legacy))
 		let after = ''
 		for (let i = 0; i < 20 && !after.includes('data-certrev-def-version="5"'); i++) after = await renderToHtml(card())
