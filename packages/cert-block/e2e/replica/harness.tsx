@@ -130,6 +130,10 @@ export interface Placement {
 		readonly lifecycle: Record<string, unknown>
 		readonly renderDef: unknown
 	}
+	/** 2.0.1: the document's placement hints, replacing the fixture's (the document is re-digested and re-signed). */
+	readonly placement?: Record<string, unknown>
+	/** 2.0.1: the Delivery API answers this entry 503 (CertREV not reached). */
+	readonly unreachable?: boolean
 }
 
 export interface CertrevSide {
@@ -143,6 +147,10 @@ export interface CertrevSide {
 	readonly cardRoute: Map<string, unknown>
 	/** Revoke a placement: the card route answers its signed tombstone from now on (the delivery's cache is untouched). */
 	revoke(entryId: string): Promise<void>
+	/** 2.0.1: the entries the Delivery API answers 503. */
+	readonly unreachable: ReadonlySet<string>
+	/** 2.0.1: every beacon body the browser posted to `/api/cert/v1/beacon`, as sent. */
+	readonly beacons: string[]
 }
 
 function asTestKey(issuer: FixtureIssuer): TestKey {
@@ -177,6 +185,10 @@ export function certrevSide(placements: readonly Placement[]): CertrevSide {
 		} else {
 			fixture = documentFor(p.fixture, p.entryId, runtime).fixture
 		}
+		if (p.placement) {
+			const card = { ...fixture.card, placement: p.placement } as unknown as CardDocumentV1
+			fixture = { ...fixture, card, doc: createHash('sha256').update(canonicalizeJson(card)).digest('hex') }
+		}
 		const payload = contractPayload(fixture, contractBinding(fixture), { subject: builderSubject(p.entryId) })
 		const envelope = (p.rotated ? rotated : baked).signPayload(payload)
 		bodies.set(p.entryId, { ...envelope, renderDef: fixture.renderDef, card: fixture.card })
@@ -184,7 +196,10 @@ export function certrevSide(placements: readonly Placement[]): CertrevSide {
 		cardRoute.set(p.entryId, { envelope, card: fixture.card })
 	}
 	const keySet = keySetBody(keySetObject([asTestKey(baked), asTestKey(rotated)]), asTestKey(baked))
+	const unreachable = new Set(placements.filter((p) => p.unreachable).map((p) => p.entryId))
 	return {
+		unreachable,
+		beacons: [],
 		baked,
 		rotated,
 		bodies,
@@ -218,6 +233,7 @@ export function certrevFetch(side: CertrevSide): typeof fetch {
 		}
 		const delivery = /^\/api\/cert\/v1\/delivery\/builder\/([^/]+)$/.exec(url.pathname)
 		if (delivery) {
+			if (side.unreachable.has(decodeURIComponent(delivery[1]))) return json({ error: 'unavailable' }, 503)
 			const body = side.bodies.get(decodeURIComponent(delivery[1]))
 			return body ? json(body) : json({ error: 'not_found' }, 404)
 		}
@@ -245,6 +261,12 @@ export async function routeCertrev(page: Page, side: CertrevSide, requests: stri
 	const portal = certrevFetch(side)
 	await page.route(`${DELIVERY_ORIGIN}/**`, async (route: Route) => {
 		requests.push(route.request().url())
+		// 2.0.1: the card's beacon, as the portal's endpoint answers it (`POST /api/cert/v1/beacon`, 204).
+		if (route.request().method() === 'POST' && new URL(route.request().url()).pathname === '/api/cert/v1/beacon') {
+			side.beacons.push(route.request().postData() ?? '')
+			await route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' } })
+			return
+		}
 		const res = await portal(route.request().url())
 		await route.fulfill({
 			status: res.status,

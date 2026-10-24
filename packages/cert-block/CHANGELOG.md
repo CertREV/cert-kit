@@ -43,6 +43,13 @@ CertREV's server.
   the editor put it; with JavaScript off every part is where the editor put it. A sidebar's rail and a floating pill
   never move. So CertREV can put the reviewer right after the byline and the memo at the end of the article with no
   install.
+- **The page's CertREV graph.** When the document carries `jsonld.graph` (a complete JSON-LD object CertREV's server
+  resolved for the placement: the Certification, its reviewer and CertREV, and the page's WebPage and Article; an
+  additive key under contract 1), the block that carries the page's assets prints it verbatim, once per page, as
+  `<script type="application/ld+json" data-certrev-graph data-certrev-external-id="<entry>">` (every `<` written as
+  `\u003c`). A document without it prints no graph. The block never builds or edits the graph; schema changes are the
+  server's. (1.x's rule that a page-builder block owns no structured data held while the block had to build the graph
+  itself; now it only prints the server's.)
 - Dialogs are the document's own (`card.dialogs`): nothing in the package draws, styles or names them, so a redesign
   of CertREV's profile and certificate dialogs needs no client change.
 

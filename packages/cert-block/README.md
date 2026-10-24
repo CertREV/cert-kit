@@ -398,6 +398,10 @@ A drop-in on 2.0.0 (same package, export, registration, inputs and CSP). What ch
   `[itemprop="author"]`, `.byline`, `[class*="byline"]` or `address` in the entry is taken. An anchor the page lacks,
   or one this client does not know, leaves the part where the editor put it, as JavaScript off does. Rails and pills
   never move.
+- **The page's CertREV graph**: when the document carries `jsonld.graph` (resolved by CertREV's server for the
+  placement), the block that carries the page's assets prints it once as `<script type="application/ld+json"
+  data-certrev-graph>`; without it, no graph. The block never builds the graph (the "card emits no structured data" rule
+  below describes 1.x's own face).
 
 ### The reader face (1.2.0, opt-in)
 
