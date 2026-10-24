@@ -5,9 +5,18 @@
  * block that carries the page's assets, and never builds or edits it; a document without it prints no graph.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { canonicalizeJson } from '@certrev/cert-contract'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type CardDocumentV1, cardGraphTag, cardHtml } from '../card-contract.js'
+import {
+	type CardDocumentV1,
+	cardDocumentDigest,
+	cardGraphTag,
+	cardHtml,
+	cardPartsFor,
+	parseCardDocument,
+} from '../card-contract.js'
 import { CertReviewCard } from '../cert-review-card.js'
 import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
 import { contractBinding, contractBody, contractFixture } from './contract-v1-shapes.js'
@@ -119,5 +128,48 @@ describe('a contract-1 placement whose document carries the graph', () => {
 		const body = (scripts[0] ?? '').replace(/^<script[^>]*>/, '').replace(/<\/script>$/, '')
 		expect(JSON.parse(body)).toEqual(GRAPH)
 		expect(warn).not.toHaveBeenCalled()
+	})
+})
+
+describe('the portal’s own Builder document with its graph (s1/builder-card-graph 302c3dd0fd)', () => {
+	const fixture = JSON.parse(
+		readFileSync(
+			join(process.cwd(), 'src/builder/__tests__/__fixtures__/contract-v1/builder-card-with-graph.json'),
+			'utf8',
+		),
+	) as { doc: string; card: CardDocumentV1 & { jsonld: { graph: unknown } } }
+
+	it('its digest is the one the portal signs; its test-environment runtime URL is refused (runtime from certrev.com only, break-it B7)', async () => {
+		expect(await cardDocumentDigest(fixture.card)).toBe(fixture.doc)
+		// The portal's unit tests serve the runtime from http://localhost:3000; staging and production from
+		// https://(staging.)portal.certrev.com, which this client accepts (the live canary cards, evidence/staging/).
+		expect(fixture.card.assets.runtime?.src.startsWith('http://localhost')).toBe(true)
+		expect(parseCardDocument(fixture.card)).toBeNull()
+		const served = {
+			...fixture.card,
+			assets: {
+				...fixture.card.assets,
+				runtime: {
+					...fixture.card.assets.runtime,
+					src: 'https://portal.certrev.com/api/cert/v1/runtime/card-runtime.6bd3e6a563e0408a.js',
+				},
+			},
+		}
+		expect(parseCardDocument(served)).not.toBeNull()
+	})
+
+	it('prints its graph once, verbatim, with no < inside the element', () => {
+		const names = cardPartsFor(fixture.card, undefined)
+		const html = cardHtml(fixture.card, names)
+		const tags =
+			html.match(/<script type="application\/ld\+json" data-certrev-graph="[^"]*"[^>]*>[\s\S]*?<\/script>/g) ?? []
+		expect(tags).toHaveLength(1)
+		const body = (tags[0] ?? '').replace(/^<script[^>]*>/, '').replace(/<\/script>$/, '')
+		expect(body).not.toContain('<')
+		expect(JSON.parse(body)).toEqual(fixture.card.jsonld.graph)
+		expect(JSON.stringify(fixture.card.jsonld.graph)).not.toMatch(/"\$(link|page)"/)
+		// Everything else the block prints is the document's own bytes, as before.
+		expect(html.startsWith(fixture.card.assets.head)).toBe(true)
+		for (const name of names) expect(html).toContain(fixture.card.parts[name] as string)
 	})
 })
