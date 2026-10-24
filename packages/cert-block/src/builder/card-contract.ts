@@ -299,9 +299,31 @@ export function cardCarriesAssets(card: CardDocumentV1, names: readonly CardPart
 }
 
 /**
+ * 2.0.1: the page's CertREV graph, when the document carries one CertREV's server resolved for this placement
+ * (`card.jsonld.graph`: a complete JSON-LD object, every link and page fact filled in, an additive key under contract
+ * 1). Printed verbatim as `<script type="application/ld+json" data-certrev-graph ...>`, with every `<` written as
+ * `\u003c` so no value can close the element; '' when the document has no graph. The block never builds or edits the
+ * graph: what it says, and when it changes, is the server's.
+ */
+export function cardGraphTag(card: CardDocumentV1): string {
+	const jsonld = (card as unknown as { jsonld?: unknown }).jsonld
+	if (typeof jsonld !== 'object' || jsonld === null) return ''
+	const graph = (jsonld as { graph?: unknown }).graph
+	if (typeof graph !== 'object' || graph === null || Array.isArray(graph)) return ''
+	let json: string
+	try {
+		json = JSON.stringify(graph)
+	} catch {
+		return ''
+	}
+	const id = escapeAttribute(card.subject.externalId)
+	return `<script type="application/ld+json" data-certrev-graph="" data-certrev-platform="builder" data-certrev-external-id="${id}">${json.replace(/</g, '\\u003c')}</script>`
+}
+
+/**
  * Exactly what a block prints inside its wrapper: its parts in page order and, only in the block holding the document's
- * first part (`cardCarriesAssets`), the head fragment before them and both dialogs (expert, then certificate) and the
- * runtime's tag after. So a split banner (a header block and a memo block) prints the head, the dialogs and the runtime
+ * first part (`cardCarriesAssets`), the head fragment before them and both dialogs (expert, then certificate), the
+ * runtime's tag and (2.0.1) the page's graph after. So a split banner (a header block and a memo block) prints the head, the dialogs and the runtime
  * once, in the header block, with no coordination between the blocks and with JavaScript off; the runtime finds a
  * control's dialog anywhere on the page by its placement. Every byte but the runtime tag is the document's own.
  */
@@ -310,5 +332,5 @@ export function cardHtml(card: CardDocumentV1, names: readonly CardPartName[]): 
 	for (const name of names) parts += card.parts[name] ?? ''
 	if (!cardCarriesAssets(card, names)) return parts
 	const dialogs = (card.dialogs.expert ?? '') + (card.dialogs.certificate ?? '')
-	return card.assets.head + parts + dialogs + cardRuntimeTag(card)
+	return card.assets.head + parts + dialogs + cardRuntimeTag(card) + cardGraphTag(card)
 }

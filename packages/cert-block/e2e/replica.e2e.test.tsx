@@ -42,6 +42,14 @@ const PLACEMENTS: Placement[] = [
 	{ entryId: 'replica-split', fixture: 'banner-elf-like' },
 	{ entryId: 'replica-next', fixture: 'sidebar-elf-like', rotated: true },
 	{ entryId: 'replica-revoked', fixture: 'sidebar-elf-like' },
+	// 2.0.1: CertREV not reached, and the placement hints (Owen: the reviewer after the byline, the memo at the end).
+	{ entryId: 'replica-unreachable', fixture: 'banner-elf-like', unreachable: true },
+	{
+		entryId: 'replica-placed',
+		fixture: 'banner-elf-like',
+		placement: { top: { anchor: 'after-byline' }, bottom: { anchor: 'content-end' } },
+	},
+	{ entryId: 'replica-hinted', fixture: 'banner-elf-like' },
 	...Object.values(previewParity().cases).map((c) => ({
 		entryId: c.externalId,
 		fixture: 'banner-elf-like' as const,
@@ -63,6 +71,24 @@ const ARTICLES: ReplicaArticle[] = [
 	},
 	{ path: '/blogs/the-elf-word/next', title: 'Next article', entryId: 'replica-next' },
 	{ path: '/blogs/the-elf-word/revoked', title: 'Retinol, revoked', entryId: 'replica-revoked' },
+	{ path: '/blogs/the-elf-word/no-marker', title: 'Retinol, no marker', entryId: 'replica-nomarker', noMarker: true },
+	{ path: '/blogs/the-elf-word/unreachable', title: 'Retinol, CertREV down', entryId: 'replica-unreachable' },
+	{
+		path: '/blogs/the-elf-word/placed',
+		title: 'Retinol, placed by the hints',
+		entryId: 'replica-placed',
+		hero: true,
+		byline: true,
+		cardAt: 2,
+	},
+	{
+		path: '/blogs/the-elf-word/hinted',
+		title: 'Retinol, default hints',
+		entryId: 'replica-hinted',
+		hero: true,
+		references: true,
+		cardAt: 2,
+	},
 	...Object.entries(previewParity().cases).map(([name, c]) => ({
 		path: `/blogs/the-elf-word/preview-${name}`,
 		title: `Retinol, the preview's ${name}`,
@@ -330,15 +356,10 @@ async function exerciseDialogs(
 		const closedByButton = await dialogState(page, part, entryId)
 		results[kind] = { opened, focusOnOpen, tabbed, closed, focusAfter, reopened, closedByButton }
 		expect(opened, `${cell} ${kind}: opened`).toMatchObject({ exists: true, open: true, modal: true })
-		// The dialog that opens is the page's one dialog for this placement: in the control's own wrapper, unless the
-		// control's block prints its part only.
-		const controlWrapper = await control.evaluate((el) =>
-			Array.from(document.querySelectorAll('[data-certrev-face="card"]')).indexOf(
-				((el.getRootNode() as ShadowRoot).host as Element).parentElement as Element,
-			),
-		)
+		// The dialog that opens is the page's one dialog for this placement (2.0.1: a part the document's hints moved
+		// opens the dialog its card block printed). Where a cell knows which wrapper printed it, it says so.
 		expect(opened.hosts, `${cell} ${kind}: one dialog host on the page`).toBe(1)
-		expect(opened.wrapper, `${cell} ${kind}: the page's dialog`).toBe(dialogWrapper ?? controlWrapper)
+		if (dialogWrapper !== undefined) expect(opened.wrapper, `${cell} ${kind}: the page's dialog`).toBe(dialogWrapper)
 		expect(focusOnOpen.inDialog, `${cell} ${kind}: focus moves into the dialog`).toBe(
 			part === 'dialog-expert' ? 'expert' : 'cert',
 		)
@@ -778,4 +799,177 @@ describe('CSP: exactly the four CertREV sources', () => {
 		},
 		120_000,
 	)
+})
+
+/** The entry's top-level blocks in order: the hero, the byline, copy, the card's own block, references, or a holder. */
+async function blockOrder(page: Page, entryId: string): Promise<string[]> {
+	return page.evaluate((id) => {
+		const column = document.querySelector(`[builder-content-id="${id}"] > .builder-blocks`)
+		return Array.from(column?.children ?? []).map((el) => {
+			const placed = el.getAttribute('data-certrev-placed')
+			if (placed) return `placed:${placed}`
+			if (el.querySelector('svg[aria-label="Hero"]')) return 'hero'
+			if (el.querySelector('.byline')) return 'byline'
+			if (el.querySelector('h2')?.textContent === 'References') return 'references'
+			if (el.querySelector('[data-certrev-face="card"]')) return 'card-block'
+			return 'copy'
+		})
+	}, entryId)
+}
+
+/** The beacons the browser posted for an entry, parsed. */
+function beaconsFor(entryId: string): { family: string; events: { reason: string; outcome: string }[] }[] {
+	return side.beacons.map((raw) => JSON.parse(raw)).filter((b) => b.externalId === entryId)
+}
+
+describe('2.0.1: nothing, never unsigned facts; each fallback beacons to CertREV', () => {
+	it.each(
+		VIEWPORTS,
+	)('at $name px a block with no delivery marker prints nothing of its export-time options', async (viewport) => {
+		const w = await open(viewport)
+		try {
+			await w.page.goto(`${server.origin}${article('replica-nomarker').path}`)
+			await settle(w.page)
+			const html = await w.page.content()
+			for (const exportTime of ['Dr. Export Time', 'export-time', 'An unsigned memo'])
+				expect(html).not.toContain(exportTime)
+			expect(await w.page.locator('[data-certrev-cert-chrome]').count()).toBe(0)
+			expect(beaconsFor('replica-nomarker').map((b) => b.events[0])).toEqual([
+				{ kind: 'fallback', reason: 'no_marker', outcome: 'other' },
+			])
+			expect(w.violations).toEqual([])
+			expect(w.errors).toEqual([])
+			await w.page.screenshot({ path: join(OUT, `no-marker-${viewport.name}.png`) })
+			evidence[`no-marker@${viewport.name}`] = { beacons: beaconsFor('replica-nomarker'), chrome: 0 }
+		} finally {
+			side.beacons.length = 0
+			await w.context.close()
+		}
+	})
+
+	it.each(
+		VIEWPORTS,
+	)('at $name px CertREV not reached: nothing, a none record that says why, one beacon', async (viewport) => {
+		const w = await open(viewport)
+		try {
+			await w.page.goto(`${server.origin}${article('replica-unreachable').path}`)
+			await settle(w.page)
+			expect(await w.page.locator('certrev-card').count()).toBe(0)
+			const record = await w.page.evaluate(() =>
+				document.querySelector('[hidden][data-certrev-envelope]')?.getAttribute('data-certrev-envelope'),
+			)
+			expect(JSON.parse(record ?? '{}')).toMatchObject({ face: 'none', reason: 'delivery_unreachable' })
+			expect(beaconsFor('replica-unreachable').map((b) => b.events[0])).toEqual([
+				{ kind: 'fallback', reason: 'delivery_unreachable', outcome: 'unreachable' },
+			])
+			expect(w.violations).toEqual([])
+			expect(w.errors).toEqual([])
+			await w.page.screenshot({ path: join(OUT, `unreachable-${viewport.name}.png`) })
+			evidence[`unreachable@${viewport.name}`] = {
+				record: JSON.parse(record ?? '{}'),
+				beacons: beaconsFor('replica-unreachable'),
+			}
+		} finally {
+			side.beacons.length = 0
+			await w.context.close()
+		}
+	})
+})
+
+describe('2.0.1: the document places its parts (JS on); JS off leaves them where the editor put them', () => {
+	it.each(
+		VIEWPORTS,
+	)('at $name px the hints put the card after the byline and the memo at the end', async (viewport) => {
+		const w = await open(viewport)
+		try {
+			await w.page.goto(`${server.origin}${article('replica-placed').path}`)
+			await settle(w.page)
+			await w.page.waitForSelector('[data-certrev-placed="bottom"]', { timeout: 5_000 })
+			const order = await blockOrder(w.page, 'replica-placed')
+			expect(order).toEqual([
+				'hero',
+				'byline',
+				'placed:top',
+				'copy',
+				'copy',
+				'card-block',
+				'copy',
+				'copy',
+				'copy',
+				'placed:bottom',
+			])
+			// The moved memo (the banner's controls are in it) still opens CertREV's dialog, the page's one in the card block.
+			const control = w.page
+				.locator('[data-certrev-placed="bottom"] certrev-card a[data-certrev-modal-open="expert"]')
+				.first()
+			await control.click()
+			await w.page.waitForTimeout(250)
+			const open = await w.page.evaluate(() => {
+				const dialog = document
+					.querySelector('certrev-card[data-certrev-part="dialog-expert"]')
+					?.shadowRoot?.querySelector('dialog')
+				return { open: !!dialog?.open, modal: dialog?.matches(':modal') ?? false }
+			})
+			expect(open).toEqual({ open: true, modal: true })
+			await w.page.keyboard.press('Escape')
+			await w.page.evaluate(() => window.scrollTo(0, 0))
+			await w.page.screenshot({ path: join(OUT, `placed-${viewport.name}-top.png`) })
+			await w.page.locator('[data-certrev-placed="bottom"]').scrollIntoViewIfNeeded()
+			await w.page.screenshot({ path: join(OUT, `placed-${viewport.name}-end.png`) })
+			expect(w.violations).toEqual([])
+			expect(w.errors).toEqual([])
+			evidence[`placed@${viewport.name}`] = { order, dialog: open }
+		} finally {
+			await w.context.close()
+		}
+	})
+
+	it.each(
+		VIEWPORTS,
+	)('at $name px the default hints: the card after the leading image, the memo before the references', async (viewport) => {
+		const w = await open(viewport)
+		try {
+			await w.page.goto(`${server.origin}${article('replica-hinted').path}`)
+			await settle(w.page)
+			await w.page.waitForSelector('[data-certrev-placed="bottom"]', { timeout: 5_000 })
+			const order = await blockOrder(w.page, 'replica-hinted')
+			expect(order).toEqual([
+				'hero',
+				'placed:top',
+				'copy',
+				'copy',
+				'card-block',
+				'copy',
+				'copy',
+				'copy',
+				'placed:bottom',
+				'references',
+			])
+			expect(w.violations).toEqual([])
+			expect(w.errors).toEqual([])
+			evidence[`hinted@${viewport.name}`] = { order }
+		} finally {
+			await w.context.close()
+		}
+	})
+
+	it('JavaScript off: no part moves; the card is where the editor put it, complete', async () => {
+		const w = await open(VIEWPORTS[0], { js: false })
+		try {
+			// A raised progressiveChunkSize, as a React 19 host passes (README); React 18 inlines the card either way.
+			await w.page.goto(`${server.origin}${article('replica-placed').path}?chunk=big`)
+			await w.page.waitForLoadState('load')
+			const order = await blockOrder(w.page, 'replica-placed')
+			expect(order).toEqual(['hero', 'byline', 'copy', 'copy', 'card-block', 'copy', 'copy', 'copy'])
+			const parts = await w.page.evaluate(() =>
+				Array.from(document.querySelectorAll('[data-certrev-face="card"] > certrev-card')).map((h) =>
+					h.getAttribute('data-certrev-part'),
+				),
+			)
+			expect(parts).toEqual(['top', 'bottom', 'dialog-expert', 'dialog-certificate'])
+			evidence['placed@js-off'] = { order, parts }
+		} finally {
+			await w.context.close()
+		}
+	})
 })

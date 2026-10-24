@@ -56,7 +56,8 @@ export interface CardBeacon {
 /** How a beacon leaves: `url`, the JSON body, and where it is sent from. */
 export type BeaconTransport = (url: string, body: string, where: 'browser' | 'server') => void
 
-const defaultTransport: BeaconTransport = (url, body, where) => {
+/** The transport the card ships with: `fetch`, never awaited, never throwing (exported for CertREV's replica harness). */
+export const fetchBeaconTransport: BeaconTransport = (url, body, where) => {
 	try {
 		const send = globalThis.fetch
 		if (typeof send !== 'function') return
@@ -78,7 +79,7 @@ const defaultTransport: BeaconTransport = (url, body, where) => {
 	}
 }
 
-let transport: BeaconTransport = defaultTransport
+let transport: BeaconTransport = fetchBeaconTransport
 let sentOnPage = 0
 let healthDrawn: boolean | null = null
 const sentOnServer = new Map<string, number>()

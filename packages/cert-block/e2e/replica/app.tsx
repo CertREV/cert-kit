@@ -21,6 +21,16 @@ export interface ReplicaArticle {
 	readonly part?: 'full' | 'header' | 'memo'
 	/** A second CertREV block (a split banner's memo block) after the copy. */
 	readonly memoBlock?: boolean
+	/** 2.0.1: the block carries no delivery marker (an entry exported before 1.1.0). */
+	readonly noMarker?: boolean
+	/** 2.0.1: a leading block that is only an image (the hero), before everything else. */
+	readonly hero?: boolean
+	/** 2.0.1: a byline block (`<p class="byline">`) after the hero. */
+	readonly byline?: boolean
+	/** 2.0.1: a references block after the copy. */
+	readonly references?: boolean
+	/** 2.0.1: how many copy paragraphs come before the CertREV block (0: the block comes first). */
+	readonly cardAt?: number
 }
 
 export const DELIVERY_ORIGIN = 'https://portal.certrev.com'
@@ -50,14 +60,36 @@ function Block(props: { readonly children: React.ReactNode }) {
 	return <div className="builder-block">{props.children}</div>
 }
 
-function CertBlock(props: { readonly entryId: string; readonly part?: ReplicaArticle['part'] }) {
+function CertBlock(props: {
+	readonly entryId: string
+	readonly part?: ReplicaArticle['part']
+	readonly noMarker?: boolean
+}) {
 	return (
 		<Block>
 			<CertReviewCard
-				delivery={{ v: 1, baseUrl: DELIVERY_ORIGIN }}
+				{...(props.noMarker
+					? // An entry exported before 1.1.0: its options and no marker (2.0.0 painted these; 2.0.1 prints nothing).
+						{
+							reviewerName: 'Dr. Export Time',
+							verifyUrl: 'https://certrev.com/verify/export-time',
+							memo: 'An unsigned memo.',
+						}
+					: { delivery: { v: 1, baseUrl: DELIVERY_ORIGIN } })}
 				builderContext={{ content: { id: props.entryId } }}
 				{...(props.part ? { part: props.part } : {})}
 			/>
+		</Block>
+	)
+}
+
+/** A leading block that is only an image, as an article's hero often is. */
+function Hero() {
+	return (
+		<Block>
+			<svg role="img" aria-label="Hero" width="100%" height="120" viewBox="0 0 760 120">
+				<rect width="760" height="120" fill="#e9dfe6" />
+			</svg>
 		</Block>
 	)
 }
@@ -67,14 +99,38 @@ function Article(props: { readonly article: ReplicaArticle }) {
 	return (
 		<article data-replica-entry={article.entryId}>
 			<h1>{article.title}</h1>
-			<div className="builder-blocks">
-				<CertBlock entryId={article.entryId} part={article.part} />
-				{COPY.map((text) => (
-					<Block key={text}>
-						<p>{text}</p>
-					</Block>
-				))}
-				{article.memoBlock ? <CertBlock entryId={article.entryId} part="memo" /> : null}
+			{/* The root `@builder.io/sdk-react` renders for an entry: `[builder-content-id] > .builder-blocks`. */}
+			<div {...{ 'builder-content-id': article.entryId, 'builder-model': 'blog-article' }}>
+				<div className="builder-blocks">
+					{article.hero ? <Hero /> : null}
+					{article.byline ? (
+						<Block>
+							<p className="byline">By Ann Writer, Senior Editor</p>
+						</Block>
+					) : null}
+					{COPY.slice(0, article.cardAt ?? 0).map((text) => (
+						<Block key={text}>
+							<p>{text}</p>
+						</Block>
+					))}
+					<CertBlock entryId={article.entryId} part={article.part} noMarker={article.noMarker} />
+					{COPY.slice(article.cardAt ?? 0).map((text) => (
+						<Block key={text}>
+							<p>{text}</p>
+						</Block>
+					))}
+					{article.memoBlock ? <CertBlock entryId={article.entryId} part="memo" /> : null}
+					{article.references ? (
+						<Block>
+							<h2>References</h2>
+							<ol>
+								<li>
+									Kafi R, et al. Improvement of naturally aged skin with vitamin A (retinol). Arch Dermatol. 2007.
+								</li>
+							</ol>
+						</Block>
+					) : null}
+				</div>
 			</div>
 		</article>
 	)

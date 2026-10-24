@@ -9,6 +9,7 @@
  */
 
 import { hydrateRoot } from 'react-dom/client'
+import { fetchBeaconTransport, setCardBeaconForTests } from '../../src/builder/card-beacon.js'
 import { setCardDeliveryRuntimeForTests } from '../../src/builder/delivery-runtime.js'
 import { App, type ReplicaArticle } from './app.js'
 
@@ -23,6 +24,8 @@ setCardDeliveryRuntimeForTests({
 	fetchImpl: () => globalThis.fetch.bind(globalThis),
 	now: Date.now,
 })
+// The test runtime silences beacons; the replica sends them as a brand's page does (no health draw, so a run is exact).
+setCardBeaconForTests({ transport: fetchBeaconTransport })
 
 hydrateRoot(document, <App articles={__REPLICA__.articles} path={window.location.pathname} />, {
 	onRecoverableError(error) {
