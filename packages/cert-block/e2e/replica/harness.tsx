@@ -345,7 +345,9 @@ async function clientBundle(side: CertrevSide, articles: readonly ReplicaArticle
 				}
 			: {}),
 		define: {
-			'process.env.NODE_ENV': '"production"',
+			// CERT_BLOCK_E2E_CLIENT_ENV=development runs the page on React's development build (what a brand's own dev server
+			// serves), whose hydration checks report what production skips.
+			'process.env.NODE_ENV': JSON.stringify(process.env.CERT_BLOCK_E2E_CLIENT_ENV ?? 'production'),
 			__REPLICA__: JSON.stringify({ kid: side.baked.kid, spki: asTestKey(side.baked).spki, articles }),
 		},
 		logLevel: 'silent',

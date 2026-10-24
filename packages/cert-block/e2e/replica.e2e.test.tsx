@@ -151,6 +151,8 @@ async function open(
 				/directive: "([^"]+)"/.exec(text)?.[1] ?? /violates the following[^"]*"([^" ]+)/.exec(text)?.[1] ?? 'unknown'
 			violations.push({ directive, blocked: text.slice(0, 160) })
 		} else if (msg.type() === 'error' && !/Failed to load resource/.test(text)) errors.push(text)
+		// 2.0.1: Chrome's warning for a declarative template written through innerHTML counts as an error here.
+		else if (msg.type() === 'warning' && /shadowrootmode|declarative Shadow DOM/i.test(text)) errors.push(text)
 	})
 	page.on('pageerror', (e) => errors.push(String(e)))
 	if (options.noSetHtml) {
@@ -387,6 +389,14 @@ describe.each(VIEWPORTS)('at $name px', (viewport) => {
 			const cell = `${entryId}-${viewport.name}`
 			const w = await open(viewport)
 			try {
+				// 2.0.1: the hosts the browser's parser built from the server's page.
+				await w.page.addInitScript(() =>
+					document.addEventListener('DOMContentLoaded', () => {
+						;(window as unknown as { __serverHosts: Element[] }).__serverHosts = Array.from(
+							document.querySelectorAll('certrev-card'),
+						)
+					}),
+				)
 				await w.page.goto(`${server.origin}${article(entryId).path}`)
 				await settle(w.page)
 				const printed = await hosts(w.page)
@@ -394,6 +404,18 @@ describe.each(VIEWPORTS)('at $name px', (viewport) => {
 				expect(card).toBeDefined()
 				expect(printed.length).toBeGreaterThan(2)
 				expect(printed.every((h) => h.attached)).toBe(true)
+				// Hydration and the render right after it keep those very nodes: React never rewrites the card (React 19
+				// rewrites an element's HTML whenever its dangerouslySetInnerHTML is a new object).
+				const kept = await w.page.evaluate(() => {
+					const before = (window as unknown as { __serverHosts: Element[] }).__serverHosts ?? []
+					const now = Array.from(document.querySelectorAll('certrev-card'))
+					return { before: before.length, now: now.length, same: now.every((h) => before.includes(h)) }
+				})
+				expect(kept, `${cell}: the server's hosts kept`).toEqual({
+					before: printed.length,
+					now: printed.length,
+					same: true,
+				})
 				const parts = printed.filter((h) => !h.part.startsWith('dialog-'))
 				const equal: Record<string, unknown> = {}
 				for (const h of parts) {

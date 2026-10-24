@@ -52,6 +52,19 @@ CertREV's server.
   itself; now it only prints the server's.)
 - Dialogs are the document's own (`card.dialogs`): nothing in the package draws, styles or names them, so a redesign
   of CertREV's profile and certificate dialogs needs no client change.
+- **Nothing in the console.** Through 2.0.0, React's development build reported a hydration mismatch on every page with
+  a contract-1 card (the browser had already attached the card's shadow roots, which React expected as templates), and
+  in production every card React wrote itself (an in-app navigation, a re-render after the page's own hydration error)
+  drew Chrome's "Found declarative shadowrootmode attribute on a template, but declarative Shadow DOM is not being
+  parsed" warning once per template. The wrapper now skips React's hydration comparison (`suppressHydrationWarning`,
+  never printed), and in a browser that parses declarative roots the HTML React writes holds each template's mode
+  under `data-certrev-shadowrootmode` until the block re-parses the card's exact bytes, as before. The server's bytes
+  are unchanged.
+- **React 19 no longer rewrites the card.** React 19 rewrites an element's `innerHTML` whenever its
+  `dangerouslySetInnerHTML` is a new object (React 18 compared the strings), so on React 19 every re-render of a
+  contract-1 block, including the one right after hydration, replaced the card the browser had built (and left it to
+  the hosted runtime to attach the roots again). The block now keeps one object per printed string, so the server's
+  card nodes are the ones on the page after hydration, and it re-attaches any root after every commit before paint.
 
 ## 2.0.0 · 2026-10-21
 
