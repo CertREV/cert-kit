@@ -68,6 +68,8 @@ const ARTICLES: ReplicaArticle[] = [
 		entryId: 'replica-split',
 		part: 'header',
 		memoBlock: true,
+		// 2.0.1: as mission e60680df22f2's e.l.f. export lays it out (the byline is in the template, above the body).
+		references: true,
 	},
 	{ path: '/blogs/the-elf-word/next', title: 'Next article', entryId: 'replica-next' },
 	{ path: '/blogs/the-elf-word/revoked', title: 'Retinol, revoked', entryId: 'replica-revoked' },
@@ -621,10 +623,10 @@ describe('an in-app navigation (no server render for the next article)', () => {
 	)
 })
 
-describe('a split banner (a header block and a memo block)', () => {
+describe('a split banner (a header block first in the body, a memo block just before the references)', () => {
 	it.each(
 		VIEWPORTS,
-	)('at $name px the header block prints the head, its card, both dialogs and the runtime; the memo block its memo only; the memo’s controls open the page’s one dialog', async (viewport) => {
+	)('at $name px the header block prints the head, its card, both dialogs and the runtime; the memo block its memo only; the memo’s controls open the page’s one dialog; the default hints move neither', async (viewport) => {
 		const w = await open(viewport)
 		try {
 			await w.page.goto(`${server.origin}${article('replica-split').path}`)
@@ -636,9 +638,19 @@ describe('a split banner (a header block and a memo block)', () => {
 			)
 			expect(wrappers).toEqual([['style', 'top', 'dialog-expert', 'dialog-certificate', 'script'], ['bottom']])
 			const cell = `split-${viewport.name}`
+			// 2.0.1: the document's default hints (the card at the start of the content, the memo before the references) are
+			// where the export put both blocks, so after the page has settled nothing has moved.
+			await w.page.waitForTimeout(500)
+			const order = await blockOrder(w.page, 'replica-split')
+			expect(order[0]).toBe('card-block')
+			expect(order.slice(-2)).toEqual(['card-block', 'references'])
+			expect(order.filter((b) => b.startsWith('placed:'))).toEqual([])
+			expect(order.filter((b) => b === 'card-block')).toHaveLength(2)
+			await w.page.screenshot({ path: join(OUT, `${cell}-page.png`), fullPage: true })
 			const dialogs = await exerciseDialogs(w.page, 'replica-split', '[data-certrev-part="bottom"]', cell, 0)
 			expect(w.violations).toEqual([])
-			evidence[`split banner@${viewport.name}`] = { wrappers, dialogs }
+			expect(w.errors).toEqual([])
+			evidence[`split banner@${viewport.name}`] = { order, wrappers, dialogs }
 		} finally {
 			await w.context.close()
 		}
