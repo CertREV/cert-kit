@@ -173,6 +173,7 @@ describe('the fallback report sends the beacon', () => {
 			card_verify_failed: 'verify_failed',
 			card_unsupported_contract: 'unsupported',
 			card_pin_mismatch: 'other',
+			envelope_verify_failed: 'verify_failed',
 			unknown_key: 'verify_failed',
 			delivery_unreachable: 'unreachable',
 			no_marker: 'other',

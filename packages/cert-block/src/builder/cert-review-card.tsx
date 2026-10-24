@@ -468,12 +468,14 @@ function withReport(
 	props: EnvelopeCardProps,
 	server: boolean,
 	certId?: string,
+	status?: number,
 ): React.ReactElement {
 	const detail: CardFallbackDetail = {
 		reason,
 		platform: 'builder',
 		externalId: props.externalId,
 		...(certId === undefined ? {} : { certId }),
+		...(status === undefined ? {} : { status }),
 	}
 	return (
 		<>
@@ -544,19 +546,22 @@ function contractNone(
 /**
  * What a card with no verified envelope paints: nothing, and a `'none'` record. 2.0.1: CertREV not reached prints
  * nothing too (it painted the block's export-time options through 2.0.0), and the record names `delivery_unreachable`
- * so the browser reports it as well; an unknown kid is reported as `unknown_key`. A definitive no (revoked, expired,
- * unverifiable, for another entry, not found) prints nothing, by design, unreported.
+ * so the browser reports it as well (with CertREV's HTTP status when it answered with one); an unknown kid is reported as
+ * `unknown_key`, and (2.0.1) an envelope that does not verify as `envelope_verify_failed`. A definitive no (revoked,
+ * expired, for another entry, not found) prints nothing, by design, unreported.
  */
 function settleWithoutEnvelope(
 	props: EnvelopeCardProps,
-	verdict: { readonly unreachable: boolean; readonly reason?: string },
+	verdict: { readonly unreachable: boolean; readonly reason?: string; readonly status?: number },
 	server: boolean,
 ): React.ReactElement {
 	const reason: CardFallbackReason | undefined = verdict.unreachable
 		? 'delivery_unreachable'
 		: verdict.reason === 'unknown_key'
 			? 'unknown_key'
-			: undefined
+			: verdict.reason !== undefined && ENVELOPE_VERIFY_FAILURES.has(verdict.reason)
+				? 'envelope_verify_failed'
+				: undefined
 	const record = serializeFallback({
 		baseUrl: props.baseUrl,
 		externalId: props.externalId,
@@ -565,8 +570,19 @@ function settleWithoutEnvelope(
 		...(reason ? { reason } : {}),
 	})
 	const none = <NoFace record={record} />
-	return reason ? withReport(none, reason, props, server) : none
+	return reason
+		? withReport(none, reason, props, server, undefined, verdict.unreachable ? verdict.status : undefined)
+		: none
 }
+
+/** 2.0.1: the kernel's suppress reasons that mean the envelope itself did not verify (reported, never silent). */
+const ENVELOPE_VERIFY_FAILURES: ReadonlySet<string> = new Set([
+	'invalid_signature',
+	'unsupported_alg',
+	'platform_mismatch',
+	'content_drift',
+	'unsupported_contract_version',
+])
 
 /**
  * Paint what the page's record for this placement says: a seed its envelope (judged at the browser's clock first when
@@ -773,7 +789,11 @@ function readAndPaint(
 	if (settled.verdict.decision !== 'render') {
 		return settleWithoutEnvelope(
 			props,
-			{ unreachable: settled.unreachable === true, reason: settled.verdict.reason },
+			{
+				unreachable: settled.unreachable === true,
+				reason: settled.verdict.reason,
+				...(settled.status === undefined ? {} : { status: settled.status }),
+			},
 			!inBrowser,
 		)
 	}

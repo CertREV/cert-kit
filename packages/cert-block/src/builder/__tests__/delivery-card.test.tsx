@@ -471,25 +471,28 @@ describe('with the delivery marker: the envelope face', () => {
 
 	describe('CertREV not reached: nothing, a delivery_unreachable record and one report (2.0.1)', () => {
 		/** Nothing printed, none of the block's export-time facts, the `'none'` record naming the outage, one report. */
-		const expectUnreachable = async (element = card()) => {
+		const expectUnreachable = async (element = card(), status?: number) => {
 			const html = await renderToHtml(element)
 			expect(chromeRoot(html)).toBeNull()
 			expectNoExportTimeFact(html)
 			expect(html).not.toContain('I reviewed the retinol claims')
-			expect(reports(warn)).toEqual([{ reason: 'delivery_unreachable', platform: 'builder', externalId: ENTRY_ID }])
+			// 2.0.1 (final review R1-7): an HTTP error answer carries its status.
+			expect(reports(warn)).toEqual([
+				{ reason: 'delivery_unreachable', platform: 'builder', externalId: ENTRY_ID, ...(status ? { status } : {}) },
+			])
 			return html
 		}
 
-		it.each([
-			['a 500', () => json({ error: 'boom' }, 500)],
-			['a 503', () => json({ error: 'unavailable' }, 503)],
-			['a body that is not JSON', () => new Response('<html>oops</html>', { status: 200 })],
-			['a JSON body that is not an object', () => json([1, 2])],
-			['a network error', () => Promise.reject(new TypeError('fetch failed'))],
-			['the fetch deadline', () => new Promise<Response>(() => {})],
-		])('%s: nothing, never the options face', async (_label, answer) => {
+		it.each<[string, () => Response | Promise<Response>, number | undefined]>([
+			['a 500', () => json({ error: 'boom' }, 500), 500],
+			['a 503', () => json({ error: 'unavailable' }, 503), 503],
+			['a body that is not JSON', () => new Response('<html>oops</html>', { status: 200 }), undefined],
+			['a JSON body that is not an object', () => json([1, 2]), undefined],
+			['a network error', () => Promise.reject(new TypeError('fetch failed')), undefined],
+			['the fetch deadline', () => new Promise<Response>(() => {}), undefined],
+		])('%s: nothing, never the options face', async (_label, answer, status) => {
 			delivery.respond(answer)
-			const html = await expectUnreachable()
+			const html = await expectUnreachable(card(), status)
 			expect(seedOf(html)).toEqual(fallbackRecord('delivery_unreachable'))
 			expect(html).toMatch(/^<!--\$--><div hidden="" data-certrev-envelope="[^"]*"><\/div><!--\/\$-->$/)
 			expect(delivery.calls).toEqual([DELIVERY_URL])
@@ -498,14 +501,14 @@ describe('with the delivery marker: the envelope face', () => {
 		it('whatever layout the block carries or an editor chose, nothing', async () => {
 			delivery.respond(() => json({ error: 'boom' }, 500))
 			const sidebarDef = { ...(OPTIONS_ONLY_SHAPES.todaysExportWithDef.renderDef as object), layout: 'sidebar' }
-			await expectUnreachable(card({ renderDef: sidebarDef as never }))
+			await expectUnreachable(card({ renderDef: sidebarDef as never }), 500)
 			warn.mockClear()
-			await expectUnreachable(card({ renderDef: sidebarDef as never, mode: 'banner' }))
+			await expectUnreachable(card({ renderDef: sidebarDef as never, mode: 'banner' }), 500)
 		})
 
 		it('a block with no reviewer in its options: the same nothing and the same record', async () => {
 			delivery.respond(() => json({ error: 'boom' }, 500))
-			const html = await expectUnreachable(card({ reviewerName: null as never }))
+			const html = await expectUnreachable(card({ reviewerName: null as never }), 500)
 			expect(seedOf(html)).toEqual(fallbackRecord('delivery_unreachable'))
 		})
 
@@ -518,6 +521,7 @@ describe('with the delivery marker: the envelope face', () => {
 						context: { certrevDesignPin: { design: '4', designBrand: 'staging-shopify-canary' } },
 					},
 				}),
+				500,
 			)
 			expect(seedOf(html)).toEqual({
 				...fallbackRecord('delivery_unreachable'),
