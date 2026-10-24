@@ -60,6 +60,13 @@ CertREV's server.
   never printed), and in a browser that parses declarative roots the HTML React writes holds each template's mode
   under `data-certrev-shadowrootmode` until the block re-parses the card's exact bytes, as before. The server's bytes
   are unchanged.
+- **A failed envelope is reported too.** An envelope that does not verify (a bad signature, an algorithm the client
+  does not accept, another platform, content that drifted from what was signed, a payload version it cannot read)
+  prints nothing, as before, and is now reported as `envelope_verify_failed` (beacon outcome `verify_failed`). Revoked,
+  expired, not found and another entry's envelope stay silent. When CertREV answers with an HTTP error, the
+  `delivery_unreachable` report carries `status` and the beacon says `http_5xx` or `http_4xx`. A beacon never sends the
+  page address (`referrerPolicy: 'no-referrer'`). Its three-per-page budget belongs to a document address, so an in-app
+  navigation starts a new one.
 - **React 19 no longer rewrites the card.** React 19 rewrites an element's `innerHTML` whenever its
   `dangerouslySetInnerHTML` is a new object (React 18 compared the strings), so on React 19 every re-render of a
   contract-1 block, including the one right after hydration, replaced the card the browser had built (and left it to

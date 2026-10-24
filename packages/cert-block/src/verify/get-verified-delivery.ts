@@ -106,6 +106,8 @@ export type CachedDelivery =
 			readonly reason: CertSuppressReason
 			/** 1.2.0: true when CertREV was not reached (no answer about the credential); see the module header. */
 			readonly unreachable?: true
+			/** 2.0.1: the HTTP status, when CertREV answered with a non-OK status other than 404/410. */
+			readonly status?: number
 	  }
 
 /** The answer for one render: the verdict AT THIS RENDER'S CLOCK, and the def to paint it with. */
@@ -117,6 +119,8 @@ export interface VerifiedDelivery {
 	readonly signature?: CertSignature
 	/** 1.2.0: on a suppress verdict, true when CertREV was not reached; else undefined. */
 	readonly unreachable?: true
+	/** 2.0.1: with `unreachable`, the HTTP status when CertREV answered with one (a 5xx, a 429, ...); else undefined. */
+	readonly status?: number
 	/**
 	 * 1.3.0: on a `render` verdict, the server-rendered face served beside the artifact, when the response carried a
 	 * well-formed one; else undefined (never on a suppress verdict). UNVERIFIED: see `DeliveredFace`.
@@ -175,8 +179,13 @@ function suppressed(reason: CertSuppressReason): CachedDelivery {
 }
 
 /** A read that did not reach CertREV: the same least-wrong reason as before 1.2.0, marked `unreachable`. */
-function unreachable(): CachedDelivery {
-	return { kind: 'suppressed', reason: 'unsupported_contract_version', unreachable: true }
+function unreachable(status?: number): CachedDelivery {
+	return {
+		kind: 'suppressed',
+		reason: 'unsupported_contract_version',
+		unreachable: true,
+		...(status === undefined ? {} : { status }),
+	}
 }
 
 const isUnreachable = (v: CachedDelivery): boolean => v.kind === 'suppressed' && v.unreachable === true
@@ -312,7 +321,7 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	// Nothing served for this placement: never certified, or withdrawn. A LIVE revocation is a 200
 	// tombstone, so a 4xx here genuinely means "no credential for this subject".
 	if (res.status === 404 || res.status === 410) return suppressed('subject_mismatch')
-	if (!res.ok) return unreachable()
+	if (!res.ok) return unreachable(res.status)
 	let body: unknown
 	try {
 		body = await res.json()
@@ -356,6 +365,7 @@ export function settleDelivery(cached: CachedDelivery, context: RenderContext): 
 			verdict: { decision: 'suppress', reason: cached.reason },
 			renderDef: null,
 			...(cached.unreachable ? { unreachable: true as const } : {}),
+			...(cached.unreachable && cached.status !== undefined ? { status: cached.status } : {}),
 		}
 	}
 	const verdict = renderVerdict(cached.payload, context)

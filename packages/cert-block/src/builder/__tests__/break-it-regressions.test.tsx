@@ -97,7 +97,7 @@ describe('B5: CertREV not reached for a block with no options to paint is report
 			)
 			expect(html).not.toContain('data-certrev-cert-chrome')
 			expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([
-				`[certrev] card_fallback ${JSON.stringify({ reason: 'delivery_unreachable', platform: 'builder', externalId: 'entry-b5' })}`,
+				`[certrev] card_fallback ${JSON.stringify({ reason: 'delivery_unreachable', platform: 'builder', externalId: 'entry-b5', status: 503 })}`,
 			])
 		} finally {
 			warn.mockRestore()

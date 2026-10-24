@@ -66,6 +66,17 @@ const golden121 = (name: string): string => {
 	return SERVER.outputs[at].split(SERVER.readerCssPlaceholder).join(SERVER.readerCss)
 }
 
+/**
+ * 2.0.1 (final review R1-1): an envelope that does not verify is reported, so its `'none'` record names
+ * `envelope_verify_failed`; 1.2.1's golden for it has no reason. The tombstone fixture carries a `renderDef` and a `face`
+ * beside a tombstone, whose signature covers every key, so it does not verify either (the portal never adds them).
+ */
+const withVerifyReason = (golden: string): string =>
+	golden.replace(
+		'&quot;face&quot;:&quot;none&quot;}',
+		'&quot;face&quot;:&quot;none&quot;,&quot;reason&quot;:&quot;envelope_verify_failed&quot;}',
+	)
+
 /** React's attribute escaping (`escapeTextForBrowser`). */
 const attr = (raw: string) =>
 	raw.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -214,7 +225,7 @@ describe("every other delivery renders 1.2.1's output, byte for byte, seed inclu
 			const c = (await serverCases(issuer))[name]
 			delivery.respond(() => json(c.body))
 			const html = await renderToHtml(card(c.props))
-			expect(html).toBe(golden121(name))
+			expect(html).toBe(name === 'tombstoneWithFace' ? withVerifyReason(golden121(name)) : golden121(name))
 			expect(html).not.toContain('data-certrev-face="delivered"')
 			expect(html).not.toContain('crv-face')
 		})
@@ -262,6 +273,7 @@ describe("every other delivery renders 1.2.1's output, byte for byte, seed inclu
 
 describe('fails closed as 1.2.1 does: nothing and a none record', () => {
 	const none = () => golden121('tombstoneWithFace')
+	const noneReported = () => withVerifyReason(none())
 
 	it('a digest rewritten to match other markup (the signature no longer verifies)', async () => {
 		const env = issuer.envelope(withFaceDigest(faceDigestFor(DELIVERED_FACE, 4)))
@@ -272,7 +284,7 @@ describe('fails closed as 1.2.1 does: nothing and a none record', () => {
 		}
 		delivery.respond(() => json({ ...tampered, renderDef: DEFS.legacy, face: evil }))
 		const html = await renderToHtml(card())
-		expect(html).toBe(none())
+		expect(html).toBe(noneReported())
 		expect(chromeRoot(html)).toBeNull()
 		expect(html).not.toContain('crv-')
 	})
@@ -283,7 +295,7 @@ describe('fails closed as 1.2.1 does: nothing and a none record', () => {
 		delivery.respond(() =>
 			json({ ...env, payload: { ...env.payload, content }, renderDef: DEFS.legacy, face: DELIVERED_FACE }),
 		)
-		expect(await renderToHtml(card())).toBe(none())
+		expect(await renderToHtml(card())).toBe(noneReported())
 	})
 
 	it('a matching face on an expired envelope', async () => {

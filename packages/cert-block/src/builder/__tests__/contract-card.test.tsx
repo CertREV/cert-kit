@@ -293,13 +293,13 @@ describe('anything else on a contract-1 placement prints nothing and reports why
 		expect(cardWrapper(html)?.inner).toBe(expectedCardHtml(fixture.card, ['top', 'bottom']))
 	})
 
-	it('a binding rewritten in transit fails the signature: nothing, as in 1.3.1 (no card report)', async () => {
+	it('a binding rewritten in transit fails the signature: nothing, reported as envelope_verify_failed (2.0.1; 1.3.1 and 2.0.0 were silent)', async () => {
 		const body = contractBody(issuer, fixture) as { payload: { content: { faceDigest: { doc: string } } } }
 		body.payload.content.faceDigest.doc = 'f'.repeat(64)
 		const html = await serve(body)
 		expect(html).not.toContain('<certrev-card')
 		expect(parseFallback(recordOf(html) ?? '')).toMatchObject({ face: 'none' })
-		expect(parseFallback(recordOf(html) ?? '')?.reason).toBeUndefined()
+		expect(parseFallback(recordOf(html) ?? '')?.reason).toBe('envelope_verify_failed')
 	})
 })
 
@@ -325,7 +325,7 @@ describe('the two 1.2.0 fallbacks, now reported', () => {
 		expect(recordOf(html)).not.toBeNull()
 		expect(parseFallback(recordOf(html) ?? '')).toMatchObject({ face: 'none', reason: 'delivery_unreachable' })
 		expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([
-			`[certrev] card_fallback ${JSON.stringify({ reason: 'delivery_unreachable', platform: 'builder', externalId: ENTRY_ID })}`,
+			`[certrev] card_fallback ${JSON.stringify({ reason: 'delivery_unreachable', platform: 'builder', externalId: ENTRY_ID, status: 503 })}`,
 		])
 	})
 

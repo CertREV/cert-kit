@@ -6,14 +6,15 @@
  * preflight; the origin is the delivery origin the page's `connect-src` already allows, so no new CSP source):
  *
  *     { v: 1, client: 'cert-block', clientVersion, contract, platform: 'builder', externalId, family,
- *       events: [{ kind: 'fallback' | 'health', reason, outcome }] }
+ *       events: [{ kind: 'fallback' | 'health', reason, outcome, status? }] }
  *
- * What it never carries: cookies (`credentials: 'omit'`), the page's address or text, the reader's user agent (only a
+ * What it never carries: cookies (`credentials: 'omit'`), the page's address (`referrerPolicy: 'no-referrer'`) or text, the reader's user agent (only a
  * coarse family: chromium, webkit, gecko, other, or server), or anything the reader typed. `externalId` is the Builder
  * entry the block renders in, which the brand's page already sends to CertREV when it reads the card.
  *
  * How much: in a browser, every fallback (each placement and reason once per page, `card-report.ts`) and one health
- * event per page in a hundred, at most three beacons per page; on a server, each placement, reason and origin at most
+ * event per page in a hundred, at most three beacons per page (a page is a document address: an in-app navigation to
+ * another article starts a new budget); on a server, each placement, reason and origin at most
  * once an hour per process, with a short deadline, never awaited. A beacon that fails is dropped: it never retries,
  * never stores anything and never changes what the card prints.
  */
@@ -40,6 +41,8 @@ export interface BeaconEvent {
 	readonly kind: 'fallback' | 'health'
 	readonly reason: string
 	readonly outcome: BeaconOutcome
+	/** The HTTP status CertREV answered with, when a read failed on one (outcome `http_4xx` or `http_5xx`). */
+	readonly status?: number
 }
 
 export interface CardBeacon {
@@ -66,6 +69,8 @@ export const fetchBeaconTransport: BeaconTransport = (url, body, where) => {
 			body,
 			headers: { 'content-type': 'text/plain;charset=UTF-8' },
 			credentials: 'omit',
+			// Never the reader's page address, whatever the storefront's Referrer-Policy.
+			referrerPolicy: 'no-referrer',
 			...(where === 'browser'
 				? // Opaque and kept alive: no CORS read of the answer, and it outlives a navigation away.
 					{ mode: 'no-cors' as const, keepalive: true }
@@ -82,6 +87,17 @@ export const fetchBeaconTransport: BeaconTransport = (url, body, where) => {
 let transport: BeaconTransport = fetchBeaconTransport
 let sentOnPage = 0
 let healthDrawn: boolean | null = null
+/** The document address the page budget belongs to. */
+let budgetPage: string | null = null
+
+/** Start a new page budget when the document's address changed (an in-app navigation). */
+function samePageBudget(): void {
+	const page = typeof location !== 'undefined' ? `${location.pathname}${location.search}` : ''
+	if (page === budgetPage) return
+	budgetPage = page
+	sentOnPage = 0
+	healthDrawn = null
+}
 const sentOnServer = new Map<string, number>()
 let random: () => number = Math.random
 let clock: () => number = Date.now
@@ -122,7 +138,9 @@ export function beaconBody(externalId: string, events: readonly BeaconEvent[], f
 
 /** Send one event from the browser, within the page's budget. */
 export function sendBrowserBeacon(baseUrl: string | undefined, externalId: string, event: BeaconEvent): void {
-	if (typeof document === 'undefined' || sentOnPage >= BEACON_MAX_PER_PAGE) return
+	if (typeof document === 'undefined') return
+	samePageBudget()
+	if (sentOnPage >= BEACON_MAX_PER_PAGE) return
 	sentOnPage++
 	const userAgent = typeof navigator !== 'undefined' ? String(navigator.userAgent ?? '') : ''
 	const body = beaconBody(externalId, [event], browserFamily(userAgent))
@@ -132,6 +150,7 @@ export function sendBrowserBeacon(baseUrl: string | undefined, externalId: strin
 /** Send one health event from the browser on one page view in a hundred (drawn once per page). */
 export function maybeSendBrowserHealth(baseUrl: string | undefined, externalId: string): void {
 	if (typeof document === 'undefined') return
+	samePageBudget()
 	if (healthDrawn === null) healthDrawn = random() < BEACON_HEALTH_SAMPLE
 	if (!healthDrawn) return
 	healthDrawn = false
@@ -177,5 +196,6 @@ export function setCardBeaconForTests(
 export function forgetCardBeaconsForTests(): void {
 	sentOnPage = 0
 	healthDrawn = null
+	budgetPage = null
 	sentOnServer.clear()
 }
