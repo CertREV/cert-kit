@@ -311,6 +311,28 @@ describe('SC1/SC2: a warm card never waits, and refreshes off the render path', 
 	})
 })
 
+describe('2.0.2 plan advice A2: a background refresh still running when the stale window ends', () => {
+	it('the next render does not wait behind it, and paints once it lands', async () => {
+		expect((await timed()).html).toContain(PAINTED)
+		delivery.respond(
+			() => new Promise<Response>((resolve) => setTimeout(() => resolve(json(deliveryBody(issuer.envelope()))), 2_000)),
+		)
+		// One render inside the last millisecond of the stale window starts the refresh (and paints the stale card).
+		await advance(CARD_DELIVERY_TTL_MS + CARD_DELIVERY_STALE_MS - 1)
+		const last = await timed()
+		expect(last.html).toContain(PAINTED)
+		expect(delivery.calls).toHaveLength(2)
+		await advance(1)
+		const after = await timed()
+		expect(after.waited).toBe(0)
+		expect(chromeRoot(after.html)).toBeNull()
+		expect(delivery.calls).toHaveLength(2)
+		await advance(2_000)
+		await landed((html) => expect(html).toContain(PAINTED))
+		expect(delivery.calls).toHaveLength(2)
+	})
+})
+
 describe('SC2: revocation still lands (ADR 0001 §7), and a remembered failure never paints', () => {
 	it('a stale card whose background refresh reads a tombstone stops painting', async () => {
 		expect((await timed()).html).toContain(PAINTED)

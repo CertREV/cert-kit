@@ -27,6 +27,7 @@ import { type CertPayload, renderVerdict } from '../contract/kernel.js'
 import {
 	type DeliveredFace,
 	type DesignPin,
+	deliveryLoading,
 	getVerifiedDelivery,
 	parseDesignPin,
 	readVerifiedDelivery,
@@ -219,6 +220,9 @@ function suspendOnServer(
 ): VerifiedDelivery {
 	const pending = inflightReads.get(key)
 	if (pending && pending.turn !== currentTurn()) return unreachableDelivery()
+	// A read of the placement this render did not start (a background refresh still running when the stale window
+	// ended): never wait behind it either. When it lands, the next render paints its answer.
+	if (!pending && deliveryLoading(read)) return unreachableDelivery()
 	return suspendOn(key, () => {
 		const loaded = getVerifiedDelivery(read)
 		if (waitMs === undefined || !Number.isFinite(waitMs) || waitMs <= 0) return loaded
