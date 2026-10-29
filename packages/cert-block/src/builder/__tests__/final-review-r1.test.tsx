@@ -7,11 +7,14 @@
  * browser read.
  */
 
-import { act, Suspense } from 'react'
+import { Writable } from 'node:stream'
+import { act, type ReactElement, Suspense } from 'react'
 import { hydrateRoot } from 'react-dom/client'
+import { renderToPipeableStream } from 'react-dom/server'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CertReviewCard, type CertReviewCardProps, SKIPPED_ATTRIBUTE } from '../cert-review-card.js'
 import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
+import { forgetPageSeedsForTests } from '../ssr-seed.js'
 import {
 	deliveryBody,
 	ENTRY_ID,
@@ -127,4 +130,109 @@ it('R1-2: a delayed sibling is skipped on the server, hydrates as its marker, an
 	expect(container.querySelectorAll('[data-certrev-cert-chrome]')).toHaveLength(2)
 	expect(container.querySelector(`[${SKIPPED_ATTRIBUTE}]`)).toBeNull()
 	expect(calls).toEqual([])
+})
+
+/** A streaming server render: the shell as it is first flushed, then everything after it, once the stream ends. */
+function streamed(element: ReactElement): Promise<{ shell: string; rest: string }> {
+	return new Promise((resolve, reject) => {
+		let html = ''
+		let shell: string | undefined
+		const sink = new Writable({
+			write(chunk, _enc, done) {
+				html += chunk.toString()
+				done()
+			},
+		})
+		sink.on('finish', () => resolve({ shell: shell ?? html, rest: html.slice((shell ?? html).length) }))
+		const stream = renderToPipeableStream(element, {
+			onShellReady() {
+				stream.pipe(sink)
+				shell = html
+			},
+			onShellError: reject,
+		})
+	})
+}
+
+it("R2-1: a skipped block that hydrates before the first block's seed streams in paints when the seed arrives, with no read", async () => {
+	forgetPageSeedsForTests()
+	let readyState: DocumentReadyState = 'loading'
+	Object.defineProperty(document, 'readyState', { configurable: true, get: () => readyState })
+	try {
+		const issuer = makeIssuer()
+		const server = scriptedDelivery(
+			() => new Promise<Response>((resolve) => setTimeout(() => resolve(json(deliveryBody(issuer.envelope()))), 200)),
+		)
+		// The header block's card streams (its own boundary); the memo block, rendered while that read runs, is skipped
+		// and goes out in the shell.
+		const page2 = () => (
+			<div>
+				<Suspense fallback={null}>{card({ part: 'header' })}</Suspense>
+				<p>The article.</p>
+				{card({ part: 'memo' })}
+			</div>
+		)
+		restore = setCardDeliveryRuntimeForTests({
+			resolveKid: issuer.resolveKid,
+			fetchImpl: () => server.fetch,
+			now: () => T0,
+		})
+		const { shell, rest } = await streamed(page2())
+		restore()
+		expect(shell).toContain(`${SKIPPED_ATTRIBUTE}=`)
+		expect(shell).not.toContain('data-certrev-cert-chrome')
+		expect(rest).toContain('data-certrev-cert-chrome')
+
+		const calls: string[] = []
+		restore = setCardDeliveryRuntimeForTests({
+			resolveKid: issuer.resolveKid,
+			fetchImpl: () =>
+				(async (url: RequestInfo | URL) => {
+					calls.push(String(url))
+					throw new TypeError('Failed to fetch')
+				}) as typeof fetch,
+			now: () => T0,
+		})
+		const container = document.createElement('div')
+		container.innerHTML = shell
+		document.body.appendChild(container)
+		const recoverable: unknown[] = []
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+		const settle = async () => {
+			for (let i = 0; i < 20; i++) {
+				await act(async () => {
+					await new Promise((r) => setTimeout(r, 5))
+				})
+			}
+		}
+		try {
+			await act(async () => {
+				hydrateRoot(container, page2(), { onRecoverableError: (e) => recoverable.push(e) })
+			})
+			await settle()
+			// Hydrated, the seed not here yet: the memo block shows nothing.
+			expect(container.querySelector('[data-certrev-cert-chrome]')).toBeNull()
+			// The rest of the stream arrives (the header's part, as the parser appends it; its inline script does not run here).
+			const late = document.createElement('div')
+			late.innerHTML = rest
+			document.body.appendChild(late)
+			await settle()
+			readyState = 'interactive'
+			await act(async () => {
+				document.dispatchEvent(new Event('DOMContentLoaded'))
+			})
+			await settle()
+			expect(consoleError).not.toHaveBeenCalled()
+		} finally {
+			consoleError.mockRestore()
+		}
+		expect(recoverable).toEqual([])
+		// The memo block (in the shell) now paints the verified card from the streamed seed; nothing was read.
+		expect(container.querySelector('[data-certrev-cert-chrome]')).not.toBeNull()
+		expect(container.querySelector(`[${SKIPPED_ATTRIBUTE}]`)).toBeNull()
+		expect(calls).toEqual([])
+	} finally {
+		Reflect.deleteProperty(document, 'readyState')
+		forgetPageSeedsForTests()
+	}
 })
