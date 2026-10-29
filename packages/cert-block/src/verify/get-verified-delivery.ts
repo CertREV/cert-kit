@@ -427,6 +427,26 @@ export function peekVerifiedDelivery(
 	return cached === undefined ? undefined : settleDelivery(cached, opts.context)
 }
 
+/**
+ * 2.0.2: the settled answer for "CertREV was not reached in time": what a server render prints when it stops waiting
+ * (its deadline passed, or another request's read of the placement is in flight). Nothing, reported as
+ * `delivery_unreachable`, exactly as for a read that failed.
+ */
+export function unreachableDelivery(): VerifiedDelivery {
+	return settleDelivery(unreachable(), { platform: 'builder', externalId: '', now: new Date(0) })
+}
+
+/**
+ * 2.0.2: remember that a read of one placement did not reach CertREV in time (a render stopped waiting for it), so the
+ * cache answers the placement at once for its failure window. A no-op on a cache with no failure window beyond 2.0.1's
+ * negative entry. Never touches a verified entry.
+ */
+export function rememberDeliveryUnreachable(
+	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
+): void {
+	;(opts.cache ?? sharedDeliveryCache).markFailed(deliveryCacheKey(opts), unreachable())
+}
+
 /** Drop the cached read for one placement (e.g. from a revocation webhook); with `design`, that pinned read. */
 export function invalidateDelivery(
 	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'design'>,

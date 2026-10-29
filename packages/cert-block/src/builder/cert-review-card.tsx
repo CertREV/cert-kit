@@ -30,6 +30,8 @@ import {
 	getVerifiedDelivery,
 	parseDesignPin,
 	readVerifiedDelivery,
+	rememberDeliveryUnreachable,
+	unreachableDelivery,
 	type VerifiedDelivery,
 } from '../verify/get-verified-delivery.js'
 import {
@@ -171,15 +173,72 @@ export function acceptedDeliveryMarker(value: unknown): { readonly baseUrl: stri
  * flight; React 18 (no `use`) gets the promise thrown, the Suspense protocol it supports. Either
  * way the retry finds the settled read in the cache through `readVerifiedDelivery`, so it never
  * suspends on a second promise.
+ *
+ * 2.0.2, on a server (`suspendOnServer`): the render waits at most the runtime's `serverWaitMs` (300 ms). Past it, the
+ * placement's failure is remembered in the cache (so every render in the failure window answers at once, even where the
+ * runtime abandons the read when the response ends), the render prints nothing (`delivery_unreachable`), and the read
+ * runs on: when it lands, the next render paints it. A render that finds the placement's read already in flight from an
+ * earlier task (another request) never waits on it and prints nothing at once. Cards rendered in the task that started
+ * the read (two cards of one placement in one page's render pass, which React's server renderer runs synchronously)
+ * share it, and wait at most what is left of its deadline.
  */
-const inflightReads = new Map<string, Promise<VerifiedDelivery>>()
+interface InflightRead {
+	readonly promise: Promise<VerifiedDelivery>
+	readonly turn: number
+}
+const inflightReads = new Map<string, InflightRead>()
+
+/** The current task's number: it changes once the task (and its microtasks) has run. */
+let turn = 0
+let turnOpen = false
+function currentTurn(): number {
+	if (!turnOpen) {
+		turnOpen = true
+		turn += 1
+		queueMicrotask(() => {
+			turnOpen = false
+		})
+	}
+	return turn
+}
+
 function suspendOn(key: string, start: () => Promise<VerifiedDelivery>): VerifiedDelivery {
 	let pending = inflightReads.get(key)
 	if (!pending) {
-		pending = start().finally(() => inflightReads.delete(key))
+		const promise = start().finally(() => inflightReads.delete(key))
+		pending = { promise, turn: currentTurn() }
 		inflightReads.set(key, pending)
 	}
-	return suspendUntil(pending)
+	return suspendUntil(pending.promise)
+}
+
+function suspendOnServer(
+	key: string,
+	read: Parameters<typeof getVerifiedDelivery>[0],
+	waitMs: number | undefined,
+): VerifiedDelivery {
+	const pending = inflightReads.get(key)
+	if (pending && pending.turn !== currentTurn()) return unreachableDelivery()
+	return suspendOn(key, () => {
+		const loaded = getVerifiedDelivery(read)
+		if (waitMs === undefined || !Number.isFinite(waitMs) || waitMs <= 0) return loaded
+		return new Promise<VerifiedDelivery>((resolve) => {
+			const timer = setTimeout(() => {
+				rememberDeliveryUnreachable(read)
+				resolve(unreachableDelivery())
+			}, waitMs)
+			loaded.then(
+				(settled) => {
+					clearTimeout(timer)
+					resolve(settled)
+				},
+				() => {
+					clearTimeout(timer)
+					resolve(unreachableDelivery())
+				},
+			)
+		})
+	})
 }
 
 /** `use` where React has it (19), else the thrown promise (18). */
@@ -692,7 +751,7 @@ function useHydrating(): boolean {
  * storefront whose CSP `connect-src` does not name CertREV (e.l.f.'s live policy) never sees a request or a violation
  * from it, and a page never loses its card for want of one.
  *
- *  - Server: read (up to `CARD_DELIVERY_TIMEOUT_MS`, a fresh or stale-while-revalidating cache first), verify and paint
+ *  - Server: read (2.0.2: waiting at most `CARD_SERVER_WAIT_MS`, never behind another request's read; a fresh or stale-while-revalidating cache, or a remembered failure, first), verify and paint
  *    as through 1.1.1, and write a record of what it painted (`ssr-seed.ts`):
  *     - a verified envelope: its face and the envelope seed (less the fields the def hides, and with no signature if
  *       it hid any);
@@ -785,7 +844,9 @@ function readAndPaint(
 	const key = design
 		? `${props.baseUrl}|${props.externalId}|design=${design.version}|${design.brand ?? ''}`
 		: `${props.baseUrl}|${props.externalId}`
-	const settled = readVerifiedDelivery(read) ?? suspendOn(key, () => getVerifiedDelivery(read))
+	const settled =
+		readVerifiedDelivery(read) ??
+		(inBrowser ? suspendOn(key, () => getVerifiedDelivery(read)) : suspendOnServer(key, read, rt.serverWaitMs))
 	if (settled.verdict.decision !== 'render') {
 		return settleWithoutEnvelope(
 			props,
