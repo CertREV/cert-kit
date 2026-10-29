@@ -244,3 +244,21 @@ describe('2.0.2: failure memory (failureTtlMs)', () => {
 		expect(t.cache.peek('k')).toBeUndefined()
 	})
 })
+
+describe('2.0.2 break-it B3: the failure slots are bounded like the store', () => {
+	it('past maxEntries, expired failures go first, then the oldest', () => {
+		const t = setup({ failureTtlMs: 60_000, maxEntries: 3 })
+		const f = { ok: false, n: 0, transient: true }
+		t.cache.markFailed('a', f)
+		t.advance(60_000)
+		t.cache.markFailed('b', f)
+		t.cache.markFailed('c', f)
+		t.cache.markFailed('d', f) // 'a' has expired: it goes
+		expect(['b', 'c', 'd'].map((k) => t.cache.peek(k))).toEqual([f, f, f])
+		t.cache.markFailed('e', f) // all live: the oldest ('b') goes
+		expect(t.cache.peek('b')).toBeUndefined()
+		expect(['c', 'd', 'e'].map((k) => t.cache.peek(k))).toEqual([f, f, f])
+		for (let i = 0; i < 10_000; i++) t.cache.markFailed(`k${i}`, f)
+		expect((t.cache as unknown as { failures: Map<string, unknown> }).failures.size).toBe(3)
+	})
+})
