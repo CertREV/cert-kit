@@ -178,52 +178,37 @@ export function acceptedDeliveryMarker(value: unknown): { readonly baseUrl: stri
  * 2.0.2, on a server (`suspendOnServer`): the render waits at most the runtime's `serverWaitMs` (300 ms). Past it, the
  * placement's failure is remembered in the cache (so every render in the failure window answers at once, even where the
  * runtime abandons the read when the response ends), the render prints nothing (`delivery_unreachable`), and the read
- * runs on: when it lands, the next render paints it. A render that finds the placement's read already in flight from an
- * earlier task (another request) never waits on it and prints nothing at once. Cards rendered in the task that started
- * the read (two cards of one placement in one page's render pass, which React's server renderer runs synchronously)
- * share it, and wait at most what is left of its deadline.
+ * runs on: when it lands, the next render paints it. A render that finds a read of the placement already running that it
+ * did not start (another request's, a background refresh, or a second card of the placement on the same page: React
+ * gives a component no way to tell these apart) never waits on it: it is `'skipped'` and prints a marker only
+ * (`SkippedRead`), which the same card instance re-renders while hydrating and replaces with the page's verified seed
+ * right after.
  */
-interface InflightRead {
-	readonly promise: Promise<VerifiedDelivery>
-	readonly turn: number
-}
-const inflightReads = new Map<string, InflightRead>()
+/** The reads a render is suspended on, per runtime cache (a fresh runtime, a fresh page in a test, starts with none). */
+const inflightReadsByCache = new WeakMap<object, Map<string, Promise<VerifiedDelivery>>>()
 
-/** The current task's number: it changes once the task (and its microtasks) has run. */
-let turn = 0
-let turnOpen = false
-function currentTurn(): number {
-	if (!turnOpen) {
-		turnOpen = true
-		turn += 1
-		queueMicrotask(() => {
-			turnOpen = false
-		})
+function suspendOn(cache: object, key: string, start: () => Promise<VerifiedDelivery>): VerifiedDelivery {
+	let reads = inflightReadsByCache.get(cache)
+	if (!reads) {
+		reads = new Map()
+		inflightReadsByCache.set(cache, reads)
 	}
-	return turn
-}
-
-function suspendOn(key: string, start: () => Promise<VerifiedDelivery>): VerifiedDelivery {
-	let pending = inflightReads.get(key)
+	let pending = reads.get(key)
 	if (!pending) {
-		const promise = start().finally(() => inflightReads.delete(key))
-		pending = { promise, turn: currentTurn() }
-		inflightReads.set(key, pending)
+		const own = reads
+		pending = start().finally(() => own.delete(key))
+		reads.set(key, pending)
 	}
-	return suspendUntil(pending.promise)
+	return suspendUntil(pending)
 }
 
 function suspendOnServer(
 	key: string,
 	read: Parameters<typeof getVerifiedDelivery>[0],
 	waitMs: number | undefined,
-): VerifiedDelivery {
-	const pending = inflightReads.get(key)
-	if (pending && pending.turn !== currentTurn()) return unreachableDelivery()
-	// A read of the placement this render did not start (a background refresh still running when the stale window
-	// ended): never wait behind it either. When it lands, the next render paints its answer.
-	if (!pending && deliveryLoading(read)) return unreachableDelivery()
-	return suspendOn(key, () => {
+): VerifiedDelivery | 'skipped' {
+	if (deliveryLoading(read)) return 'skipped'
+	return suspendOn(read.cache ?? inflightReadsByCache, key, () => {
 		const loaded = getVerifiedDelivery(read)
 		if (waitMs === undefined || !Number.isFinite(waitMs) || waitMs <= 0) return loaded
 		return new Promise<VerifiedDelivery>((resolve) => {
@@ -243,6 +228,26 @@ function suspendOnServer(
 			)
 		})
 	})
+}
+
+/** 2.0.2: the attribute a skipped server render's marker carries: the card instance's `useId`. */
+export const SKIPPED_ATTRIBUTE = 'data-certrev-skipped'
+
+/**
+ * 2.0.2: what a server render prints when it did not wait for a read it did not start: a hidden marker naming the card
+ * instance, and no record (it knows nothing about the placement, so it must never stand in for another card's record).
+ * Not a failure: nothing is reported or remembered.
+ */
+function SkippedRead({ instance }: { readonly instance: string }) {
+	return <div hidden {...{ [SKIPPED_ATTRIBUTE]: instance }} />
+}
+
+/** 2.0.2: whether the live document holds this card instance's skipped marker (it is hydrating one). */
+function skippedInDocument(instance: string): boolean {
+	for (const el of Array.from(document.querySelectorAll(`[${SKIPPED_ATTRIBUTE}]`))) {
+		if (el.getAttribute(SKIPPED_ATTRIBUTE) === instance) return true
+	}
+	return false
 }
 
 /** `use` where React has it (19), else the thrown promise (18). */
@@ -796,6 +801,8 @@ function useHydrating(): boolean {
 function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 	const rt = cardDeliveryRuntime()
 	const hydrating = useHydrating()
+	// 2.0.2: this card instance's id, the same on the server and while hydrating (`SkippedRead`).
+	const instance = React.useId()
 	// Latched at mount: this instance hydrated server HTML (as opposed to a client mount).
 	const [hydratedMount] = React.useState(hydrating)
 	// The clock is read per render, so the lifecycle is judged NOW, not when the envelope was fetched.
@@ -816,11 +823,13 @@ function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 	)
 	if (awaitsStream) return <StreamedRecordCard {...props} />
 	if (inBrowser) {
+		// 2.0.2: the server skipped this instance's read: hydrate its marker as it is; right after, the page's record paints.
+		if (hydrating && skippedInDocument(instance)) return <SkippedRead instance={instance} />
 		if (fromPage) return paintRecord(fromPage, props, context, !hydrating)
 		if (hydratedMount) return null
 		if (!props.clientRead) return clientMountFace(props)
 	}
-	return readAndPaint(props, context, inBrowser)
+	return readAndPaint(props, context, inBrowser, instance)
 }
 
 /**
@@ -831,6 +840,7 @@ function readAndPaint(
 	props: EnvelopeCardProps,
 	context: Parameters<typeof renderVerdict>[1],
 	inBrowser: boolean,
+	instance = '',
 ): React.ReactElement | null {
 	const rt = cardDeliveryRuntime()
 	const { design } = props
@@ -850,7 +860,10 @@ function readAndPaint(
 		: `${props.baseUrl}|${props.externalId}`
 	const settled =
 		readVerifiedDelivery(read) ??
-		(inBrowser ? suspendOn(key, () => getVerifiedDelivery(read)) : suspendOnServer(key, read, rt.serverWaitMs))
+		(inBrowser
+			? suspendOn(rt.cache, key, () => getVerifiedDelivery(read))
+			: suspendOnServer(key, read, rt.serverWaitMs))
+	if (settled === 'skipped') return <SkippedRead instance={instance} />
 	if (settled.verdict.decision !== 'render') {
 		return settleWithoutEnvelope(
 			props,

@@ -7,6 +7,7 @@
  * (`renderToPipeableStream`, no `document`).
  */
 
+import { renderToReadableStream } from 'react-dom/server.browser'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
 import {
@@ -211,8 +212,12 @@ describe('SC2: concurrent renders never wait behind a read in flight', () => {
 		expect(firstDone).toBe(false)
 		for (const html of others) {
 			expect(chromeRoot(html)).toBeNull()
-			expect(seedOf(html)).toEqual(unreachableRecord)
+			// 2.0.2 (final review R1-2): a skipped render writes no record (it knows nothing of the placement), only its marker.
+			expect(seedOf(html)).toBeNull()
+			expect(html).toContain('data-certrev-skipped=')
 		}
+		// Not failures: nothing reported for the skipped renders.
+		expect(warn).not.toHaveBeenCalled()
 		await vi.advanceTimersByTimeAsync(CARD_SERVER_WAIT_MS)
 		await first
 		expect(delivery.calls).toHaveLength(1)
@@ -234,7 +239,7 @@ describe('SC2: concurrent renders never wait behind a read in flight', () => {
 		expect(delivery.calls).toHaveLength(1)
 	})
 
-	it('two cards of one placement in one page render share the one read (and its one wait)', async () => {
+	it('two cards of one placement in one page render: one read, one wait (the second card does not add one)', async () => {
 		delivery.respond(hang)
 		const page = await timed(
 			<>
@@ -243,6 +248,42 @@ describe('SC2: concurrent renders never wait behind a read in flight', () => {
 			</>,
 		)
 		expect(page.waited).toBe(CARD_SERVER_WAIT_MS)
+		expect(page.html).toContain('data-certrev-skipped=')
+		expect(delivery.calls).toHaveLength(1)
+	})
+})
+
+describe('final review R1-1: independent renders started in the same task never wait on each other', () => {
+	/** `renderToReadableStream` from React's web build: it renders synchronously inside the call (no task boundary). */
+	async function readableHtml(element: ReturnType<typeof card>): Promise<string> {
+		const stream = await renderToReadableStream(element)
+		await stream.allReady
+		return new Response(stream).text()
+	}
+
+	it.each<[string, (element: ReturnType<typeof card>) => Promise<string>]>([
+		['renderToPipeableStream', renderToHtml],
+		['renderToReadableStream (web build)', readableHtml],
+	])('%s: two roots started back to back, no await between: the second finishes at once, the first waits 300 ms', async (_api, render) => {
+		delivery.respond(hang)
+		let firstDone = false
+		let secondDone = false
+		const first = render(card()).then((html) => {
+			firstDone = true
+			return html
+		})
+		const second = render(card()).then((html) => {
+			secondDone = true
+			return html
+		})
+		await settleIo()
+		expect(secondDone).toBe(true)
+		expect(firstDone).toBe(false)
+		expect(await second).toContain('data-certrev-skipped=')
+		await vi.advanceTimersByTimeAsync(CARD_SERVER_WAIT_MS)
+		await settleIo()
+		expect(firstDone).toBe(true)
+		expect(seedOf(await first)).toEqual(unreachableRecord)
 		expect(delivery.calls).toHaveLength(1)
 	})
 })

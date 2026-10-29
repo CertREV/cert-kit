@@ -62,6 +62,8 @@ it.each<[string, () => ContractFixture]>([
 		fetchImpl: () => server.fetch,
 		now: () => T0,
 	})
+	// 2.0.2: the warm render, where both blocks print (the cold read's skipped memo block: final-review-r1.test.tsx).
+	await renderToHtml(page())
 	const html = await renderToHtml(page())
 	restore()
 	const calls: string[] = []

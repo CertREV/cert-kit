@@ -662,13 +662,18 @@ describe('with the delivery marker: the envelope face', () => {
 			expect(delivery.calls).toHaveLength(2)
 		})
 
-		it('two cards on one page share one read', async () => {
-			const html = await renderToHtml(
+		it('two cards on one page share one read (2.0.2: on the cold read the second does not wait for it)', async () => {
+			const page = (
 				<>
 					{card()}
 					{card({ mode: 'sidebar' })}
-				</>,
+				</>
 			)
+			// 2.0.2 (final review R1-1): the cold render's second card prints the skipped marker instead of waiting.
+			const cold = await renderToHtml(page)
+			expect(cold.split('<div data-certrev-cert-chrome').length - 1).toBe(1)
+			expect(cold).toContain('data-certrev-skipped=')
+			const html = await renderToHtml(page)
 			expect(html.split('<div data-certrev-cert-chrome').length - 1).toBe(2)
 			expect(delivery.calls).toHaveLength(1)
 		})
