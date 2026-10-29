@@ -8,8 +8,9 @@
  *    entry, not found).
  *  - 2.0.1: where CertREV cannot be reached (a 5xx, a body that is not JSON, a network error, the deadline), nothing
  *    either, with a `'none'` record naming `delivery_unreachable` and one report (1.2.0 to 2.0.0 painted the block's
- *    options face). The server's read waits up to 8s; a cached certificate is fresh for 30 s and served at most 30 s
- *    past that while one refresh runs or while CertREV is down, then nothing.
+ *    options face). 2.0.2: the server's render waits up to 300 ms (2.0.1: 8 s) and a failure is remembered 60 s (2.0.1:
+ *    5 s); a cached certificate is fresh for 30 s and served at most 30 s past that while one refresh runs or while
+ *    CertREV is down, then nothing.
  */
 
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -27,9 +28,11 @@ import {
 	WIRE_INPUTS,
 } from '../cert-review-card.js'
 import {
+	CARD_DELIVERY_FAILURE_MS,
 	CARD_DELIVERY_STALE_MS,
 	CARD_DELIVERY_TIMEOUT_MS,
 	CARD_DELIVERY_TTL_MS,
+	CARD_SERVER_WAIT_MS,
 	cardDeliveryRuntime,
 	setCardDeliveryRuntimeForTests,
 } from '../delivery-runtime.js'
@@ -530,32 +533,52 @@ describe('with the delivery marker: the envelope face', () => {
 			expect(delivery.calls).toEqual([`${DELIVERY_URL}?design=4&designBrand=staging-shopify-canary`])
 		})
 
-		it('the card runtime waits 8s (the verifier defaults to 3s); a certificate is fresh 30 s and served 30 s past that', () => {
+		it('2.0.2 (SC1): a server render waits 300 ms; the read itself may run 8 s; a failure is remembered 60 s; a certificate is fresh 30 s and served 30 s past that', () => {
 			restore()
+			expect(CARD_SERVER_WAIT_MS).toBe(300)
 			expect(CARD_DELIVERY_TIMEOUT_MS).toBe(8_000)
+			expect(CARD_DELIVERY_FAILURE_MS).toBe(60_000)
 			expect(CARD_DELIVERY_TTL_MS).toBe(30_000)
 			expect(CARD_DELIVERY_STALE_MS).toBe(30_000)
 			expect(cardDeliveryRuntime().timeoutMs).toBe(CARD_DELIVERY_TIMEOUT_MS)
+			expect(cardDeliveryRuntime().serverWaitMs).toBe(CARD_SERVER_WAIT_MS)
 			restore = setCardDeliveryRuntimeForTests({ fetchImpl: () => delivery.fetch })
 			expect(cardDeliveryRuntime().timeoutMs).toBe(CARD_DELIVERY_TIMEOUT_MS)
+			expect(cardDeliveryRuntime().serverWaitMs).toBe(CARD_SERVER_WAIT_MS)
 		})
 
-		it('a read slower than 3s still paints the envelope under the card deadline', async () => {
+		it('2.0.2 (SC1): a read slower than the server wait prints nothing at 300 ms, lands in the cache, and the next render paints it with no new read', async () => {
 			restore()
 			restore = setCardDeliveryRuntimeForTests({
 				resolveKid: issuer.resolveKid,
 				fetchImpl: () => delivery.fetch,
 				now: () => clock,
+				timeoutMs: CARD_DELIVERY_TIMEOUT_MS,
+				serverWaitMs: CARD_SERVER_WAIT_MS,
 			})
 			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 			try {
 				const body = deliveryBody(issuer.envelope())
 				delivery.respond(() => new Promise<Response>((resolve) => setTimeout(() => resolve(json(body)), 5_000)))
-				const pending = renderToHtml(card())
-				await vi.advanceTimersByTimeAsync(5_000)
-				const html = await pending
-				expect(html).toContain('I reviewed the retinol claims')
-				expect(seedOf(html)).toMatchObject({ externalId: ENTRY_ID, payload: { subject: { externalId: ENTRY_ID } } })
+				let done = false
+				const pending = renderToHtml(card()).then((html) => {
+					done = true
+					return html
+				})
+				await vi.advanceTimersByTimeAsync(299)
+				expect(done).toBe(false)
+				await vi.advanceTimersByTimeAsync(1)
+				const first = await pending
+				expect(chromeRoot(first)).toBeNull()
+				expect(seedOf(first)).toEqual(fallbackRecord('delivery_unreachable'))
+				// The read runs on and lands at 5 s (its verification is real async work): from then on a render paints it, at
+				// once, and nothing reads again. Every render before it lands prints nothing at once (the remembered failure).
+				await vi.advanceTimersByTimeAsync(4_700)
+				await vi.waitFor(async () => expect(await renderToHtml(card())).toContain('I reviewed the retinol claims'), {
+					timeout: 2_000,
+					interval: 5,
+				})
+				expect(delivery.calls).toHaveLength(1)
 			} finally {
 				vi.useRealTimers()
 			}
@@ -625,14 +648,16 @@ describe('with the delivery marker: the envelope face', () => {
 			expect(chromeRoot(await renderToHtml(card()))).toBeNull()
 		})
 
-		it('a failed read prints nothing, and is retried after the short negative TTL', async () => {
+		it('2.0.2 (SC1): a failed read prints nothing, is remembered 60 s with no read, then read once more', async () => {
 			delivery.respond(() => json({ error: 'boom' }, 500))
 			expect(seedOf(await renderToHtml(card()))).toEqual(fallbackRecord('delivery_unreachable'))
 			delivery.respond(() => json(deliveryBody(issuer.envelope())))
-			clock = T0 + 4_000
+			clock = T0 + 6_000
+			expect(seedOf(await renderToHtml(card()))).toEqual(fallbackRecord('delivery_unreachable'))
+			clock = T0 + CARD_DELIVERY_FAILURE_MS - 1
 			expect(seedOf(await renderToHtml(card()))).toEqual(fallbackRecord('delivery_unreachable'))
 			expect(delivery.calls).toHaveLength(1)
-			clock = T0 + 6_000
+			clock = T0 + CARD_DELIVERY_FAILURE_MS
 			expect(await renderToHtml(card())).toContain('I reviewed the retinol claims')
 			expect(delivery.calls).toHaveLength(2)
 		})

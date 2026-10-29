@@ -18,6 +18,12 @@
  *      down costs the page nothing it already had. A definitive answer (a revocation, say)
  *      replaces the entry the moment the refresh lands. With the default `staleMs` of 0 an
  *      expired entry is gone, exactly as before 1.2.0.
+ *   5. (2.0.2, opt-in through `failureTtlMs`) FAILURE MEMORY: a transient result (`isTransient`: the origin was not
+ *      reached) is remembered in a slot of its own for `failureTtlMs`, beside a positive entry and never over it. While
+ *      it is remembered nothing loads for the key: a read with no servable entry gets the failure at once, and a stale
+ *      entry is served without starting a refresh. A definitive answer clears it. So an ongoing outage costs a caller at
+ *      most one load per key per failure window. `markFailed` lets a caller that stopped waiting (a render deadline)
+ *      remember one before the load itself settles. Without `failureTtlMs` the cache behaves exactly as 2.0.1's.
  *
  * It is deliberately tiny + dependency-free (a Map + timestamps) so it runs in any server
  * runtime (Node, edge, workerd). For multi-instance deployments this is per-instance L1 and
@@ -44,6 +50,11 @@ export interface TtlCacheOptions {
 	 * it and none would ever refresh again.
 	 */
 	readonly inflightMaxMs?: number
+	/**
+	 * 2.0.2: how long a transient result (`isTransient`) is remembered, in a slot of its own (default: none, and a transient
+	 * result is cached as a negative entry as before). See the module header, point 5.
+	 */
+	readonly failureTtlMs?: number
 	/** Injectable clock for deterministic tests. */
 	readonly now?: () => number
 }
@@ -62,11 +73,13 @@ interface Inflight<V> {
 export class TtlCache<V> {
 	private readonly store = new Map<string, Entry<V>>()
 	private readonly inflight = new Map<string, Inflight<V>>()
+	private readonly failures = new Map<string, { readonly value: V; readonly until: number }>()
 	private readonly ttlMs: number
 	private readonly negativeTtlMs: number
 	private readonly maxEntries: number
 	private readonly staleMs: number
 	private readonly inflightMaxMs: number
+	private readonly failureTtlMs: number
 	private readonly now: () => number
 
 	constructor(opts: TtlCacheOptions = {}) {
@@ -75,6 +88,7 @@ export class TtlCache<V> {
 		this.maxEntries = opts.maxEntries ?? 1000
 		this.staleMs = opts.staleMs !== undefined && opts.staleMs > 0 ? opts.staleMs : 0
 		this.inflightMaxMs = opts.inflightMaxMs ?? Number.POSITIVE_INFINITY
+		this.failureTtlMs = opts.failureTtlMs !== undefined && opts.failureTtlMs > 0 ? opts.failureTtlMs : 0
 		this.now = opts.now ?? Date.now
 	}
 
@@ -89,10 +103,20 @@ export class TtlCache<V> {
 		return undefined
 	}
 
+	/** 2.0.2: the remembered failure while it lasts (only with `failureTtlMs`); prunes it past that. */
+	private failure(key: string): { readonly value: V } | undefined {
+		const f = this.failures.get(key)
+		if (!f) return undefined
+		if (f.until > this.now()) return f
+		this.failures.delete(key)
+		return undefined
+	}
+
 	/** Read a live (non-expired) entry, or undefined. Never serves a stale one; prunes an entry past its stale window. */
 	peek(key: string): V | undefined {
 		const e = this.servable(key)
-		return e && e.expiresAt > this.now() ? e.value : undefined
+		if (e && e.expiresAt > this.now()) return e.value
+		return this.failure(key)?.value
 	}
 
 	/**
@@ -109,8 +133,10 @@ export class TtlCache<V> {
 		isTransient?: (v: V) => boolean,
 	): V | undefined {
 		const e = this.servable(key)
-		if (!e) return undefined
-		if (e.expiresAt <= this.now()) {
+		const failed = this.failure(key)
+		if (!e) return failed?.value
+		// 2.0.2: no refresh while a failure is remembered; the stale value is still served.
+		if (e.expiresAt <= this.now() && !failed) {
 			this.load(key, loader, isNegative, positiveTtlMs, isTransient).catch(() => undefined)
 		}
 		return e.value
@@ -160,7 +186,14 @@ export class TtlCache<V> {
 
 		const promise: Promise<V> = (async () => {
 			const value = await loader()
-			if (isTransient?.(value)) {
+			if (this.failureTtlMs > 0) {
+				if (isTransient?.(value)) {
+					this.markFailed(key, value)
+					const kept = this.servable(key)
+					return kept && !kept.negative ? kept.value : value
+				}
+				this.failures.delete(key)
+			} else if (isTransient?.(value)) {
 				const kept = this.servable(key)
 				if (kept && !kept.negative) return kept.value
 			}
@@ -189,9 +222,23 @@ export class TtlCache<V> {
 		this.store.set(key, { value, expiresAt: this.now() + ttl, negative })
 	}
 
+	/**
+	 * 2.0.2: remember a transient failure for `key` for `failureTtlMs` from now (a caller that stopped waiting for a load, or
+	 * a load that settled on one). It never touches a positive entry. Without `failureTtlMs` it is a negative entry, as a
+	 * transient result was before 2.0.2.
+	 */
+	markFailed(key: string, value: V): void {
+		if (this.failureTtlMs <= 0) {
+			this.set(key, value, true)
+			return
+		}
+		this.failures.set(key, { value, until: this.now() + this.failureTtlMs })
+	}
+
 	/** Drop a key (e.g. on a known revocation push). */
 	delete(key: string): void {
 		this.store.delete(key)
+		this.failures.delete(key)
 	}
 
 	/**
@@ -205,11 +252,15 @@ export class TtlCache<V> {
 		for (const key of this.store.keys()) {
 			if (key.startsWith(prefix)) this.store.delete(key)
 		}
+		for (const key of this.failures.keys()) {
+			if (key.startsWith(prefix)) this.failures.delete(key)
+		}
 	}
 
 	clear(): void {
 		this.store.clear()
 		this.inflight.clear()
+		this.failures.clear()
 	}
 
 	get size(): number {

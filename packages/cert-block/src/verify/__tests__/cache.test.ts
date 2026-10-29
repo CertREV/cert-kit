@@ -177,3 +177,70 @@ describe('inflightMaxMs: an unsettled load is joined only so long', () => {
 		expect(t.calls()).toBe(2)
 	})
 })
+
+describe('2.0.2: failure memory (failureTtlMs)', () => {
+	const failing = async (): Promise<Value> => ({ ok: false, n: 0, transient: true })
+
+	it('a transient result is remembered for failureTtlMs: no load inside it, one load after it', async () => {
+		const t = setup({ failureTtlMs: 60_000 })
+		t.answer(failing)
+		expect(await t.get()).toEqual({ ok: false, n: 0, transient: true })
+		t.advance(59_999)
+		expect(t.read()).toEqual({ ok: false, n: 0, transient: true })
+		expect(await t.get()).toEqual({ ok: false, n: 0, transient: true })
+		expect(t.cache.peek('k')).toEqual({ ok: false, n: 0, transient: true })
+		expect(t.calls()).toBe(1)
+		t.answer(async () => ({ ok: true, n: 7 }))
+		t.advance(1)
+		expect(t.read()).toBeUndefined()
+		expect(await t.get()).toEqual({ ok: true, n: 7 })
+		expect(t.calls()).toBe(2)
+	})
+
+	it('it sits beside a positive entry, never over it: the stale value is served, with no refresh while it lasts', async () => {
+		const t = setup({ failureTtlMs: 60_000, staleMs: 30_000 })
+		expect(await t.get()).toEqual({ ok: true, n: 1 })
+		t.answer(failing)
+		t.advance(1_000)
+		expect(t.read()).toEqual({ ok: true, n: 1 })
+		await settle()
+		expect(t.calls()).toBe(2)
+		for (let i = 0; i < 5; i++) expect(t.read()).toEqual({ ok: true, n: 1 })
+		await settle()
+		expect(t.calls()).toBe(2)
+		t.advance(30_000)
+		expect(t.read()).toEqual({ ok: false, n: 0, transient: true })
+		expect(t.calls()).toBe(2)
+	})
+
+	it('a definitive answer clears it', async () => {
+		const t = setup({ failureTtlMs: 60_000 })
+		t.cache.markFailed('k', { ok: false, n: 0, transient: true })
+		expect(t.read()).toEqual({ ok: false, n: 0, transient: true })
+		t.cache.delete('k')
+		expect(t.read()).toBeUndefined()
+		t.cache.markFailed('k', { ok: false, n: 0, transient: true })
+		t.cache.clear()
+		expect(t.read()).toBeUndefined()
+	})
+
+	it('a load that lands after markFailed replaces the failure with its answer', async () => {
+		const t = setup({ failureTtlMs: 60_000 })
+		let release: (v: Value) => void = () => {}
+		t.answer(() => new Promise<Value>((resolve) => (release = resolve)))
+		const pending = t.get()
+		t.cache.markFailed('k', { ok: false, n: 0, transient: true })
+		expect(t.read()).toEqual({ ok: false, n: 0, transient: true })
+		release({ ok: true, n: 3 })
+		await pending
+		expect(t.read()).toEqual({ ok: true, n: 3 })
+	})
+
+	it('without failureTtlMs, markFailed is a negative entry for the negative TTL (the 2.0.1 behaviour)', () => {
+		const t = setup()
+		t.cache.markFailed('k', { ok: false, n: 0, transient: true })
+		expect(t.cache.peek('k')).toEqual({ ok: false, n: 0, transient: true })
+		t.advance(100)
+		expect(t.cache.peek('k')).toBeUndefined()
+	})
+})
