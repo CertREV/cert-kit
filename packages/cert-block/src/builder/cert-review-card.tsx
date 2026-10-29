@@ -737,6 +737,27 @@ function StreamedRecordCard(props: EnvelopeCardProps) {
 	return paintRecord(record, props, context, true)
 }
 
+/**
+ * 2.0.2 (final review R2-1): a card whose server render skipped its read. While hydrating, its marker as the server
+ * printed it. After, the record the page holds for its placement (the seed the card that did the read printed), also
+ * when that record streams in after this card hydrated; nothing while it has not arrived, and nothing if the page loads
+ * without one. It reads nothing.
+ */
+function SkippedThenRecord(props: EnvelopeCardProps & { readonly instance: string; readonly hydrating: boolean }) {
+	const rt = cardDeliveryRuntime()
+	// In render, not in an effect, as `StreamedRecordCard` does.
+	watchStreamedRecords()
+	const record = React.useSyncExternalStore(
+		subscribeStreamedRecords,
+		() => streamedRecordFor(props.baseUrl, props.externalId, props.design),
+		pendingRecord,
+	)
+	if (props.hydrating) return <SkippedRead instance={props.instance} />
+	if (record === 'pending' || record === 'done') return null
+	const context = { platform: 'builder', externalId: props.externalId, now: new Date(rt.now()) }
+	return paintRecord(record, props, context, true)
+}
+
 const subscribeNever = () => () => {}
 
 /**
@@ -821,10 +842,11 @@ function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 	const [awaitsStream] = React.useState(
 		() => inBrowser && !hydrating && fromPage === undefined && document.readyState === 'loading',
 	)
+	// 2.0.2, latched at mount: this instance is hydrating a server render that skipped its read (`SkippedRead`).
+	const [skippedMount] = React.useState(() => inBrowser && hydrating && skippedInDocument(instance))
+	if (skippedMount) return <SkippedThenRecord {...props} instance={instance} hydrating={hydrating} />
 	if (awaitsStream) return <StreamedRecordCard {...props} />
 	if (inBrowser) {
-		// 2.0.2: the server skipped this instance's read: hydrate its marker as it is; right after, the page's record paints.
-		if (hydrating && skippedInDocument(instance)) return <SkippedRead instance={instance} />
 		if (fromPage) return paintRecord(fromPage, props, context, !hydrating)
 		if (hydratedMount) return null
 		if (!props.clientRead) return clientMountFace(props)
