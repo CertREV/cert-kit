@@ -447,6 +447,13 @@ export function rememberDeliveryUnreachable(
 	;(opts.cache ?? sharedDeliveryCache).markFailed(deliveryCacheKey(opts), unreachable())
 }
 
+/** 2.0.2: whether a read of one placement is already running in `cache` (a render's, or a background refresh). */
+export function deliveryLoading(
+	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
+): boolean {
+	return (opts.cache ?? sharedDeliveryCache).loading(deliveryCacheKey(opts))
+}
+
 /** Drop the cached read for one placement (e.g. from a revocation webhook); with `design`, that pinned read. */
 export function invalidateDelivery(
 	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'design'>,

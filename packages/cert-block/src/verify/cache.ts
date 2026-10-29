@@ -68,6 +68,7 @@ interface Entry<V> {
 interface Inflight<V> {
 	readonly promise: Promise<V>
 	readonly startedAt: number
+	readonly token: object
 }
 
 export class TtlCache<V> {
@@ -184,8 +185,12 @@ export class TtlCache<V> {
 		const existing = this.inflight.get(key)
 		if (existing && this.now() - existing.startedAt < this.inflightMaxMs) return existing.promise
 
+		const token = {}
 		const promise: Promise<V> = (async () => {
 			const value = await loader()
+			// 2.0.2: a load that was replaced (abandoned past `inflightMaxMs`) never writes: its answer may be older than
+			// the replacement's, and a late verified read must never overwrite a newer revocation.
+			if (this.inflight.get(key)?.token !== token) return value
 			if (this.failureTtlMs > 0) {
 				if (isTransient?.(value)) {
 					this.markFailed(key, value)
@@ -202,10 +207,10 @@ export class TtlCache<V> {
 			return value
 		})().finally(() => {
 			// Only this load's own slot: a newer load that replaced an abandoned one keeps its place.
-			if (this.inflight.get(key)?.promise === promise) this.inflight.delete(key)
+			if (this.inflight.get(key)?.token === token) this.inflight.delete(key)
 		})
 
-		this.inflight.set(key, { promise, startedAt: this.now() })
+		this.inflight.set(key, { promise, startedAt: this.now(), token })
 		return promise
 	}
 
@@ -220,6 +225,12 @@ export class TtlCache<V> {
 		const configured = negative ? this.negativeTtlMs : this.ttlMs
 		const ttl = ttlMsOverride !== undefined && Number.isFinite(ttlMsOverride) ? ttlMsOverride : configured
 		this.store.set(key, { value, expiresAt: this.now() + ttl, negative })
+	}
+
+	/** 2.0.2: whether a load for `key` is running (and still joinable, younger than `inflightMaxMs`). */
+	loading(key: string): boolean {
+		const existing = this.inflight.get(key)
+		return existing !== undefined && this.now() - existing.startedAt < this.inflightMaxMs
 	}
 
 	/**

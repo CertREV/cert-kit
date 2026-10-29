@@ -262,3 +262,18 @@ describe('2.0.2 break-it B3: the failure slots are bounded like the store', () =
 		expect((t.cache as unknown as { failures: Map<string, unknown> }).failures.size).toBe(3)
 	})
 })
+
+describe('2.0.2 plan advice A1: a replaced load never writes', () => {
+	it('an abandoned verified load that settles after its replacement read a revocation leaves the revocation', async () => {
+		const t = setup({ inflightMaxMs: 10_000, staleMs: 30_000, failureTtlMs: 60_000 })
+		let releaseOld: (v: Value) => void = () => {}
+		t.answer(() => new Promise<Value>((resolve) => (releaseOld = resolve)))
+		const old = t.get()
+		t.advance(10_000)
+		t.answer(async () => ({ ok: false, n: 2 })) // the replacement reads a definitive no (a tombstone)
+		expect(await t.get()).toEqual({ ok: false, n: 2 })
+		releaseOld({ ok: true, n: 1 }) // the old verified answer lands last
+		await old
+		expect(t.cache.peek('k')).toEqual({ ok: false, n: 2 })
+	})
+})
