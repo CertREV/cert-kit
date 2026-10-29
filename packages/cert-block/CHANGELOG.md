@@ -27,9 +27,13 @@ connections and never answered held a brand's HTML up to 8 s, again every 5 s.
   300 ms or the read's 8 s), a network error, a 5xx, a body that is not JSON. Inside that window no read of the
   placement starts and every render answers at once, so an ongoing outage costs at most one 300 ms wait per placement
   per minute. CertREV's recovery shows on the first render after the window.
-- **Concurrent requests never wait behind a read in flight.** A render that finds another request's read of the
-  placement still running prints nothing at once. Cards of one placement in the same page render (a split header and
-  memo, a card twice) still share the one read, and its one wait.
+- **Concurrent requests never wait behind a read in flight.** A server render that finds a read of the placement
+  already running that it did not start (another request's, a background refresh) prints nothing at once and reports
+  nothing: it is not a failure. React gives a block no way to tell another request from a second block of the same
+  placement on its own page, so on a placement's cold read the second block (a split banner's memo, say) does not wait
+  either: it prints a hidden `data-certrev-skipped` marker and no record, hydrates as that marker, and right after
+  paints from the verified seed the first block printed, with no browser read. Every warm render prints both blocks,
+  as before.
 - **A warm card never waits.** A verified card paints from the cache while it is fresh (30 s) and through its stale
   window (30 s more), refreshed in the background, never on the render path. While a failure is remembered the stale
   card keeps painting and no refresh starts; past the stale window it prints nothing, at once.
