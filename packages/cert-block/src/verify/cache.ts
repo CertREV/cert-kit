@@ -224,13 +224,23 @@ export class TtlCache<V> {
 
 	/**
 	 * 2.0.2: remember a transient failure for `key` for `failureTtlMs` from now (a caller that stopped waiting for a load, or
-	 * a load that settled on one). It never touches a positive entry. Without `failureTtlMs` it is a negative entry, as a
-	 * transient result was before 2.0.2.
+	 * a load that settled on one), beside the key's entry: it never touches a positive entry. Without `failureTtlMs` it is
+	 * a negative entry for the negative TTL, as a transient result was before 2.0.2, and like any `set` it replaces the
+	 * key's entry.
 	 */
 	markFailed(key: string, value: V): void {
 		if (this.failureTtlMs <= 0) {
 			this.set(key, value, true)
 			return
+		}
+		// Bounded like the store (break-it B3): past `maxEntries`, drop the expired failures, then the oldest.
+		if (this.failures.size >= this.maxEntries && !this.failures.has(key)) {
+			const now = this.now()
+			for (const [k, f] of this.failures) if (f.until <= now) this.failures.delete(k)
+			if (this.failures.size >= this.maxEntries) {
+				const oldest = this.failures.keys().next().value
+				if (oldest !== undefined) this.failures.delete(oldest)
+			}
 		}
 		this.failures.set(key, { value, until: this.now() + this.failureTtlMs })
 	}

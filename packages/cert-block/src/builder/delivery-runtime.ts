@@ -91,7 +91,8 @@ function newCardCache(now?: () => number): TtlCache<CachedDelivery> {
 		ttlMs: CARD_DELIVERY_TTL_MS,
 		negativeTtlMs: 5_000,
 		staleMs: CARD_DELIVERY_STALE_MS,
-		failureTtlMs: CARD_DELIVERY_FAILURE_MS,
+		// 2.0.2: on a server only. A browser read (`clientRead`) holds no page, and keeps 2.0.1's 5 s (break-it B1).
+		...(typeof document === 'undefined' ? { failureTtlMs: CARD_DELIVERY_FAILURE_MS } : {}),
 		// A refresh the host runtime abandoned (workerd cancels a finished request's I/O) never
 		// settles; after the deadline plus a margin, the next render starts a new one.
 		inflightMaxMs: CARD_DELIVERY_TIMEOUT_MS + 2_000,
