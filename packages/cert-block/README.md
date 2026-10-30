@@ -599,7 +599,9 @@ before it writes the seed, the payload is stripped:
 The face is painted from the stripped payload on the server and in the browser, so the two are identical and the page
 source holds neither the photo URL nor the memo text. `content.expert.compensationCue` is never stripped: it is a locked
 disclosure no def can hide, and the banner, the memo and the sidebar paint "Compensated expert" from it (the floating pill's own markup carries no
-disclosure line, as in the portal's snippets; the modal it opens paints the cue). **When anything was stripped the seed
+disclosure line, as in the portal's snippets; the modal it opens paints the cue). `content.expert.reviewScope` (2.1.0) is
+never stripped either: `'text'` makes every face and both dialogs print the text-only scope line ("Independent editorial
+review of this article’s text. …"), and anything else, absent included, the full line. **When anything was stripped the seed
 carries no `signature`.** The signature signs the whole payload, so a stripped payload no longer verifies against it;
 the browser never re-checks a seed's signature, only the lifecycle and subject policy at its own clock, and neither reads
 a stripped field. A seed that stripped nothing keeps the signature, so its payload can still be checked against the issuer
@@ -1026,7 +1028,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`2.0.2`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`2.1.0`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.

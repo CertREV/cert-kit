@@ -29,7 +29,7 @@
 
 import { asText, escapeHtml } from './escape.js'
 import { resizeAvatarUrl } from './avatar-resize.js'
-import { CERT_SCOPE_LINE, formatCertDisplayDate } from './display-strings.js'
+import { formatCertDisplayDate, scopeLineForReview } from './display-strings.js'
 import { checkIcon, chevronMark, verifiedStamp } from './certrev-cert-modal.styles.js'
 
 export interface CertModalCredential {
@@ -48,6 +48,9 @@ export interface CertModalExpert {
 	/** The pre-composed material-connection label ('Compensated expert') or null/absent for
 	 *  a pro-bono reviewer. Present → the disclosure footer renders the label; null/absent → label omitted. */
 	compensationCue?: string | null
+	/** 2.1.0: what the review covered (`'text'` | `'text_and_sources'`, absent = text and sources). Picks the locked
+	 *  scope line the footer prints, never its words. */
+	reviewScope?: string | null
 }
 
 /** The subset of the signed `payload.content` the modals read (structural). */
@@ -171,12 +174,13 @@ function certifiedChip(cls: string): string {
  * (`expert.compensationCue`, a FINISHED string off the signed envelope) leads ONLY when the reviewer
  * was compensated; a pro-bono reviewer (null/absent cue) drops the label but keeps the scope line —
  * which makes no compensation claim, so it is true for volunteers too and renders unconditionally.
- * The scope line is the verbatim FTC copy (`CERT_SCOPE_LINE`), never re-assembled here.
+ * The scope line is the verbatim FTC copy (`CERT_SCOPE_LINE`, or 2.1.0's `CERT_SCOPE_LINE_TEXT_ONLY` when the signed
+ * `expert.reviewScope` is `'text'`), never re-assembled here.
  */
 function disclosureFooter(expert: CertModalExpert | null | undefined): string {
 	const cue = asText(expert?.compensationCue).trim()
 	const cueHtml = cue ? `<span class="crm-disclosure__cue">${escapeHtml(cue)}</span> ` : ''
-	return `<div class="crm-disclosure">${cueHtml}${escapeHtml(CERT_SCOPE_LINE)}</div>`
+	return `<div class="crm-disclosure">${cueHtml}${escapeHtml(scopeLineForReview(expert?.reviewScope))}</div>`
 }
 
 /**
