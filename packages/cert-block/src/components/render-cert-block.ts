@@ -77,10 +77,11 @@ import {
 } from './memo-toggle.js'
 import { CERTREV_LINK_REL } from './rel.js'
 import {
-	CERT_SCOPE_LINE,
 	CERT_STRINGS_VERSION,
+	type CertReviewScope,
 	COMPENSATED_EXPERT_CUE,
 	CREDENTIAL_VERIFIED_ATTRIBUTION,
+	certScopeLineFor,
 	RENDER_BLOCK_FONT_STACKS,
 	type ResolvedBlockTheme,
 	resolveBlockTheme,
@@ -114,6 +115,8 @@ export interface CertBlockFace {
  * supply them and taking them as input made compliance copy rewritable from a CMS
  * field. `compensationCue` survives as an input for exactly ONE decision — whether the
  * reviewer was compensated at all — never for the wording.
+ * `reviewScope` (2.1.0) is the same kind of input: it picks WHICH locked scope line prints
+ * (`certScopeLineFor`), never its words.
  */
 export interface CertBlockFacts {
 	/** The content author (the "Written by" column). */
@@ -150,6 +153,12 @@ export interface CertBlockFacts {
 	 * reviewer: it makes no compensation claim, so it is true for volunteers too.
 	 */
 	readonly compensationCue?: string | null
+	/**
+	 * 2.1.0: WHAT the review covered, never the wording (the portal's signed `content.expert.reviewScope`). `'text'` prints
+	 * the locked `CERT_SCOPE_LINE_TEXT_ONLY`; absent, `'text_and_sources'` or any other value prints `CERT_SCOPE_LINE`,
+	 * exactly as 2.0.2 did (`certScopeLineFor`).
+	 */
+	readonly reviewScope?: CertReviewScope
 }
 
 /** The full input to `renderCertBlock`. */
@@ -623,7 +632,7 @@ function bannerMemoCard(facts: CertBlockFacts, placed: PlacedTest, responsive = 
 		? certificateLink(facts.certificateUrl, 'Certificate', STAMP_LINK_STYLE)
 		: ''
 	const scope = placed('scopeLine')
-		? `<div style="font-size:13px;color:var(--navy-55);margin-top:8px;line-height:1.5;">${escapeHtml(CERT_SCOPE_LINE)}</div>`
+		? `<div style="font-size:13px;color:var(--navy-55);margin-top:8px;line-height:1.5;">${escapeHtml(certScopeLineFor(facts.reviewScope))}</div>`
 		: ''
 	return (
 		`<div style="border:1px solid var(--navy-10);border-radius:calc(var(--br,14px) * 0.7);padding:24px;font-family:var(--cr-bf);">` +
@@ -665,7 +674,7 @@ function sidebarCard(facts: CertBlockFacts, placed: PlacedTest, responsive = fal
 	const cueEl = showsCompensationCue(facts, placed)
 		? `<span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(COMPENSATED_EXPERT_CUE)}</span>`
 		: ''
-	const scopeEl = placed('scopeLine') ? escapeHtml(CERT_SCOPE_LINE) : ''
+	const scopeEl = placed('scopeLine') ? escapeHtml(certScopeLineFor(facts.reviewScope)) : ''
 	const disclosure =
 		cueEl || scopeEl
 			? `<div style="font-size:12.5px;line-height:1.5;color:var(--navy-55);margin-top:16px;">${cueEl}${cueEl && scopeEl ? ' · ' : ''}${scopeEl}</div>`
@@ -806,7 +815,7 @@ function renderCustomFace(facts: CertBlockFacts, placed: PlacedTest, responsive 
 	const cueEl = showsCompensationCue(facts, placed)
 		? `<span style="font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(COMPENSATED_EXPERT_CUE)}</span>`
 		: ''
-	const scopeEl = placed('scopeLine') ? escapeHtml(CERT_SCOPE_LINE) : ''
+	const scopeEl = placed('scopeLine') ? escapeHtml(certScopeLineFor(facts.reviewScope)) : ''
 	if (cueEl || scopeEl) {
 		parts.push(
 			`<div style="font-size:12.5px;line-height:1.5;color:var(--navy-55);margin-top:16px;">${cueEl}${cueEl && scopeEl ? ' · ' : ''}${scopeEl}</div>`,

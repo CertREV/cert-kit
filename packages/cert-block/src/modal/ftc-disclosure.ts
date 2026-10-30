@@ -15,3 +15,11 @@
 
 export const FTC_DISCLOSURE_LINE =
 	"Independent editorial review of this article’s text and sources. Not a product endorsement, nor medical advice." as const;
+
+/**
+ * 2.1.0: the line for an article whose review covered its TEXT only (no references or sources section): a byte-faithful
+ * copy of the portal's `FTC_DISCLOSURE_LINE_TEXT_ONLY` (Owen, Console decision af5b0db5). Same contract status and curly
+ * apostrophe as `FTC_DISCLOSURE_LINE`.
+ */
+export const FTC_DISCLOSURE_LINE_TEXT_ONLY =
+	"Independent editorial review of this article’s text. Not a product endorsement, nor medical advice." as const;

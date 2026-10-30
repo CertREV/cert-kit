@@ -142,6 +142,30 @@ export const CERT_SCOPE_LINE =
 	'Independent editorial review of this article’s text and sources. Not a product endorsement, nor medical advice.'
 
 /**
+ * 2.1.0: the scope line for an article whose review covered its TEXT only (no references or sources section). Byte-verbatim
+ * copy of the portal's `FTC_DISCLOSURE_LINE_TEXT_ONLY` (`src/lib/embed/ftc-disclosure.ts`; Owen, Console decision
+ * af5b0db5, 2026-10-30: the review line says what the expert actually reviewed). Same curly apostrophe, same contract
+ * status as `CERT_SCOPE_LINE`: never re-word here.
+ */
+export const CERT_SCOPE_LINE_TEXT_ONLY =
+	'Independent editorial review of this article’s text. Not a product endorsement, nor medical advice.'
+
+/**
+ * 2.1.0: what the review covered, the portal's signed `content.expert.reviewScope`. ABSENT means `text_and_sources`: every
+ * envelope signed before the field existed prints exactly as 2.0.2 printed it.
+ */
+export type CertReviewScope = 'text' | 'text_and_sources'
+
+/**
+ * The scope line for a review scope, the ONE rule every face of this package prints by: only an exact `'text'` is the
+ * text-only line; anything else (absent, null, `'text_and_sources'`, a value this version has never heard of) is the full
+ * `CERT_SCOPE_LINE`. The portal's `scopeLineFor` decides the same way.
+ */
+export function certScopeLineFor(reviewScope: unknown): typeof CERT_SCOPE_LINE | typeof CERT_SCOPE_LINE_TEXT_ONLY {
+	return reviewScope === 'text' ? CERT_SCOPE_LINE_TEXT_ONLY : CERT_SCOPE_LINE
+}
+
+/**
  * The delivered display-string EDITION, stamped as `data-certrev-strings-version`
  * so the crawl monitor can assert which verbatim strings a live face should carry.
  * MUST equal the portal's `CERT_DISPLAY_STRINGS_VERSION` (display-strings.ts).
