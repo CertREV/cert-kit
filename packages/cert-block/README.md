@@ -329,9 +329,8 @@ bytes; the Delivery response carries the document as its unsigned `card` sibling
 
 **What a block prints.** Inside the card's wrapper (`data-certrev-face="card"`): the block's part hosts in page order
 and, in the block that holds the document's first part (the card on a banner, else the rail, else the pill), the head
-fragment (`<style data-certrev-card-head>`) before them, CertREV's profile and certificate dialog hosts and, once CertREV
-serves it, the runtime's `<script src integrity crossorigin="anonymous" defer>` after them. So a page prints each of
-those once: a split banner's header block carries them and its memo block prints the memo only, whose controls open the
+fragment (`<style data-certrev-card-head>`) before them and CertREV's profile and certificate dialog hosts after them
+(2.1.1: no runtime `<script>`; the card loads the runtime from the browser, below). So a page prints each of those once: a split banner's header block carries them and its memo block prints the memo only, whose controls open the
 page's one dialog (the runtime finds it by the placement). Keep the header block on a page that has a memo block. Each part is a
 `<certrev-card>` with a declarative shadow root, attached by the HTML parser: the card is complete with JavaScript off
 and no theme rule reaches inside it. The saved design decides the layout, not the block's `mode`; `part` splits a banner
@@ -343,7 +342,10 @@ page keeps one card when a brand changes its design. A sidebar card's float is l
 card print it again from the seed after re-checking it. A card the client mounts with no record on the page (an in-app
 navigation, Builder's editor) reads the Delivery API once (`clientRead`, on by default from 2.0.0; `clientRead={false}`
 restores 1.3.1's no-read behaviour), prints the card and attaches its roots (`setHTMLUnsafe`, else from each template),
-and loads the runtime once. A read your policy blocks prints nothing and reports `delivery_unreachable` (2.0.1; 2.0.0
+and loads the runtime once. On every page, server-rendered or not, the block that holds the page's assets loads
+CertREV's runtime once, into `document.head`, with its SRI integrity and `crossorigin="anonymous"` (2.1.1; 2.0.x also
+printed its tag in the server's HTML). So a policy whose `script-src` is a per-request nonce with `'strict-dynamic'`
+allows it (your nonced bundle inserts it) and logs no violation; the four sources above are unchanged. A read your policy blocks prints nothing and reports `delivery_unreachable` (2.0.1; 2.0.0
 painted the block's options face, as 1.3.1 did).
 
 **React 19 hosts and readers with JavaScript off.** React 19 streams a Suspense boundary larger than its
@@ -1028,7 +1030,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`2.1.0`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`2.1.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.
