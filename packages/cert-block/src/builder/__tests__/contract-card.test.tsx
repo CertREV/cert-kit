@@ -177,7 +177,14 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 				</ol>
 			</div>
 		)
-		const html = await serve(contractBody(issuer, { ...fixture, card, doc } as ContractFixture), page)
+		// 2.0.2 (final review R1-1): on the placement's cold read the memo block does not wait behind the header block's read
+		// (it prints the skipped marker and fills in from the seed after hydration); the warm render prints both blocks.
+		const cold = await serve(contractBody(issuer, { ...fixture, card, doc } as ContractFixture), page)
+		expect(cold.match(/data-certrev-cert-chrome=""/g)?.length).toBe(1)
+		expect(cold).toContain('data-certrev-skipped=')
+		expect(cold.match(/<script src="https:\/\/portal\.certrev\.com\/api\/cert\/v1\/runtime\//g)?.length).toBe(1)
+		const html = await renderToHtml(page)
+		expect(delivery.calls).toHaveLength(1)
 		// Counted in the printed markup (the seeds hold the document escaped, never as tags).
 		const count = (re: RegExp) => html.match(re)?.length ?? 0
 		expect(count(/<style data-certrev-card-head>/g)).toBe(1)

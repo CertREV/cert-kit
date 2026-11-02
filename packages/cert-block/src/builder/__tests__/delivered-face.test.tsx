@@ -182,6 +182,10 @@ describe('the matching delivery paints the delivered face', () => {
 					{card({ mode: 'sidebar' })}
 				</>
 			)
+			// 2.0.2 (final review R1-1): on the cold read the second card does not wait behind the first's read; warm, both print.
+			const cold = await renderToHtml(page)
+			expect(cold.split('data-certrev-face="delivered"').length - 1).toBe(1)
+			expect(cold).toContain('data-certrev-skipped=')
 			const html = await renderToHtml(page)
 			expect(html.split('data-certrev-face="delivered"').length - 1).toBe(2)
 			expect(await renderToHtml(page)).toBe(html)
@@ -261,12 +265,15 @@ describe("every other delivery renders 1.2.1's output, byte for byte, seed inclu
 	})
 
 	it('a split banner (header block + memo block on one page) never shows the delivered face', async () => {
-		const html = await renderToHtml(
+		const pair = (
 			<>
 				{card({ part: 'header' })}
 				{card({ part: 'memo' })}
-			</>,
+			</>
 		)
+		// 2.0.2 (final review R1-1): the cold render's memo block prints the skipped marker; the warm render, both blocks.
+		expect(await renderToHtml(pair)).toContain('data-certrev-skipped=')
+		const html = await renderToHtml(pair)
 		expect(html).toBe(golden121('legacy.partHeader') + golden121('legacy.partMemo'))
 	})
 })

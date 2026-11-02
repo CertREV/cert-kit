@@ -27,9 +27,12 @@ import { type CertPayload, renderVerdict } from '../contract/kernel.js'
 import {
 	type DeliveredFace,
 	type DesignPin,
+	deliveryLoading,
 	getVerifiedDelivery,
 	parseDesignPin,
 	readVerifiedDelivery,
+	rememberDeliveryUnreachable,
+	unreachableDelivery,
 	type VerifiedDelivery,
 } from '../verify/get-verified-delivery.js'
 import {
@@ -171,15 +174,80 @@ export function acceptedDeliveryMarker(value: unknown): { readonly baseUrl: stri
  * flight; React 18 (no `use`) gets the promise thrown, the Suspense protocol it supports. Either
  * way the retry finds the settled read in the cache through `readVerifiedDelivery`, so it never
  * suspends on a second promise.
+ *
+ * 2.0.2, on a server (`suspendOnServer`): the render waits at most the runtime's `serverWaitMs` (300 ms). Past it, the
+ * placement's failure is remembered in the cache (so every render in the failure window answers at once, even where the
+ * runtime abandons the read when the response ends), the render prints nothing (`delivery_unreachable`), and the read
+ * runs on: when it lands, the next render paints it. A render that finds a read of the placement already running that it
+ * did not start (another request's, a background refresh, or a second card of the placement on the same page: React
+ * gives a component no way to tell these apart) never waits on it: it is `'skipped'` and prints a marker only
+ * (`SkippedRead`), which the same card instance re-renders while hydrating and replaces with the page's verified seed
+ * right after.
  */
-const inflightReads = new Map<string, Promise<VerifiedDelivery>>()
-function suspendOn(key: string, start: () => Promise<VerifiedDelivery>): VerifiedDelivery {
-	let pending = inflightReads.get(key)
+/** The reads a render is suspended on, per runtime cache (a fresh runtime, a fresh page in a test, starts with none). */
+const inflightReadsByCache = new WeakMap<object, Map<string, Promise<VerifiedDelivery>>>()
+
+function suspendOn(cache: object, key: string, start: () => Promise<VerifiedDelivery>): VerifiedDelivery {
+	let reads = inflightReadsByCache.get(cache)
+	if (!reads) {
+		reads = new Map()
+		inflightReadsByCache.set(cache, reads)
+	}
+	let pending = reads.get(key)
 	if (!pending) {
-		pending = start().finally(() => inflightReads.delete(key))
-		inflightReads.set(key, pending)
+		const own = reads
+		pending = start().finally(() => own.delete(key))
+		reads.set(key, pending)
 	}
 	return suspendUntil(pending)
+}
+
+function suspendOnServer(
+	key: string,
+	read: Parameters<typeof getVerifiedDelivery>[0],
+	waitMs: number | undefined,
+): VerifiedDelivery | 'skipped' {
+	if (deliveryLoading(read)) return 'skipped'
+	return suspendOn(read.cache ?? inflightReadsByCache, key, () => {
+		const loaded = getVerifiedDelivery(read)
+		if (waitMs === undefined || !Number.isFinite(waitMs) || waitMs <= 0) return loaded
+		return new Promise<VerifiedDelivery>((resolve) => {
+			const timer = setTimeout(() => {
+				rememberDeliveryUnreachable(read)
+				resolve(unreachableDelivery())
+			}, waitMs)
+			loaded.then(
+				(settled) => {
+					clearTimeout(timer)
+					resolve(settled)
+				},
+				() => {
+					clearTimeout(timer)
+					resolve(unreachableDelivery())
+				},
+			)
+		})
+	})
+}
+
+/** 2.0.2: the attribute a skipped server render's marker carries: the card instance's `useId`. */
+export const SKIPPED_ATTRIBUTE = 'data-certrev-skipped'
+
+/**
+ * 2.0.2: what a server render prints when it did not wait for a read it did not start: a hidden marker naming the card
+ * instance, and no record (it knows nothing about the placement, so it must never stand in for another card's record).
+ * Not a failure: nothing is reported or remembered.
+ */
+function SkippedRead({ instance }: { readonly instance: string }) {
+	return <div hidden {...{ [SKIPPED_ATTRIBUTE]: instance }} />
+}
+
+/** 2.0.2: whether the live document holds this card instance's skipped marker (it is hydrating one). */
+function skippedInDocument(instance: string): boolean {
+	for (const el of Array.from(document.querySelectorAll(`[${SKIPPED_ATTRIBUTE}]`))) {
+		if (el.getAttribute(SKIPPED_ATTRIBUTE) === instance) return true
+	}
+	return false
 }
 
 /** `use` where React has it (19), else the thrown promise (18). */
@@ -669,6 +737,27 @@ function StreamedRecordCard(props: EnvelopeCardProps) {
 	return paintRecord(record, props, context, true)
 }
 
+/**
+ * 2.0.2 (final review R2-1): a card whose server render skipped its read. While hydrating, its marker as the server
+ * printed it. After, the record the page holds for its placement (the seed the card that did the read printed), also
+ * when that record streams in after this card hydrated; nothing while it has not arrived, and nothing if the page loads
+ * without one. It reads nothing.
+ */
+function SkippedThenRecord(props: EnvelopeCardProps & { readonly instance: string; readonly hydrating: boolean }) {
+	const rt = cardDeliveryRuntime()
+	// In render, not in an effect, as `StreamedRecordCard` does.
+	watchStreamedRecords()
+	const record = React.useSyncExternalStore(
+		subscribeStreamedRecords,
+		() => streamedRecordFor(props.baseUrl, props.externalId, props.design),
+		pendingRecord,
+	)
+	if (props.hydrating) return <SkippedRead instance={props.instance} />
+	if (record === 'pending' || record === 'done') return null
+	const context = { platform: 'builder', externalId: props.externalId, now: new Date(rt.now()) }
+	return paintRecord(record, props, context, true)
+}
+
 const subscribeNever = () => () => {}
 
 /**
@@ -692,7 +781,7 @@ function useHydrating(): boolean {
  * storefront whose CSP `connect-src` does not name CertREV (e.l.f.'s live policy) never sees a request or a violation
  * from it, and a page never loses its card for want of one.
  *
- *  - Server: read (up to `CARD_DELIVERY_TIMEOUT_MS`, a fresh or stale-while-revalidating cache first), verify and paint
+ *  - Server: read (2.0.2: waiting at most `CARD_SERVER_WAIT_MS`, never behind another request's read; a fresh or stale-while-revalidating cache, or a remembered failure, first), verify and paint
  *    as through 1.1.1, and write a record of what it painted (`ssr-seed.ts`):
  *     - a verified envelope: its face and the envelope seed (less the fields the def hides, and with no signature if
  *       it hid any);
@@ -733,6 +822,8 @@ function useHydrating(): boolean {
 function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 	const rt = cardDeliveryRuntime()
 	const hydrating = useHydrating()
+	// 2.0.2: this card instance's id, the same on the server and while hydrating (`SkippedRead`).
+	const instance = React.useId()
 	// Latched at mount: this instance hydrated server HTML (as opposed to a client mount).
 	const [hydratedMount] = React.useState(hydrating)
 	// The clock is read per render, so the lifecycle is judged NOW, not when the envelope was fetched.
@@ -751,13 +842,16 @@ function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 	const [awaitsStream] = React.useState(
 		() => inBrowser && !hydrating && fromPage === undefined && document.readyState === 'loading',
 	)
+	// 2.0.2, latched at mount: this instance is hydrating a server render that skipped its read (`SkippedRead`).
+	const [skippedMount] = React.useState(() => inBrowser && hydrating && skippedInDocument(instance))
+	if (skippedMount) return <SkippedThenRecord {...props} instance={instance} hydrating={hydrating} />
 	if (awaitsStream) return <StreamedRecordCard {...props} />
 	if (inBrowser) {
 		if (fromPage) return paintRecord(fromPage, props, context, !hydrating)
 		if (hydratedMount) return null
 		if (!props.clientRead) return clientMountFace(props)
 	}
-	return readAndPaint(props, context, inBrowser)
+	return readAndPaint(props, context, inBrowser, instance)
 }
 
 /**
@@ -768,6 +862,7 @@ function readAndPaint(
 	props: EnvelopeCardProps,
 	context: Parameters<typeof renderVerdict>[1],
 	inBrowser: boolean,
+	instance = '',
 ): React.ReactElement | null {
 	const rt = cardDeliveryRuntime()
 	const { design } = props
@@ -785,7 +880,12 @@ function readAndPaint(
 	const key = design
 		? `${props.baseUrl}|${props.externalId}|design=${design.version}|${design.brand ?? ''}`
 		: `${props.baseUrl}|${props.externalId}`
-	const settled = readVerifiedDelivery(read) ?? suspendOn(key, () => getVerifiedDelivery(read))
+	const settled =
+		readVerifiedDelivery(read) ??
+		(inBrowser
+			? suspendOn(rt.cache, key, () => getVerifiedDelivery(read))
+			: suspendOnServer(key, read, rt.serverWaitMs))
+	if (settled === 'skipped') return <SkippedRead instance={instance} />
 	if (settled.verdict.decision !== 'render') {
 		return settleWithoutEnvelope(
 			props,

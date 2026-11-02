@@ -14,6 +14,10 @@
  * A revocation still lands on the first render after its refresh does. The tests' runtime gets
  * the same cache shape, so they exercise what production runs.
  *
+ * 2.0.2: a server render waits at most `CARD_SERVER_WAIT_MS` (300 ms) for a cold read, never joins another request's read
+ * in flight, and a failure is remembered `CARD_DELIVERY_FAILURE_MS` (60 s) per placement, so a hanging CertREV costs a
+ * brand's page at most one short wait per placement per minute (2.0.1: 8 s, every 5 s).
+ *
  * 2.0.0: the trust root is a key SET (`verify/key-set.ts`). `resolveKid` is still the baked set (today
  * `cert-issuer-1`), and the card verifies with `resolveKidFor(baseUrl)`: a baked kid resolves as before, any other kid
  * makes one read of the delivery origin's published key set, accepted only when a baked kid signs it. A rotation then
@@ -31,8 +35,26 @@ import { forgetFaceHashesForTests } from './delivered-face.js'
 import { CERT_ISSUER_KID, CERT_ISSUER_PUBLIC_KEY_PEM } from './issuer-key.js'
 import { forgetPageSeedsForTests } from './ssr-seed.js'
 
-/** The card's server read deadline. A brand's server waits this long once per cold placement. */
+/**
+ * The card's fetch deadline: how long a read of the Delivery API may run (2.0.2: in the background, past the render; a
+ * browser read under `clientRead`). Not how long a server render waits: that is `CARD_SERVER_WAIT_MS`.
+ */
 export const CARD_DELIVERY_TIMEOUT_MS = 8_000
+/**
+ * 2.0.2: the longest a SERVER render waits for a placement's read (2.0.1 waited the whole `CARD_DELIVERY_TIMEOUT_MS`,
+ * 8 s). Past it the render prints nothing (`delivery_unreachable`), the placement's failure is remembered
+ * (`CARD_DELIVERY_FAILURE_MS`), and the read runs on: when it lands it is cached for the next render. 300 ms covers the
+ * Delivery API's p90 function time (221 ms over 30 days of production, n = 21,368 CDN misses; 93% <= 300 ms) and a
+ * cached edge answer (~50 ms) plus a round trip; see the CHANGELOG.
+ */
+export const CARD_SERVER_WAIT_MS = 300
+/**
+ * 2.0.2: how long a placement's failure (a timeout, a network error, a 5xx, a render that stopped waiting) is
+ * remembered per process. Inside it, no read of the placement starts: a render with no cached card prints nothing at
+ * once, and a stale card paints without a refresh. So an ongoing outage costs at most one short wait per placement per
+ * minute. (2.0.1: a failure was remembered 5 s.)
+ */
+export const CARD_DELIVERY_FAILURE_MS = 60_000
 /**
  * 2.0.1: how long a verified answer is fresh. With the stale window below, a card adds at most one minute to the Delivery
  * API's own cache (`max-age=60, stale-while-revalidate=240`), so a revoked card is gone within ADR 0001 §7's five to
@@ -57,6 +79,8 @@ export interface CardDeliveryRuntime {
 	readonly cache: TtlCache<CachedDelivery>
 	readonly now: () => number
 	readonly timeoutMs?: number
+	/** 2.0.2: the longest a server render waits for a read (`CARD_SERVER_WAIT_MS`). */
+	readonly serverWaitMs?: number
 }
 
 const bakedResolveKid: ResolvePublicKeyByKid = (kid) =>
@@ -67,6 +91,8 @@ function newCardCache(now?: () => number): TtlCache<CachedDelivery> {
 		ttlMs: CARD_DELIVERY_TTL_MS,
 		negativeTtlMs: 5_000,
 		staleMs: CARD_DELIVERY_STALE_MS,
+		// 2.0.2: on a server only. A browser read (`clientRead`) holds no page, and keeps 2.0.1's 5 s (break-it B1).
+		...(typeof document === 'undefined' ? { failureTtlMs: CARD_DELIVERY_FAILURE_MS } : {}),
 		// A refresh the host runtime abandoned (workerd cancels a finished request's I/O) never
 		// settles; after the deadline plus a margin, the next render starts a new one.
 		inflightMaxMs: CARD_DELIVERY_TIMEOUT_MS + 2_000,
@@ -81,6 +107,7 @@ function defaultRuntime(): CardDeliveryRuntime {
 		cache: newCardCache(),
 		now: Date.now,
 		timeoutMs: CARD_DELIVERY_TIMEOUT_MS,
+		serverWaitMs: CARD_SERVER_WAIT_MS,
 	}
 }
 

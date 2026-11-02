@@ -5,6 +5,48 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 2.0.2 · 2026-10-29
+
+**A CertREV outage never slows a brand's page by more than a fraction of a second.** A drop-in on 2.0.1: same package,
+same `certRevCertComponent` and registration (`CertREV Cert`, the same 22 inputs), no new prop, no new peer dependency,
+the same four Content-Security-Policy sources, the same records, reports and beacons. Only how long a server render
+waits for CertREV changes. In 2.0.1 a cold placement's server render waited for the Delivery read up to 8 s, every
+concurrent request on that placement waited with it, and a failure was remembered 5 s, so a CertREV that accepted
+connections and never answered held a brand's HTML up to 8 s, again every 5 s.
+
+- **A server render waits at most 300 ms** (`CARD_SERVER_WAIT_MS`) for a placement's read. Past it the block prints
+  nothing, as for any read that did not reach CertREV (`delivery_unreachable`), and the page goes out. The read itself
+  runs on (its own deadline stays 8 s): when it lands it is cached, and the next render paints the card. Why 300 ms:
+  over the 30 days to 2026-10-29, CertREV's production Delivery and card routes ran 21,368 function invocations (the
+  CDN misses; a cached edge answer runs none and took about 40-50 ms of server time when probed). Their durations:
+  p50 127 ms, p75 149 ms, p90 221 ms, p95 355 ms, p99 1,120 ms; 91.1% within 250 ms, 93.0% within 300 ms, 96.5%
+  within 400 ms, 97.8% within 500 ms. 300 ms holds a cached answer and a p90 miss with its round trip; waiting for
+  the p99 would cost over a second, which is the delay this release removes. A slower read is not lost, only not
+  waited for.
+- **A failure is remembered 60 s** (`CARD_DELIVERY_FAILURE_MS`) per placement and process: a timeout (the render's
+  300 ms or the read's 8 s), a network error, a 5xx, a body that is not JSON. Inside that window no read of the
+  placement starts and every render answers at once, so an ongoing outage costs at most one 300 ms wait per placement
+  per minute. CertREV's recovery shows on the first render after the window.
+- **Concurrent requests never wait behind a read in flight.** A server render that finds a read of the placement
+  already running that it did not start (another request's, a background refresh) prints nothing at once and reports
+  nothing: it is not a failure. React gives a block no way to tell another request from a second block of the same
+  placement on its own page, so on a placement's cold read the second block (a split banner's memo, say) does not wait
+  either: it prints a hidden `data-certrev-skipped` marker and no record, hydrates as that marker, and right after
+  paints from the verified seed the first block printed, with no browser read. Every warm render prints both blocks,
+  as before.
+- **A warm card never waits.** A verified card paints from the cache while it is fresh (30 s) and through its stale
+  window (30 s more), refreshed in the background, never on the render path. While a failure is remembered the stale
+  card keeps painting and no refresh starts; past the stale window it prints nothing, at once.
+- **Revocation within ADR 0001 §7 is unchanged.** The fresh and stale windows are 2.0.1's; a definitive no (revoked,
+  expired, a 404 or 410, an envelope that does not verify) replaces the cached card when its refresh lands and is
+  never painted over; a remembered failure only ever prints nothing.
+- `TtlCache` (exported) gains an optional `failureTtlMs` and a `markFailed(key, value)`. Without `failureTtlMs` it
+  behaves exactly as in 2.0.1.
+- Browser reads (a client mount with `clientRead`) are unchanged: they never hold a page.
+- The WordPress plugin and the hosted card runtime do not share this path: the hosted runtime only reads CertREV from
+  the browser, after the card is printed, and the WordPress plugin prints from the card stored on the post, refreshed
+  in the background.
+
 ## 2.0.1 · 2026-10-25
 
 **e.l.f.'s one install.** A drop-in on 2.0.0: same package, same `certRevCertComponent` and registration (`CertREV

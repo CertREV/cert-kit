@@ -177,3 +177,103 @@ describe('inflightMaxMs: an unsettled load is joined only so long', () => {
 		expect(t.calls()).toBe(2)
 	})
 })
+
+describe('2.0.2: failure memory (failureTtlMs)', () => {
+	const failing = async (): Promise<Value> => ({ ok: false, n: 0, transient: true })
+
+	it('a transient result is remembered for failureTtlMs: no load inside it, one load after it', async () => {
+		const t = setup({ failureTtlMs: 60_000 })
+		t.answer(failing)
+		expect(await t.get()).toEqual({ ok: false, n: 0, transient: true })
+		t.advance(59_999)
+		expect(t.read()).toEqual({ ok: false, n: 0, transient: true })
+		expect(await t.get()).toEqual({ ok: false, n: 0, transient: true })
+		expect(t.cache.peek('k')).toEqual({ ok: false, n: 0, transient: true })
+		expect(t.calls()).toBe(1)
+		t.answer(async () => ({ ok: true, n: 7 }))
+		t.advance(1)
+		expect(t.read()).toBeUndefined()
+		expect(await t.get()).toEqual({ ok: true, n: 7 })
+		expect(t.calls()).toBe(2)
+	})
+
+	it('it sits beside a positive entry, never over it: the stale value is served, with no refresh while it lasts', async () => {
+		const t = setup({ failureTtlMs: 60_000, staleMs: 30_000 })
+		expect(await t.get()).toEqual({ ok: true, n: 1 })
+		t.answer(failing)
+		t.advance(1_000)
+		expect(t.read()).toEqual({ ok: true, n: 1 })
+		await settle()
+		expect(t.calls()).toBe(2)
+		for (let i = 0; i < 5; i++) expect(t.read()).toEqual({ ok: true, n: 1 })
+		await settle()
+		expect(t.calls()).toBe(2)
+		t.advance(30_000)
+		expect(t.read()).toEqual({ ok: false, n: 0, transient: true })
+		expect(t.calls()).toBe(2)
+	})
+
+	it('a definitive answer clears it', async () => {
+		const t = setup({ failureTtlMs: 60_000 })
+		t.cache.markFailed('k', { ok: false, n: 0, transient: true })
+		expect(t.read()).toEqual({ ok: false, n: 0, transient: true })
+		t.cache.delete('k')
+		expect(t.read()).toBeUndefined()
+		t.cache.markFailed('k', { ok: false, n: 0, transient: true })
+		t.cache.clear()
+		expect(t.read()).toBeUndefined()
+	})
+
+	it('a load that lands after markFailed replaces the failure with its answer', async () => {
+		const t = setup({ failureTtlMs: 60_000 })
+		let release: (v: Value) => void = () => {}
+		t.answer(() => new Promise<Value>((resolve) => (release = resolve)))
+		const pending = t.get()
+		t.cache.markFailed('k', { ok: false, n: 0, transient: true })
+		expect(t.read()).toEqual({ ok: false, n: 0, transient: true })
+		release({ ok: true, n: 3 })
+		await pending
+		expect(t.read()).toEqual({ ok: true, n: 3 })
+	})
+
+	it('without failureTtlMs, markFailed is a negative entry for the negative TTL (the 2.0.1 behaviour)', () => {
+		const t = setup()
+		t.cache.markFailed('k', { ok: false, n: 0, transient: true })
+		expect(t.cache.peek('k')).toEqual({ ok: false, n: 0, transient: true })
+		t.advance(100)
+		expect(t.cache.peek('k')).toBeUndefined()
+	})
+})
+
+describe('2.0.2 break-it B3: the failure slots are bounded like the store', () => {
+	it('past maxEntries, expired failures go first, then the oldest', () => {
+		const t = setup({ failureTtlMs: 60_000, maxEntries: 3 })
+		const f = { ok: false, n: 0, transient: true }
+		t.cache.markFailed('a', f)
+		t.advance(60_000)
+		t.cache.markFailed('b', f)
+		t.cache.markFailed('c', f)
+		t.cache.markFailed('d', f) // 'a' has expired: it goes
+		expect(['b', 'c', 'd'].map((k) => t.cache.peek(k))).toEqual([f, f, f])
+		t.cache.markFailed('e', f) // all live: the oldest ('b') goes
+		expect(t.cache.peek('b')).toBeUndefined()
+		expect(['c', 'd', 'e'].map((k) => t.cache.peek(k))).toEqual([f, f, f])
+		for (let i = 0; i < 10_000; i++) t.cache.markFailed(`k${i}`, f)
+		expect((t.cache as unknown as { failures: Map<string, unknown> }).failures.size).toBe(3)
+	})
+})
+
+describe('2.0.2 plan advice A1: a replaced load never writes', () => {
+	it('an abandoned verified load that settles after its replacement read a revocation leaves the revocation', async () => {
+		const t = setup({ inflightMaxMs: 10_000, staleMs: 30_000, failureTtlMs: 60_000 })
+		let releaseOld: (v: Value) => void = () => {}
+		t.answer(() => new Promise<Value>((resolve) => (releaseOld = resolve)))
+		const old = t.get()
+		t.advance(10_000)
+		t.answer(async () => ({ ok: false, n: 2 })) // the replacement reads a definitive no (a tombstone)
+		expect(await t.get()).toEqual({ ok: false, n: 2 })
+		releaseOld({ ok: true, n: 1 }) // the old verified answer lands last
+		await old
+		expect(t.cache.peek('k')).toEqual({ ok: false, n: 2 })
+	})
+})
