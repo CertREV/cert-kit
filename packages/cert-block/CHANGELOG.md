@@ -5,6 +5,29 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 2.1.1 · 2026-11-02
+
+**A storefront whose `script-src` is a per-request nonce with `'strict-dynamic'` logs no Content-Security-Policy
+violation for the card.** The visual output is unchanged: every part, dialog, head fragment and JSON-LD graph the
+Builder card prints is 2.1.0's, byte for byte. On Builder the server's HTML no longer carries the runtime's tag; the
+card loads the runtime from the browser, as it already did beside the tag. No integration change, and the same four
+Content-Security-Policy sources.
+
+- **Why.** 2.0.0 to 2.1.0 printed CertREV's runtime as `<script src integrity crossorigin="anonymous" defer>` in the
+  block that carries the page's assets. A parser-inserted script carries no nonce, and `'strict-dynamic'` ignores host
+  sources (`https://portal.certrev.com`), so such a policy blocked it: one violation and one CSP report on every page
+  view. The card kept working, because its layout effect also injected the runtime, which the policy allows.
+- **Now.** `cardHtml` prints the head fragment, the parts, both dialogs and the graph, nothing else. The same block
+  injects the runtime once per page into `document.head` (`injectCardRuntime`: its SRI integrity,
+  `crossorigin="anonymous"`, `defer`), on hydration of the server's page and on a client mount alike, unless the runtime
+  already runs. A script inserted by the page's own nonced bundle is what `'strict-dynamic'` trusts. A page whose policy
+  lists `https://portal.certrev.com` in `script-src`, or has no policy, loads the same runtime once, as before (2.0.x
+  could load it twice on such a page, the tag and the injection; its init is idempotent).
+- **With JavaScript off** the card is complete, as before: the runtime never ran there.
+- **A drop-in on 2.1.0 and on 2.0.1**: same `certRevCertComponent` and registration (`CertREV Cert`, the same 22
+  inputs), no new prop, no new peer dependency, the same `exports` map and runtime exports. `cardRuntimeTag` stays
+  exported, unchanged, for any other caller.
+
 ## 2.1.0 · 2026-10-30
 
 **The card says what the expert actually reviewed.** When CertREV signs `content.expert.reviewScope: 'text'` (the

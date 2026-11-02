@@ -57,6 +57,11 @@ export interface CspOptions {
 	readonly without?: CertrevDirective
 	/** The brand's own policy allows `data:` images (the card's logos are `data:image/svg+xml` today). */
 	readonly dataImages: boolean
+	/**
+	 * 2.1.1: `script-src` is only the per-response nonce and `'strict-dynamic'` (e.l.f.'s policy, 2026-11-02): no `'self'`,
+	 * no host source (`'strict-dynamic'` ignores both), so only the nonced bundle and the scripts it inserts run.
+	 */
+	readonly strictDynamic?: boolean
 }
 
 /**
@@ -68,7 +73,9 @@ export function cspFor(nonce: string, options: CspOptions): string {
 		options.without === directive ? '' : ` ${CERTREV_CSP_SOURCES[directive]}`
 	return [
 		"default-src 'self'",
-		`script-src 'self' 'nonce-${nonce}'${add('script-src')}`,
+		options.strictDynamic
+			? `script-src 'nonce-${nonce}' 'strict-dynamic'`
+			: `script-src 'self' 'nonce-${nonce}'${add('script-src')}`,
 		`connect-src 'self'${add('connect-src')}`,
 		`font-src 'self'${add('font-src')}`,
 		`img-src 'self'${options.dataImages ? ' data:' : ''}${add('img-src')}`,
@@ -429,8 +436,14 @@ export async function startReplica(
 				// the card's included, after the shell, where only a script moves it into place).
 				...(url.searchParams.get('chunk') === 'big' ? { progressiveChunkSize: 1_000_000 } : {}),
 				nonce,
-				bootstrapModules: ['/client.js'],
-				bootstrapScriptContent: 'window.__replicaRecoverable=[]',
+				// 2.1.1: under `strictDynamic` the page's bundle is loaded by its nonced inline script, as a nonce-based storefront
+				// loads its own (React 18 prints no nonce on a bootstrap module). Every script the bundle inserts then runs.
+				...(state.csp.strictDynamic
+					? {
+							bootstrapScriptContent:
+								"window.__replicaRecoverable=[];var s=document.createElement('script');s.type='module';s.src='/client.js';document.head.appendChild(s)",
+						}
+					: { bootstrapModules: ['/client.js'], bootstrapScriptContent: 'window.__replicaRecoverable=[]' }),
 			})
 			res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...headers })
 			res.write('<!DOCTYPE html>')
