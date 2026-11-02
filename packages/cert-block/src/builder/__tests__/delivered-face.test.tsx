@@ -2,7 +2,10 @@
  * 1.3.0, server renders: the delivery card paints the server-rendered face served beside the artifact ONLY when its
  * bytes hash to the signed `content.faceDigest` for the def served with it, on an unpinned block that shows the whole
  * card. Every other delivery renders what 1.2.1 rendered, byte for byte, seed included: the golden was rendered by the
- * unmodified 1.2.1 tree for the same deliveries (`delivered-face-shapes.ts`), not by this one.
+ * unmodified 1.2.1 tree for the same deliveries (`delivered-face-shapes.ts`), not by this one. One exception since 1.3.1:
+ * the `reader` def's entries (and `pinnedMatching`) hold 1.3.1's reader face, because 1.3.1 caught the reader face up to
+ * the portal's one face; the golden's `readerRegeneratedFrom` says how they were re-recorded, and everything outside the
+ * stylesheet and the reader sections of those entries (the wrapper, the seed) is still the 1.2.1 bytes.
  *
  * Real crypto throughout: the envelopes are signed with a fixed fixture key and the kernel runs; the face digests are
  * computed with Node's `createHash`, the card hashes with WebCrypto.
@@ -13,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CERT_STRINGS_VERSION } from '../../components/render-def.js'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
 import { acceptedFaceDigest, sha256HexUtf8, showsWholeCard } from '../delivered-face.js'
-import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
+import { CARD_DELIVERY_TTL_MS, setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
 import { parseSeed, serializeSeed } from '../ssr-seed.js'
 import {
 	type CaseProps,
@@ -62,6 +65,17 @@ const golden121 = (name: string): string => {
 	if (at === undefined) throw new Error(`no golden for ${name}`)
 	return SERVER.outputs[at].split(SERVER.readerCssPlaceholder).join(SERVER.readerCss)
 }
+
+/**
+ * 2.0.1 (final review R1-1): an envelope that does not verify is reported, so its `'none'` record names
+ * `envelope_verify_failed`; 1.2.1's golden for it has no reason. The tombstone fixture carries a `renderDef` and a `face`
+ * beside a tombstone, whose signature covers every key, so it does not verify either (the portal never adds them).
+ */
+const withVerifyReason = (golden: string): string =>
+	golden.replace(
+		'&quot;face&quot;:&quot;none&quot;}',
+		'&quot;face&quot;:&quot;none&quot;,&quot;reason&quot;:&quot;envelope_verify_failed&quot;}',
+	)
 
 /** React's attribute escaping (`escapeTextForBrowser`). */
 const attr = (raw: string) =>
@@ -168,6 +182,10 @@ describe('the matching delivery paints the delivered face', () => {
 					{card({ mode: 'sidebar' })}
 				</>
 			)
+			// 2.0.2 (final review R1-1): on the cold read the second card does not wait behind the first's read; warm, both print.
+			const cold = await renderToHtml(page)
+			expect(cold.split('data-certrev-face="delivered"').length - 1).toBe(1)
+			expect(cold).toContain('data-certrev-skipped=')
 			const html = await renderToHtml(page)
 			expect(html.split('data-certrev-face="delivered"').length - 1).toBe(2)
 			expect(await renderToHtml(page)).toBe(html)
@@ -186,8 +204,9 @@ describe('the matching delivery paints the delivered face', () => {
 		delivery.respond(() =>
 			json({ ...issuer.envelope(withFaceDigest(faceDigestFor(next, 5))), renderDef: def, face: next }),
 		)
-		clock = T0 + 61_000
-		// Past the TTL the cached face paints while one refresh runs (1.2.0's stale window); the refresh brings the new one.
+		clock = T0 + CARD_DELIVERY_TTL_MS + 1_000
+		// Past the TTL the cached face paints while one refresh runs (1.2.0's stale window, 2.0.1's 30 s); the refresh brings
+		// the new one.
 		expect(await renderToHtml(card())).toBe(deliveredOutput(CLIENT.seedsWithFace.legacy))
 		let after = ''
 		for (let i = 0; i < 20 && !after.includes('data-certrev-def-version="5"'); i++) after = await renderToHtml(card())
@@ -210,7 +229,7 @@ describe("every other delivery renders 1.2.1's output, byte for byte, seed inclu
 			const c = (await serverCases(issuer))[name]
 			delivery.respond(() => json(c.body))
 			const html = await renderToHtml(card(c.props))
-			expect(html).toBe(golden121(name))
+			expect(html).toBe(name === 'tombstoneWithFace' ? withVerifyReason(golden121(name)) : golden121(name))
 			expect(html).not.toContain('data-certrev-face="delivered"')
 			expect(html).not.toContain('crv-face')
 		})
@@ -230,30 +249,38 @@ describe("every other delivery renders 1.2.1's output, byte for byte, seed inclu
 		}
 	})
 
-	it('a split banner block never hashes the face (there is nothing to decide)', async () => {
+	// 2.0.0: the read hashes a served face once, beside the read (`get-verified-delivery.ts`), so no render suspends on
+	// the hashes after suspending on the read (React 19's `use` answers a second suspension with the first one's result).
+	// A split block still decides nothing from them: it paints 1.2.1's part, byte for byte.
+	it('a split banner block paints its own part whatever the face hashes to; the read hashes the face once', async () => {
 		const digest = vi.spyOn(globalThis.crypto.subtle, 'digest')
 		try {
 			expect(await renderToHtml(card({ part: 'header' }))).toBe(golden121('legacy.partHeader'))
 			expect(await renderToHtml(card({ part: 'memo' }))).toBe(golden121('legacy.partMemo'))
-			expect(digest).not.toHaveBeenCalled()
+			// html and css, once, for the one read both blocks share (the second render is served from the cache).
+			expect(digest).toHaveBeenCalledTimes(2)
 		} finally {
 			digest.mockRestore()
 		}
 	})
 
 	it('a split banner (header block + memo block on one page) never shows the delivered face', async () => {
-		const html = await renderToHtml(
+		const pair = (
 			<>
 				{card({ part: 'header' })}
 				{card({ part: 'memo' })}
-			</>,
+			</>
 		)
+		// 2.0.2 (final review R1-1): the cold render's memo block prints the skipped marker; the warm render, both blocks.
+		expect(await renderToHtml(pair)).toContain('data-certrev-skipped=')
+		const html = await renderToHtml(pair)
 		expect(html).toBe(golden121('legacy.partHeader') + golden121('legacy.partMemo'))
 	})
 })
 
 describe('fails closed as 1.2.1 does: nothing and a none record', () => {
 	const none = () => golden121('tombstoneWithFace')
+	const noneReported = () => withVerifyReason(none())
 
 	it('a digest rewritten to match other markup (the signature no longer verifies)', async () => {
 		const env = issuer.envelope(withFaceDigest(faceDigestFor(DELIVERED_FACE, 4)))
@@ -264,7 +291,7 @@ describe('fails closed as 1.2.1 does: nothing and a none record', () => {
 		}
 		delivery.respond(() => json({ ...tampered, renderDef: DEFS.legacy, face: evil }))
 		const html = await renderToHtml(card())
-		expect(html).toBe(none())
+		expect(html).toBe(noneReported())
 		expect(chromeRoot(html)).toBeNull()
 		expect(html).not.toContain('crv-')
 	})
@@ -275,7 +302,7 @@ describe('fails closed as 1.2.1 does: nothing and a none record', () => {
 		delivery.respond(() =>
 			json({ ...env, payload: { ...env.payload, content }, renderDef: DEFS.legacy, face: DELIVERED_FACE }),
 		)
-		expect(await renderToHtml(card())).toBe(none())
+		expect(await renderToHtml(card())).toBe(noneReported())
 	})
 
 	it('a matching face on an expired envelope', async () => {

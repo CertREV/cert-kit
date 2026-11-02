@@ -160,6 +160,15 @@ export {
 	invalidateVerdict,
 	sharedVerdictCache,
 } from './verify/get-verified-envelope.js'
+// 2.0.0: the issuer key SET (baked kids, then the origin's published set signed by a baked kid).
+export {
+	type AcceptedKeySet,
+	KEY_SET_PATH,
+	type KeySetResolverOptions,
+	keySetResolver,
+	type PublishedKeySet,
+	verifyKeySet,
+} from './verify/key-set.js'
 export {
 	type FetchingKidResolverOptions,
 	fetchingKidResolver,

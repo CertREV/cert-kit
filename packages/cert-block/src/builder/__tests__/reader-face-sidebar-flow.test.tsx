@@ -17,7 +17,7 @@
  * outside this suite, on the served canary page with the rules added; jsdom has no layout.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { READER_CSS } from '../../reader/reader-css.generated.js'
 import { BUILDER_SIDEBAR_FLOW_CSS, CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
 import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
@@ -117,13 +117,18 @@ describe('the sidebar flow rules on the delivery card', () => {
 		expect(html).not.toContain(':has(')
 	})
 
-	it('the options-only card paints no rules', async () => {
-		const html = await renderToHtml(
-			<CertReviewCard {...(OPTIONS_ONLY_SHAPES.todaysExport as CertReviewCardProps)} mode="sidebar" />,
-		)
-		expect(html).toContain('data-certrev-cert-chrome')
-		expect(html).not.toContain('data-certrev-builder-flow')
-		expect(delivery.calls).toEqual([])
+	it('an options-only block (no marker) paints neither a face nor the rules (2.0.1: nothing at all)', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+		try {
+			const html = await renderToHtml(
+				<CertReviewCard {...(OPTIONS_ONLY_SHAPES.todaysExport as CertReviewCardProps)} mode="sidebar" />,
+			)
+			expect(html).not.toContain('data-certrev-cert-chrome')
+			expect(html).not.toContain('data-certrev-builder-flow')
+			expect(delivery.calls).toEqual([])
+		} finally {
+			warn.mockRestore()
+		}
 	})
 
 	it('a revoked envelope paints neither the face nor the rules', async () => {

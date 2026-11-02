@@ -1,24 +1,32 @@
 /**
- * `certrev-reader-tokens`: the four CSS custom properties a reader section carries on its root, from the render def.
+ * `certrev-reader-tokens`: the CSS custom properties a reader section carries on its root, from the render def.
  *
  *   --cr-ba     the accent the card cap and pill paint: the def's `barInk`, else its `accentColor`, else navy
  *   --cr-ba-fg  the ink on that accent: white, or `#141414` when the def baked it for the colour that painted
  *   --cr-br     the corner radius
  *   --cr-bf     the font stack for the brand's `fontSlot`
+ *   --cr-sf     (toned face only) the card surface, the def's `surface`
+ *   --cr-ink    (toned face only) the card ink, the def's `inkColor`
  *
  * The values land inside a double-quoted `style` attribute, and they are held to the allow-list the Liquid snippet and
  * the PHP twin's def parser hold them to: a colour is `#RGB` or `#RRGGBB`, a radius one non-negative px / rem / em / %
- * length or a bare `0`, and anything else paints the default (navy, 14px). A denylist of characters is not enough: a
+ * length or a bare `0`, and anything else paints the default (navy `#0a1b3f`, 12px: the design guide's memo-rung
+ * defaults, as the plugin and the hosted embed paint a face with no design). A denylist of characters is not enough: a
  * quote, a backslash, a comment opener or a bracket left in a value hides the `;` that ends it and swallows the
  * declarations after it. The variable names are the reader stylesheet's (`reader.css`), which `.certrev-reader`
  * declares defaults for.
+ *
+ * A face is TONED when the def sets an ink, or a surface that is not white (`#fff` / `#ffffff`, either case): only
+ * then are `--cr-sf` / `--cr-ink` written (each only when valid), and the section root gains `certrev-r-toned`
+ * (`isTonedStyle`, which reads the style string as the snippets do).
  */
 import { asText } from '../components/escape.js'
 import { esc, rec, textOr } from './helpers.js'
 
-/** The accent when the def has none: CertREV navy. */
-const DEFAULT_ACCENT = '#0A1B3F'
-const DEFAULT_RADIUS = '14px'
+/** The accent when the def has none: the design guide's memo-rung default (CertREV navy). */
+const DEFAULT_ACCENT = '#0a1b3f'
+/** The corner when the def has none: the design guide's memo-rung default. */
+const DEFAULT_RADIUS = '12px'
 /** The foreground the def bakes for a light accent; anything else is the white default. */
 const DARK_INK = '#141414'
 
@@ -71,6 +79,9 @@ export interface ReaderTokens {
 	readonly fg: string
 }
 
+/** Whether a root `style` is a toned face's: the snippets' `cr_style contains ';--cr-sf:' or ';--cr-ink:'`. */
+export const isTonedStyle = (style: string): boolean => style.includes(';--cr-sf:') || style.includes(';--cr-ink:')
+
 export function readerTokens(def: unknown): ReaderTokens {
 	const rd = rec(def)
 	const tokens = rec(rd.tokens)
@@ -90,5 +101,17 @@ export function readerTokens(def: unknown): ReaderTokens {
 
 	const br = radius(tokens.cornerRadius) || DEFAULT_RADIUS
 	const bf = fontStack(asText(tokens.fontSlot))
-	return { style: `--cr-ba:${esc(ba)};--cr-ba-fg:${fg};--cr-br:${esc(br)};--cr-bf:${bf}`, fg }
+
+	// A toned face: an ink, or a surface that is not white. `downcase` in the snippet; the digits are ASCII.
+	const surface = hexColour(tokens.surface)
+	const ink = hexColour(tokens.inkColor)
+	const surfaceLc = surface.toLowerCase()
+	const toned = ink !== '' || (surface !== '' && surfaceLc !== '#fff' && surfaceLc !== '#ffffff')
+
+	let style = `--cr-ba:${esc(ba)};--cr-ba-fg:${fg};--cr-br:${esc(br)};--cr-bf:${bf}`
+	if (toned) {
+		if (surface !== '') style += `;--cr-sf:${esc(surface)}`
+		if (ink !== '') style += `;--cr-ink:${esc(ink)}`
+	}
+	return { style, fg }
 }

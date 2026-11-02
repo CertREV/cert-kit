@@ -42,9 +42,18 @@
  * beside it, and `settleDelivery` hands it out only on a `render` verdict. NOTHING HERE VOUCHES FOR IT: the signature
  * does not cover it. What binds it is the signed `payload.content.faceDigest` (cert-contract 0.6.0), and a caller
  * paints it only after hashing it against that digest, as the Builder card does (`src/builder/delivered-face.ts`).
+ *
+ * 2.0.0: the response may also carry the contract-1 CARD DOCUMENT as a third UNSIGNED sibling, `card` (CertREV's portal
+ * serves it only for a brand on contract 1). It is kept exactly as served when it is a JSON object (any other value,
+ * `null` included, is no card), cached beside the payload, and handed out only on a `render` verdict. Like `face`,
+ * NOTHING HERE VOUCHES FOR IT: the signed `payload.content.faceDigest` binds it (`contract: 1`, `doc`), and the Builder
+ * card prints it only after its shape check and digest check pass (`src/builder/card-contract.ts`). A read with no
+ * card is the 1.3.1 object exactly. The read is made with `credentials: 'omit'`: it never sends a cookie.
  */
 
+import { cardDocumentDigest } from '../builder/card-contract.js'
 import type { CertChromeRenderDef } from '../builder/cert-chrome-data.js'
+import { type DeliveredFaceHashes, hashDeliveredFace } from '../builder/delivered-face.js'
 import type {
 	CertDeliveryArtifact,
 	CertPayload,
@@ -81,12 +90,24 @@ export type CachedDelivery =
 			readonly signature?: CertSignature
 			/** 1.3.0: the unsigned face sibling, when the response carried a well-formed one; else absent. */
 			readonly face?: DeliveredFace
+			/** 2.0.0: the unsigned card-document sibling as served, when it was a JSON object; else absent. */
+			readonly card?: Readonly<Record<string, unknown>>
+			/**
+			 * 2.0.0: the digest of `card` (lowercase hex sha256 of its RFC 8785 bytes; null when it cannot be computed),
+			 * computed once by the read that cached it; present whenever `card` is. UNVERIFIED like the card: the caller
+			 * compares it with the signed binding.
+			 */
+			readonly cardDigest?: string | null
+			/** 2.0.0: the two hashes of `face`, computed once by the read; present whenever `face` is (null: no WebCrypto). */
+			readonly faceHashes?: DeliveredFaceHashes | null
 	  }
 	| {
 			readonly kind: 'suppressed'
 			readonly reason: CertSuppressReason
 			/** 1.2.0: true when CertREV was not reached (no answer about the credential); see the module header. */
 			readonly unreachable?: true
+			/** 2.0.1: the HTTP status, when CertREV answered with a non-OK status other than 404/410. */
+			readonly status?: number
 	  }
 
 /** The answer for one render: the verdict AT THIS RENDER'S CLOCK, and the def to paint it with. */
@@ -98,11 +119,23 @@ export interface VerifiedDelivery {
 	readonly signature?: CertSignature
 	/** 1.2.0: on a suppress verdict, true when CertREV was not reached; else undefined. */
 	readonly unreachable?: true
+	/** 2.0.1: with `unreachable`, the HTTP status when CertREV answered with one (a 5xx, a 429, ...); else undefined. */
+	readonly status?: number
 	/**
 	 * 1.3.0: on a `render` verdict, the server-rendered face served beside the artifact, when the response carried a
 	 * well-formed one; else undefined (never on a suppress verdict). UNVERIFIED: see `DeliveredFace`.
 	 */
 	readonly face?: DeliveredFace
+	/**
+	 * 2.0.0: on a `render` verdict, the card document served beside the artifact (a JSON object, exactly as served);
+	 * else undefined. UNVERIFIED: print it only after `parseCardDocument` and the digest check of
+	 * `src/builder/card-contract.ts`, against the verified payload's `faceDigest`.
+	 */
+	readonly card?: Readonly<Record<string, unknown>>
+	/** 2.0.0: `card`'s digest as the read computed it, beside `card`; see `CachedDelivery`. */
+	readonly cardDigest?: string | null
+	/** 2.0.0: `face`'s hashes as the read computed them, beside `face`; see `CachedDelivery`. */
+	readonly faceHashes?: DeliveredFaceHashes | null
 }
 
 export interface GetVerifiedDeliveryOptions {
@@ -146,8 +179,13 @@ function suppressed(reason: CertSuppressReason): CachedDelivery {
 }
 
 /** A read that did not reach CertREV: the same least-wrong reason as before 1.2.0, marked `unreachable`. */
-function unreachable(): CachedDelivery {
-	return { kind: 'suppressed', reason: 'unsupported_contract_version', unreachable: true }
+function unreachable(status?: number): CachedDelivery {
+	return {
+		kind: 'suppressed',
+		reason: 'unsupported_contract_version',
+		unreachable: true,
+		...(status === undefined ? {} : { status }),
+	}
 }
 
 const isUnreachable = (v: CachedDelivery): boolean => v.kind === 'suppressed' && v.unreachable === true
@@ -273,7 +311,7 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 		res = await fetchWithDeadline(
 			fetchImpl,
 			deliveryUrl(opts.baseUrl, opts.platform, opts.externalId, opts.design),
-			{ headers: { accept: 'application/json' } },
+			{ headers: { accept: 'application/json' }, credentials: 'omit' },
 			opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS,
 		)
 	} catch {
@@ -283,7 +321,7 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	// Nothing served for this placement: never certified, or withdrawn. A LIVE revocation is a 200
 	// tombstone, so a 4xx here genuinely means "no credential for this subject".
 	if (res.status === 404 || res.status === 410) return suppressed('subject_mismatch')
-	if (!res.ok) return unreachable()
+	if (!res.ok) return unreachable(res.status)
 	let body: unknown
 	try {
 		body = await res.json()
@@ -304,12 +342,19 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	// A `render` verdict came from an envelope (a tombstone never renders), so `signature` is the one just verified.
 	const signature = isRecord(body.signature) ? (body.signature as unknown as CertSignature) : undefined
 	const face = parseDeliveredFace(body.face)
+	const card = isRecord(body.card) ? body.card : undefined
+	// 2.0.0: the digests a render compares with the signed binding, computed here, once per read, so a render that waited
+	// for this read never waits a second time. Under React 19, `use` matches promises by their order in a render: a
+	// second suspension (on a digest) after the first (on this read) was handed this read's result, and the card failed.
+	const cardDigest = card ? await cardDocumentDigest(card) : undefined
+	const faceHashes = face ? await hashDeliveredFace(face) : undefined
 	return {
 		kind: 'verified',
 		payload: verdict.payload,
 		renderDef: parseRenderDef(body.renderDef),
 		...(signature ? { signature } : {}),
-		...(face ? { face } : {}),
+		...(face ? { face, faceHashes } : {}),
+		...(card ? { card, cardDigest } : {}),
 	}
 }
 
@@ -320,6 +365,7 @@ export function settleDelivery(cached: CachedDelivery, context: RenderContext): 
 			verdict: { decision: 'suppress', reason: cached.reason },
 			renderDef: null,
 			...(cached.unreachable ? { unreachable: true as const } : {}),
+			...(cached.unreachable && cached.status !== undefined ? { status: cached.status } : {}),
 		}
 	}
 	const verdict = renderVerdict(cached.payload, context)
@@ -329,6 +375,9 @@ export function settleDelivery(cached: CachedDelivery, context: RenderContext): 
 		renderDef: cached.renderDef,
 		...(cached.signature ? { signature: cached.signature } : {}),
 		...(cached.face ? { face: cached.face } : {}),
+		...(cached.faceHashes !== undefined ? { faceHashes: cached.faceHashes } : {}),
+		...(cached.card ? { card: cached.card } : {}),
+		...(cached.cardDigest !== undefined ? { cardDigest: cached.cardDigest } : {}),
 	}
 }
 
@@ -376,6 +425,33 @@ export function peekVerifiedDelivery(
 ): VerifiedDelivery | undefined {
 	const cached = (opts.cache ?? sharedDeliveryCache).peek(deliveryCacheKey(opts))
 	return cached === undefined ? undefined : settleDelivery(cached, opts.context)
+}
+
+/**
+ * 2.0.2: the settled answer for "CertREV was not reached in time": what a server render prints when it stops waiting
+ * (its deadline passed, or another request's read of the placement is in flight). Nothing, reported as
+ * `delivery_unreachable`, exactly as for a read that failed.
+ */
+export function unreachableDelivery(): VerifiedDelivery {
+	return settleDelivery(unreachable(), { platform: 'builder', externalId: '', now: new Date(0) })
+}
+
+/**
+ * 2.0.2: remember that a read of one placement did not reach CertREV in time (a render stopped waiting for it), so the
+ * cache answers the placement at once for its failure window. A no-op on a cache with no failure window beyond 2.0.1's
+ * negative entry. Never touches a verified entry.
+ */
+export function rememberDeliveryUnreachable(
+	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
+): void {
+	;(opts.cache ?? sharedDeliveryCache).markFailed(deliveryCacheKey(opts), unreachable())
+}
+
+/** 2.0.2: whether a read of one placement is already running in `cache` (a render's, or a background refresh). */
+export function deliveryLoading(
+	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
+): boolean {
+	return (opts.cache ?? sharedDeliveryCache).loading(deliveryCacheKey(opts))
 }
 
 /** Drop the cached read for one placement (e.g. from a revocation webhook); with `design`, that pinned read. */

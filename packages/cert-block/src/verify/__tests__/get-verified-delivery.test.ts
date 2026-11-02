@@ -176,19 +176,26 @@ describe('getVerifiedDelivery', () => {
 	})
 
 	it.each([
-		['404', 'subject_mismatch', false, () => json({}, 404)],
-		['410', 'subject_mismatch', false, () => json({}, 410)],
-		['500', 'unsupported_contract_version', true, () => json({}, 500)],
-		['non-JSON', 'unsupported_contract_version', true, () => new Response('nope')],
-		['a JSON array', 'unsupported_contract_version', true, () => json([])],
-		['a network error', 'unsupported_contract_version', true, () => Promise.reject(new TypeError('fetch failed'))],
-		['the deadline', 'unsupported_contract_version', true, () => new Promise<Response>(() => {})],
-	])('%s suppresses (%s; CertREV not reached: %s) without throwing', async (_label, reason, notReached, answer) => {
+		['404', 'subject_mismatch', false, () => json({}, 404), undefined],
+		['410', 'subject_mismatch', false, () => json({}, 410), undefined],
+		['500', 'unsupported_contract_version', true, () => json({}, 500), 500],
+		['non-JSON', 'unsupported_contract_version', true, () => new Response('nope'), undefined],
+		['a JSON array', 'unsupported_contract_version', true, () => json([]), undefined],
+		[
+			'a network error',
+			'unsupported_contract_version',
+			true,
+			() => Promise.reject(new TypeError('fetch failed')),
+			undefined,
+		],
+		['the deadline', 'unsupported_contract_version', true, () => new Promise<Response>(() => {}), undefined],
+	])('%s suppresses (%s; CertREV not reached: %s) without throwing', async (_label, reason, notReached, answer, status) => {
 		const t = setup(answer as () => Response | Promise<Response>)
 		expect(await getVerifiedDelivery(t.opts())).toEqual({
 			verdict: { decision: 'suppress', reason },
 			renderDef: null,
 			...(notReached ? { unreachable: true } : {}),
+			...(status ? { status } : {}),
 		})
 	})
 
@@ -381,7 +388,7 @@ describe('the design pin (1.2.0-canary.5)', () => {
 		expect(await getVerifiedDelivery({ ...t.opts(), design: { version: 3 } })).toEqual({
 			verdict: { decision: 'suppress', reason },
 			renderDef: null,
-			...(label === '503' ? { unreachable: true } : {}),
+			...(label === '503' ? { unreachable: true, status: 503 } : {}),
 		})
 		expect(t.delivery.calls).toEqual([`${DELIVERY_URL}?design=3`])
 	})

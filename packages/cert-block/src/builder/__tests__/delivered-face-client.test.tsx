@@ -4,7 +4,9 @@
  * payload's own signed digest, with no read. A seed with no face, or a face the browser cannot confirm (no WebCrypto,
  * bytes that do not hash), paints what 1.2.1 paints for it: the goldens were rendered by the unmodified 1.2.1 tree for
  * the same records and reads (`delivered-face-shapes.ts`). Hydration, a client mount over the page's record, a record
- * streamed in while the page loads, and a `clientRead` read.
+ * streamed in while the page loads, and a `clientRead` read. Since 1.3.1 the `reader` def's entries hold 1.3.1's reader
+ * face (the portal's one face), re-recorded as the golden's `readerRegeneratedFrom` says; the wrapper and the seed of
+ * those entries are still the 1.2.1 bytes.
  *
  * Every browser fetch is refused and counted (a storefront CSP that names no CertREV origin), except under `clientRead`.
  */

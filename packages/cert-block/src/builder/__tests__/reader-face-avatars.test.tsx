@@ -112,7 +112,7 @@ describe('the reader face on the delivery card: avatars', () => {
 	it('paints the three initials avatars for a v9 def with nothing hidden and no photo (the judge page)', async () => {
 		const html = await paint(v9([]), content())
 		expect(html).toContain('data-certrev-face="reader"')
-		expect(avatars(html)).toEqual(['sm:SW', ':JD', 'lg:JD'])
+		expect(avatars(html)).toEqual([':SW', ':JD', 'lg:JD'])
 		// the initials are inline, so the only <img> on the page is each CertREV logo
 		expect(html).not.toMatch(/<img [^>]*certrev-r-face/)
 		expect(html.match(/<img /g)).toHaveLength(2)
@@ -131,25 +131,25 @@ describe('the reader face on the delivery card: avatars', () => {
 
 	it("paints the reviewer's photo, and the writer's initials, when only the reviewer has a photo", async () => {
 		const html = await paint(v9([]), content({ photos: true }))
-		expect(avatars(html)).toEqual(['sm:SW', ':img', 'lg:img'])
+		expect(avatars(html)).toEqual([':SW', ':img', 'lg:img'])
 		expect(html).toContain('jane-doe.jpg')
 	})
 
 	it('treats a def that hides a field the faces ignore as one that hides no avatar', async () => {
-		expect(avatars(await paint(v9(['bio']), content()))).toEqual(['sm:SW', ':JD', 'lg:JD'])
+		expect(avatars(await paint(v9(['bio']), content()))).toEqual([':SW', ':JD', 'lg:JD'])
 	})
 
 	it('a def that hides the memo paints no memo card, so no memo avatar: the memo is stripped before the card paints (1.2.0)', async () => {
 		// canary.5 painted all three here (the face ignored `memo`); the memo text is not on the page now, in either the
 		// face or the seed, so there is no memo card to hold the third avatar. The byline avatars stay.
 		const html = await paint(v9(['bio', 'memo']), content())
-		expect(avatars(html)).toEqual(['sm:SW', ':JD'])
+		expect(avatars(html)).toEqual([':SW', ':JD'])
 		expect(html).not.toContain(base.memo as string)
 	})
 
 	it('paints the initials and drops the photo URL when showExpertPhoto is false', async () => {
 		const html = await paint(v9([]), content({ photos: true, display: { showExpertPhoto: false } }))
-		expect(avatars(html)).toEqual(['sm:SW', ':JD', 'lg:JD'])
+		expect(avatars(html)).toEqual([':SW', ':JD', 'lg:JD'])
 		// `showExpertPhoto: false` is not stripped from the seed (it is not a hidden field), so the photo URL may be in
 		// the seed's payload; it is in no painted element: the face never reads it
 		expect(withoutSeed(html)).not.toContain('jane-doe.jpg')
@@ -159,7 +159,7 @@ describe('the reader face on the delivery card: avatars', () => {
 		for (const photos of [false, true]) {
 			const html = await paint(v9(['reviewerPhoto']), content({ photos }))
 			expect(html).toContain('data-certrev-face="reader"')
-			expect(avatars(html)).toEqual(['sm:SW', ':JD', 'lg:JD'])
+			expect(avatars(html)).toEqual([':SW', ':JD', 'lg:JD'])
 			// hidden means absent from the page: the face never read the URL, and the seed has it stripped
 			expect(html).not.toContain('jane-doe.jpg')
 			expect(html).not.toContain('cdn.certrev.com/experts')

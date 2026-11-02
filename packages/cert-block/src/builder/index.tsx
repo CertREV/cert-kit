@@ -31,10 +31,10 @@
  * (`face: { html, css }`, unsigned) and the verified envelope signs that face's sha256 digests for the
  * def version served (`content.faceDigest`), an unpinned whole-card block paints that face instead;
  * markup that does not hash to the signed digest is never painted. A revoked, expired, unverifiable or unreachable cert, a marker that
- * is not exactly that shape, or a missing entry id renders nothing. A block WITHOUT the marker
- * (every entry exported before 1.1.0) renders from its options exactly as 1.0.3 did, so the
- * paragraph above still describes it: an editor who deletes the marker gets the options face back,
- * which is the 1.0.3 trust boundary, not a new one.
+ * is not exactly that shape, or a missing entry id renders nothing. 2.0.1: a block WITHOUT the marker
+ * (every entry exported before 1.1.0) renders nothing too, and reports `no_marker`: through 2.0.0 it
+ * painted its options as 1.0.3 did, unsigned export-time claims an editor could change. So deleting the
+ * marker no longer brings any face back.
  *
  * Three things the card DOES enforce, and they are the limit of it: no chrome at all without a
  * `reviewerName` and a `verifyUrl`; a credential renders only welded to its dated verification
@@ -155,6 +155,17 @@ export const certRevAnchorComponent: CertRevBuilderRegistration = {
 // 1.2.0-canary.5: the design pin, for CertREV's own canary replica (`<Content context={{ certrevDesignPin }}>`).
 export { type DesignPin, designPinFromUrl, parseDesignPin } from '../verify/get-verified-delivery.js'
 
+// 2.0.0: the contract-1 card (CertREV's server-rendered card document), its fallback report and the Builder flow rule.
+export {
+	acceptedCardBinding,
+	type CardBinding,
+	type CardDocumentV1,
+	type CardPartName,
+	cardDocumentDigest,
+	cardPartsFor,
+	parseCardDocument,
+} from './card-contract.js'
+export { CARD_FALLBACK_EVENT, type CardFallbackDetail, type CardFallbackReason } from './card-report.js'
 // ── The Builder.io PUSH kit (CertReviewCard) + the single-sourced wire type ──
 export {
 	BUILDER_CERT_CHROME_KEYS,
@@ -176,6 +187,7 @@ export {
 	PLACEMENT_INPUTS,
 	WIRE_INPUTS,
 } from './cert-review-card.js'
+export { BUILDER_CARD_FLOW_CSS } from './contract-card.js'
 export {
 	CERT_FACE_FIELDS,
 	credentialLabel,
