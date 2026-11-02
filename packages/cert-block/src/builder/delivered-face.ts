@@ -103,6 +103,22 @@ export function deliveredFaceHtml(face: DeliveredFace): string {
 	return `<style>${face.css}</style>${face.html}`
 }
 
+/**
+ * Make room in a memo of pending-then-settled work: drop the oldest SETTLED entry once the memo is full, never a pending
+ * one. A render suspends on a pending entry and, when React retries it, must find that entry again; evicting it would make
+ * every retry start (and suspend on) a new one, so a page with more documents than the memo holds would never finish
+ * (break-it B1). With nothing settled to drop, the memo grows past its bound until entries settle.
+ */
+export function evictOldestSettled<V extends { settled?: unknown }>(memo: Map<string, V>, max: number): void {
+	if (memo.size < max) return
+	for (const [key, entry] of memo) {
+		if (entry.settled !== undefined) {
+			memo.delete(key)
+			return
+		}
+	}
+}
+
 /** One face's hashing: the pending digest, and its answer once settled. */
 export interface FaceHashMemo {
 	readonly pending: Promise<DeliveredFaceHashes | null>
@@ -128,10 +144,8 @@ export function faceHashesFor(face: DeliveredFace): FaceHashMemo {
 			return hashes
 		}),
 	}
-	if (faceHashMemo.size >= FACE_HASH_MEMO_MAX) {
-		const oldest = faceHashMemo.keys().next().value
-		if (oldest !== undefined) faceHashMemo.delete(oldest)
-	}
+	// 2.0.0: never a pending entry (break-it B1: more faces than the memo holds made every retry suspend again).
+	evictOldestSettled(faceHashMemo, FACE_HASH_MEMO_MAX)
 	faceHashMemo.set(key, fresh)
 	return fresh
 }

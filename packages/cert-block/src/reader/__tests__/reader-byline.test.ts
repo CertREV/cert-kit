@@ -6,8 +6,9 @@
  * `fixtures/oracle-extra.json`, as well as against what the face is documented to paint:
  *
  *  - AVATARS. Every byline paints a round avatar, a photo when there is one to paint and otherwise the person's
- *    INITIALS (an inline `<svg>`, not an `<img>`; see `face.ts` and `reader-initials.test.ts`): 36 px for the writer,
- *    42 px for the banner reviewer, 46 px for the memo and sidebar reviewer. A def that hides `reviewerPhoto` hides the
+ *    INITIALS (an inline `<svg>`, not an `<img>`; see `face.ts` and `reader-initials.test.ts`): 42 px for the writer
+ *    AND the banner reviewer (one face, photo or initials, at every width: the portal's 2026-10-12 hotfix, in 1.3.1;
+ *    the writer's was the 36 px `sm` face before), 46 px for the memo and sidebar reviewer. A def that hides `reviewerPhoto` hides the
  *    PHOTOS, both the reviewer's and the writer's, and the initials paint in their place with no photo URL on the page;
  *    `display.showExpertPhoto: false` paints the initials too and never reads a photo URL. A person with no name to take
  *    initials from would get the silhouette; every cell here has names.
@@ -63,11 +64,11 @@ const avatars = (html: string): string[] =>
 describe('the avatars of a v9 Banners/Sidebar def', () => {
 	// The cells' people: the writer "Morgan Placeholder", the reviewer "Dr. Avery Quinlan" (the honorific is dropped).
 	const INITIALS = {
-		banner: ['sm:MP', ':AQ', 'lg:AQ'],
+		banner: [':MP', ':AQ', 'lg:AQ'],
 		sidebar: ['lg:AQ'],
 	} as const
 	const PHOTOS = {
-		banner: ['sm:img', ':img', 'lg:img'],
+		banner: [':img', ':img', 'lg:img'],
 		sidebar: ['lg:img'],
 	} as const
 

@@ -8,18 +8,20 @@
  * whose server HTML streams in after another card hydrated still finds its seed; a card mounted on the client reuses
  * the page's seed; and the phone memo toggle the server HTML carries works once hydrated.
  *
- * 1.2.0 (the re-cut): the browser reads NOTHING unless the block opts in with `clientRead`. Where the server could not
- * reach CertREV it painted the block's options face and an `'options'` record, which hydrates as it is; where it got a
- * definitive no it painted nothing and a `'none'` record. A client re-render after a hydration error elsewhere on the
- * page repaints from the record, with no read. A card mounted on the client with no record paints the block's options
- * face (nothing for a block without them); only with `clientRead` does it read once, failing closed silently. A
- * reviewer photo the browser cannot load (a CSP `img-src`, a 404) is repainted as the reviewer's initials.
+ * 1.2.0 (the re-cut): the browser reads NOTHING unless the block opts in with `clientRead`. 2.0.1: where the server could
+ * not reach CertREV it printed nothing and a `'none'` record naming `delivery_unreachable` (1.2.0 to 2.0.0 painted the
+ * block's options face), which hydrates as it is; where it got a definitive no it printed nothing and a `'none'` record.
+ * A client re-render after a hydration error elsewhere on the page repaints from the record, with no read. A card mounted
+ * on the client with no record and `clientRead={false}` prints nothing and reports `client_read_off`; with `clientRead`
+ * it reads once, failing closed. A reviewer photo the browser cannot load (a CSP `img-src`, a 404) is repainted as the
+ * reviewer's initials.
  */
 
 import { verifyArtifact } from '@certrev/cert-contract'
 import { act, type ReactElement } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CARD_FALLBACK_EVENT, type CardFallbackDetail } from '../card-report.js'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
 import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
 import { parseSeed, SEED_ATTRIBUTE } from '../ssr-seed.js'
@@ -49,8 +51,20 @@ afterEach(() => {
 })
 
 let issuer: ReturnType<typeof makeIssuer>
+let warn: ReturnType<typeof vi.spyOn>
+/** The browser's fallback events on this page (`card-report.ts`). */
+let events: CardFallbackDetail[]
+const onEvent = (e: Event) => events.push((e as CustomEvent<CardFallbackDetail>).detail)
 beforeEach(() => {
 	issuer = makeIssuer()
+	// The server's one-line reports (2.0.1: CertREV not reached is one): kept off the test output.
+	warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+	events = []
+	document.addEventListener(CARD_FALLBACK_EVENT, onEvent)
+})
+afterEach(() => {
+	warn.mockRestore()
+	document.removeEventListener(CARD_FALLBACK_EVENT, onEvent)
 })
 
 const card = (id = ENTRY_ID) => <CertReviewCard delivery={MARKER} builderContext={{ content: { id } }} />
@@ -65,10 +79,17 @@ const optionsCard = (extra: Partial<CertReviewCardProps> = {}) => (
 	/>
 )
 
-/** The memo `todaysExport` carries: on the page only when the options face painted. */
+/** The memo `todaysExport` carries: through 2.0.0 on the page when the options face painted; never in 2.0.1. */
 const OPTIONS_MEMO = 'The retinol guidance and usage cadence are accurate and safely framed.'
 
-const fallbackRecord = (face: 'options' | 'none') => ({ v: 1, baseUrl: BASE, externalId: ENTRY_ID, face })
+/** The record a server writes where it printed no face (2.0.1: always `'none'`, with the outage's reason). */
+const fallbackRecord = (reason?: 'delivery_unreachable') => ({
+	v: 1,
+	baseUrl: BASE,
+	externalId: ENTRY_ID,
+	face: 'none',
+	...(reason ? { reason } : {}),
+})
 
 /** e.l.f.'s def on the 1.2.0 reader face. */
 const READER_DEF = { ...ELF_LIKE_DEF, face: 'reader', layout: 'banner' }
@@ -268,24 +289,25 @@ it('a card whose server HTML streams in after another card hydrated still finds 
 	expect(parseSeed(secondNode?.getAttribute(SEED_ATTRIBUTE) ?? '')?.externalId).toBe(SECOND)
 })
 
-it("a card mounted on the client with no record on the page makes no read: the block's options face, or nothing", async () => {
+// 2.0.0: `clientRead={false}`, 1.2.0 to 1.3.1's default; the 2.0 default reads (`contract-card-client.test.tsx`).
+it('with `clientRead={false}`, a card mounted on the client with no record on the page makes no read and prints nothing (2.0.1), reporting client_read_off', async () => {
 	const browserCalls = refusingBrowser()
 	const withOptions = document.createElement('div')
 	const bare = document.createElement('div')
 	document.body.append(withOptions, bare)
 	await act(async () => {
-		createRoot(withOptions).render(optionsCard())
-		createRoot(bare).render(card())
+		createRoot(withOptions).render(optionsCard({ clientRead: false }))
+		createRoot(bare).render(
+			<CertReviewCard delivery={MARKER} clientRead={false} builderContext={{ content: { id: ENTRY_ID } }} />,
+		)
 	})
 	await settle()
 	expect(browserCalls).toEqual([])
-	// The block's own options face, as 0.5.x painted it, with no record (the server wrote none for this mount).
-	const painted = withOptions.querySelector('[data-certrev-cert-chrome]')
-	expect(painted).not.toBeNull()
-	expect(withOptions.textContent).toContain(OPTIONS_MEMO)
-	expect(painted?.hasAttribute(SEED_ATTRIBUTE)).toBe(false)
-	// A block with the marker and no options (nothing to paint from) paints nothing.
+	// Through 2.0.0 the first painted the block's own options face; now neither prints anything.
+	expect(withOptions.innerHTML).toBe('')
 	expect(bare.innerHTML).toBe('')
+	// One report for the placement (the page reports each placement and reason once).
+	expect(events).toEqual([{ reason: 'client_read_off', platform: 'builder', externalId: ENTRY_ID }])
 })
 
 it('with `clientRead`, a card mounted on the client with no seed on the page reads once and paints', async () => {
@@ -348,29 +370,29 @@ it.each([
 	expect(container.querySelector('[data-certrev-cert-chrome]')).toBeNull()
 })
 
-it('a card whose server could not reach CertREV hydrates the options face it painted, with no browser read and no mismatch', async () => {
+it('a card whose server could not reach CertREV hydrates the nothing it printed (2.0.1), with no browser read, no mismatch and one report', async () => {
 	const html = await serverHtml(() => json({ error: 'unavailable' }, 503), ENTRY_ID, optionsCard())
-	expect(seedOf(html)).toEqual(fallbackRecord('options'))
+	expect(seedOf(html)).toEqual(fallbackRecord('delivery_unreachable'))
+	expect(html).not.toContain(OPTIONS_MEMO)
 	const browserCalls = refusingBrowser()
 	const container = mountServerHtml(html)
 	const serverDom = container.innerHTML
-	const chromeNode = container.querySelector('[data-certrev-cert-chrome]')
-	expect(chromeNode).not.toBeNull()
+	expect(container.querySelector('[data-certrev-cert-chrome]')).toBeNull()
 	const { recoverable, consoleErrors } = await hydrate(container, optionsCard())
 	expect(recoverable).toEqual([])
 	expect(consoleErrors).toBe(0)
 	expect(browserCalls).toEqual([])
-	expect(container.querySelector('[data-certrev-cert-chrome]')).toBe(chromeNode)
 	expect(container.innerHTML).toBe(serverDom)
-	expect(container.textContent).toContain(OPTIONS_MEMO)
+	expect(container.textContent).not.toContain(OPTIONS_MEMO)
+	expect(events).toEqual([{ reason: 'delivery_unreachable', platform: 'builder', externalId: ENTRY_ID }])
 })
 
-it("the canary replica's pinned card (the host's proof) gets the same options face on a 503, through hydration and on a client mount, with no browser read", async () => {
+it("the canary replica's pinned card gets the same nothing on a 503, through hydration and (`clientRead={false}`) on a client mount, with no browser read", async () => {
 	const pin = { certrevDesignPin: { design: '1170', designBrand: 'staging-shopify-canary' } }
 	const pinned = () => optionsCard({ builderContext: { content: { id: ENTRY_ID }, context: pin } })
 	const html = await serverHtml(() => json({ error: 'unavailable' }, 503), ENTRY_ID, pinned())
 	expect(seedOf(html)).toEqual({
-		...fallbackRecord('options'),
+		...fallbackRecord('delivery_unreachable'),
 		design: { version: 1170, brand: 'staging-shopify-canary' },
 	})
 	const browserCalls = refusingBrowser()
@@ -380,22 +402,24 @@ it("the canary replica's pinned card (the host's proof) gets the same options fa
 	expect(recoverable).toEqual([])
 	expect(consoleErrors).toBe(0)
 	expect(container.innerHTML).toBe(serverDom)
-	expect(container.textContent).toContain(OPTIONS_MEMO)
-	// A pinned card the browser mounts with no record (Builder's editor on the replica): the options face, no read.
+	expect(container.textContent).not.toContain(OPTIONS_MEMO)
+	// A pinned card the browser mounts with no record (Builder's editor on the replica): nothing, no read.
 	const later = document.createElement('div')
 	document.body.appendChild(later)
 	await act(async () => {
-		createRoot(later).render(optionsCard({ builderContext: { content: { id: 'another-entry' }, context: pin } }))
+		createRoot(later).render(
+			optionsCard({ clientRead: false, builderContext: { content: { id: 'another-entry' }, context: pin } }),
+		)
 	})
 	await settle()
-	expect(later.textContent).toContain(OPTIONS_MEMO)
+	expect(later.innerHTML).toBe('')
 	expect(browserCalls).toEqual([])
 })
 
 it("a server 'none' record keeps the card down through hydration, with no browser read", async () => {
 	const tombstone = await issuer.tombstone()
 	const html = await serverHtml(() => json(tombstone), ENTRY_ID, optionsCard())
-	expect(seedOf(html)).toEqual(fallbackRecord('none'))
+	expect(seedOf(html)).toEqual(fallbackRecord())
 	const browserCalls = refusingBrowser()
 	const container = mountServerHtml(html)
 	const { recoverable, consoleErrors } = await hydrate(container, optionsCard())
@@ -420,14 +444,14 @@ describe("React's client re-render after a hydration error elsewhere on the page
 
 	it.each([
 		['the envelope (a seed)', 'seed'],
-		['the options face (CertREV not reached)', 'options'],
+		['nothing (CertREV not reached; 2.0.1, once the options face)', 'unreachable'],
 		['nothing (revoked)', 'none'],
 	] as const)('repaints %s from the server record, with no browser read', async (_name, kind) => {
 		const tombstone = await issuer.tombstone()
 		const answer =
 			kind === 'seed'
 				? () => json(deliveryBody(issuer.envelope()))
-				: kind === 'options'
+				: kind === 'unreachable'
 					? () => json({ error: 'unavailable' }, 503)
 					: () => json(tombstone)
 		const html = await serverHtml(answer, ENTRY_ID, page('rendered on the server'))
@@ -442,14 +466,13 @@ describe("React's client re-render after a hydration error elsewhere on the page
 		if (kind === 'seed') {
 			expect(chrome?.hasAttribute('data-certrev-delivery')).toBe(true)
 			expect(container.textContent).toContain('Dr. Jane Doe')
-		} else if (kind === 'options') {
-			expect(chrome).not.toBeNull()
-			expect(chrome?.hasAttribute('data-certrev-delivery')).toBe(false)
-			expect(container.textContent).toContain(OPTIONS_MEMO)
-			expect(seedOf(container.innerHTML)).toEqual(fallbackRecord('options'))
+		} else if (kind === 'unreachable') {
+			expect(chrome).toBeNull()
+			expect(container.textContent).not.toContain(OPTIONS_MEMO)
+			expect(seedOf(container.innerHTML)).toEqual(fallbackRecord('delivery_unreachable'))
 		} else {
 			expect(chrome).toBeNull()
-			expect(seedOf(container.innerHTML)).toEqual(fallbackRecord('none'))
+			expect(seedOf(container.innerHTML)).toEqual(fallbackRecord())
 		}
 	})
 })
@@ -461,7 +484,7 @@ describe('a reviewer photo the browser cannot load is repainted as their initial
 		const container = mountServerHtml(html)
 		const seed = container.querySelector(`[${SEED_ATTRIBUTE}]`)?.getAttribute(SEED_ATTRIBUTE)
 		// The server painted the reviewer's photo (twice: the byline and the memo) and the writer's initials.
-		expect(avatars(container)).toEqual(['sm:SW', ':img', 'lg:img'])
+		expect(avatars(container)).toEqual([':SW', ':img', 'lg:img'])
 		prepare(container)
 		const { recoverable, consoleErrors } = await hydrate(container)
 		expect(recoverable).toEqual([])
@@ -472,13 +495,13 @@ describe('a reviewer photo the browser cannot load is repainted as their initial
 
 	it("on the photo's error event (a CSP img-src refusal, a 404)", async () => {
 		const { container, seed } = await hydratedReaderCard()
-		expect(avatars(container)).toEqual(['sm:SW', ':img', 'lg:img'])
+		expect(avatars(container)).toEqual([':SW', ':img', 'lg:img'])
 		const photo = container.querySelector('.certrev-r-face:not(.sm) > img')
 		if (!photo) throw new Error('no reviewer photo on the hydrated card')
 		await act(async () => {
 			photo.dispatchEvent(new Event('error'))
 		})
-		expect(avatars(container)).toEqual(['sm:SW', ':JD', 'lg:JD'])
+		expect(avatars(container)).toEqual([':SW', ':JD', 'lg:JD'])
 		expect(container.querySelector('.certrev-r-face > img')).toBeNull()
 		// The seed is the server's, untouched; only the face painted from it changed.
 		expect(container.querySelector(`[${SEED_ATTRIBUTE}]`)?.getAttribute(SEED_ATTRIBUTE)).toBe(seed)
@@ -491,7 +514,7 @@ describe('a reviewer photo the browser cannot load is repainted as their initial
 				Object.defineProperty(img, 'naturalWidth', { configurable: true, get: () => 0 })
 			}
 		})
-		expect(avatars(container)).toEqual(['sm:SW', ':JD', 'lg:JD'])
+		expect(avatars(container)).toEqual([':SW', ':JD', 'lg:JD'])
 	})
 
 	it('a photo that loaded, or is still loading, stays', async () => {
@@ -501,7 +524,75 @@ describe('a reviewer photo the browser cannot load is repainted as their initial
 			Object.defineProperty(loaded, 'complete', { configurable: true, get: () => true })
 			Object.defineProperty(loaded, 'naturalWidth', { configurable: true, get: () => 640 })
 		})
-		expect(avatars(container)).toEqual(['sm:SW', ':img', 'lg:img'])
+		expect(avatars(container)).toEqual([':SW', ':img', 'lg:img'])
+	})
+})
+
+describe("a writer's photo the browser cannot load is the writer's initials, never the reviewer's (1.3.1)", () => {
+	// 1.3.1: the banner's writer takes the same plain 42px face as the reviewer (it was the `sm` face), so the person
+	// whose photo failed is read from the byline: "Written by" is the writer's, "Reviewed by" the reviewer's.
+	const WRITER_PHOTO = 'https://cdn.example.test/writer.jpg'
+	async function hydratedBothPhotos() {
+		const content = {
+			...builderPayload().content,
+			author: { name: 'Sam Writer', title: 'Senior Content Editor', photoUrl: WRITER_PHOTO },
+		}
+		const html = await serverHtml(() => json(deliveryBody(issuer.envelope({ content }), READER_DEF_WITH_PHOTOS)))
+		refusingBrowser()
+		const container = mountServerHtml(html)
+		expect(avatars(container)).toEqual([':img', ':img', 'lg:img'])
+		const { recoverable, consoleErrors } = await hydrate(container)
+		expect(recoverable).toEqual([])
+		expect(consoleErrors).toBe(0)
+		return container
+	}
+	const photoOf = (container: HTMLElement, role: string): Element => {
+		const byline = Array.from(container.querySelectorAll('.certrev-r-by')).find((by) =>
+			by.querySelector('.certrev-r-role')?.textContent?.startsWith(role),
+		)
+		const photo = byline?.querySelector('.certrev-r-face > img')
+		if (!photo) throw new Error(`no ${role} photo on the hydrated card`)
+		return photo
+	}
+
+	it("the writer's photo fails: the writer's initials, the reviewer's photo stays", async () => {
+		const container = await hydratedBothPhotos()
+		await act(async () => {
+			photoOf(container, 'Written by').dispatchEvent(new Event('error'))
+		})
+		expect(avatars(container)).toEqual([':SW', ':img', 'lg:img'])
+		// (the seed, untouched, still carries the URL; the painted face does not)
+		expect(container.querySelector(`img[src="${WRITER_PHOTO}"]`)).toBeNull()
+	})
+
+	it("the reviewer's photo fails: the reviewer's initials (card and memo), the writer's photo stays", async () => {
+		const container = await hydratedBothPhotos()
+		await act(async () => {
+			photoOf(container, 'Reviewed by').dispatchEvent(new Event('error'))
+		})
+		expect(avatars(container)).toEqual([':img', ':JD', 'lg:JD'])
+		expect(container.querySelector(`img[src="${WRITER_PHOTO}"]`)).not.toBeNull()
+	})
+
+	it('both photos fail before hydration: both repaint as initials', async () => {
+		const html = await serverHtml(() =>
+			json(
+				deliveryBody(
+					issuer.envelope({
+						content: { ...builderPayload().content, author: { name: 'Sam Writer', photoUrl: WRITER_PHOTO } },
+					}),
+					READER_DEF_WITH_PHOTOS,
+				),
+			),
+		)
+		refusingBrowser()
+		const container = mountServerHtml(html)
+		for (const img of Array.from(container.querySelectorAll('.certrev-r-face > img'))) {
+			Object.defineProperty(img, 'complete', { configurable: true, get: () => true })
+			Object.defineProperty(img, 'naturalWidth', { configurable: true, get: () => 0 })
+		}
+		await hydrate(container)
+		expect(avatars(container)).toEqual([':SW', ':JD', 'lg:JD'])
 	})
 })
 

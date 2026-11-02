@@ -41,9 +41,10 @@
  * page carried for another version.
  *
  * WHEN THE SERVER HAD NO ENVELOPE TO PAINT (1.2.0) the same attribute carries a fallback record instead of a seed:
- * `{ v: 1, baseUrl, externalId, design?, face }`, where `face` is `'options'` (CertREV could not be reached, so the
- * server painted the block's own options face) or `'none'` (the server painted nothing: revoked, expired, unverifiable,
- * for another entry). A browser that renders the card again (hydration, or React's client re-render after a hydration
+ * `{ v: 1, baseUrl, externalId, design?, face, reason? }`, where `face` is `'none'` (the server painted nothing:
+ * revoked, expired, unverifiable, for another entry, or, 2.0.1, CertREV not reached, with `reason` naming why) or, on a
+ * page a 2.0.0 server rendered, `'options'` (CertREV could not be reached and that server painted the block's options
+ * face; 2.0.1 prints nothing for it). A browser that renders the card again (hydration, or React's client re-render after a hydration
  * error elsewhere on the page) paints what the record says, so it neither reads the Delivery API nor shows a card the
  * server withheld. A record holds no payload, so `parseSeed` never takes one for a seed. A `'none'` record sits on a
  * `hidden` element with nothing in it.
@@ -54,6 +55,17 @@
  * it against the seed payload's digest itself (`cert-review-card.tsx`); a seed with no `face`, a malformed one, or one
  * whose hashes fail paints what 1.2.1 paints for it. A seed with no face is byte for byte the 1.2.1 seed. The face is
  * on the page twice (painted, and in the seed), which is its page-weight cost.
+ *
+ * A CONTRACT-1 CARD RIDES THE SEED (2.0.0), and only when the server printed it: the seed then ends with `card`, the
+ * card document exactly as the Delivery API served it, whose RFC 8785 digest the signed `payload.content.faceDigest`
+ * binds (`contract: 1`, `doc`). The browser prints that card from the seed only after it has checked it against the
+ * seed payload's binding itself (`cert-review-card.tsx`), so a client re-render (React's recovery from a hydration
+ * error, a streamed record, a later mount of the same placement) prints the server's card with no read. A seed with no
+ * card is the 1.3.1 seed byte for byte. The card is on the page twice (printed, and in the seed), as 1.3.0's face is.
+ *
+ * A FALLBACK RECORD MAY NAME ITS REASON (2.0.0): where a contract-1 placement prints nothing, its `'none'` record ends
+ * with `reason` (`card_missing`, `card_verify_failed`, `card_unsupported_contract`, `card_pin_mismatch`), the same
+ * reason the card reports. Every other record is the 1.3.1 record byte for byte, and 1.3.1 ignores the key.
  *
  * React-free and browser-only in effect: with no `document` (a server) `pageSeedFor` finds nothing, so a server never
  * reads or keeps a seed and a multi-tenant render process holds nothing per page.
@@ -90,6 +102,11 @@ export interface DeliverySeed {
 	 * seed read from the page it is UNVERIFIED until hashed against `payload.content.faceDigest`.
 	 */
 	readonly face?: DeliveredFace
+	/**
+	 * 2.0.0: the contract-1 card document the server printed (the file header), exactly as served; absent whenever it
+	 * printed anything else. On a seed read from the page it is UNVERIFIED until checked against the payload's binding.
+	 */
+	readonly card?: Readonly<Record<string, unknown>>
 }
 
 /** A seed as read from the page: the parsed seed and the attribute's exact text (re-rendered verbatim on hydration). */
@@ -98,7 +115,7 @@ export interface PageSeed {
 	readonly raw: string
 }
 
-/** What the server painted with no verified envelope: the block's options face, or nothing. */
+/** What the server painted with no verified envelope: nothing (2.0.1 never writes `'options'`; a 2.0.0 page may hold one). */
 export type FallbackFace = 'options' | 'none'
 
 /** The record a server writes where it had no envelope to paint (the file header). */
@@ -107,6 +124,8 @@ export interface DeliveryFallback {
 	readonly externalId: string
 	readonly design?: DesignPin
 	readonly face: FallbackFace
+	/** 2.0.0: why a contract-1 placement printed nothing; absent on every other record. */
+	readonly reason?: string
 }
 
 /** A fallback record as read from the page, with the attribute's exact text. */
@@ -203,6 +222,8 @@ export function serializeSeed(seed: DeliverySeed): string {
 		renderDef: seed.renderDef,
 		// 1.3.0: last, and only with a delivered face, so a seed without one is the 1.2.1 bytes.
 		...(seed.face ? { face: { html: seed.face.html, css: seed.face.css } } : {}),
+		// 2.0.0: last, and only with a printed contract-1 card, so a seed without one is the 1.3.1 bytes.
+		...(seed.card ? { card: seed.card } : {}),
 	})
 }
 
@@ -213,6 +234,7 @@ export function serializeFallback(fallback: DeliveryFallback): string {
 		externalId: fallback.externalId,
 		...serializedPin(fallback.design),
 		face: fallback.face,
+		...(fallback.reason === undefined ? {} : { reason: fallback.reason }),
 	})
 }
 
@@ -234,7 +256,7 @@ export function parseSeed(raw: string): DeliverySeed | null {
 		return null
 	}
 	if (!isRecord(value) || value.v !== 1) return null
-	const { baseUrl, externalId, design, payload, signature, renderDef, face } = value
+	const { baseUrl, externalId, design, payload, signature, renderDef, face, card } = value
 	if (typeof baseUrl !== 'string' || typeof externalId !== 'string') return null
 	if (!isRecord(payload) || !isRecord(payload.subject) || !isRecord(payload.lifecycle) || !isRecord(payload.content)) {
 		return null
@@ -252,6 +274,8 @@ export function parseSeed(raw: string): DeliverySeed | null {
 		...(isRecord(signature) ? { signature: signature as unknown as CertSignature } : {}),
 		renderDef: parseRenderDef(renderDef),
 		...(delivered ? { face: delivered } : {}),
+		// 2.0.0: a card that is not a JSON object is no card (the seed paints as its binding says without one).
+		...(isRecord(card) ? { card } : {}),
 	}
 }
 
@@ -264,12 +288,18 @@ export function parseFallback(raw: string): DeliveryFallback | null {
 		return null
 	}
 	if (!isRecord(value) || value.v !== 1 || 'payload' in value) return null
-	const { baseUrl, externalId, design, face } = value
+	const { baseUrl, externalId, design, face, reason } = value
 	if (typeof baseUrl !== 'string' || typeof externalId !== 'string') return null
 	if (face !== 'options' && face !== 'none') return null
 	const pin = parsedPin(design)
 	if (pin === null) return null
-	return { baseUrl, externalId, ...(pin ? { design: pin } : {}), face }
+	return {
+		baseUrl,
+		externalId,
+		...(pin ? { design: pin } : {}),
+		face,
+		...(typeof reason === 'string' ? { reason } : {}),
+	}
 }
 
 /** One placement's key: the origin, the entry and the pin (the read's own key, so a pin never shares a seed). */

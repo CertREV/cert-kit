@@ -1,7 +1,9 @@
 /**
- * 1.3.0, the delivered face on a React with `use` (React 19): the card hands `use` the read's promise, then ONE promise
- * per face for its hashes (memoized by the face's content), so a replayed render sees the promise it first saw and a
- * second card with the same face suspends on nothing new.
+ * The delivered face on a React with `use` (React 19). 2.0.0: the card hands `use` the read's promise and nothing else,
+ * because the read hashes the face itself (`get-verified-delivery.ts`). Through 1.3.1 it suspended a second time, on the
+ * face's hashes; React 19's `use` matches promises by their order in a render, so the retry was handed the READ's
+ * result for the hashes and the delivered face never matched (the replica on React 19 showed it). A second card with the
+ * same face suspends on nothing new.
  *
  * `use` is mocked here to record the promise it is given and suspend by throwing it (the protocol the installed React
  * renders), as in `design-pin-card-use.test.tsx`.
@@ -43,12 +45,12 @@ beforeEach(() => {
 
 const card = () => <CertReviewCard delivery={MARKER} builderContext={{ content: { id: ENTRY_ID } }} />
 
-it('suspends on the read, then on one promise for the face hashes, and paints the delivered face', async () => {
+it('suspends once, on the read (whose result carries the face hashes), and paints the delivered face', async () => {
 	const html = await renderToHtml(card())
 	expect(html).toContain('data-certrev-face="delivered"')
 	expect(calls).toHaveLength(1)
-	expect(used).toHaveLength(2)
-	expect(used[1]).toBe(faceHashesFor(DELIVERED_FACE).pending)
+	expect(used).toHaveLength(1)
+	expect(used[0]).not.toBe(faceHashesFor(DELIVERED_FACE).pending)
 })
 
 it('a second card with the same face suspends on nothing new', async () => {

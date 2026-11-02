@@ -22,19 +22,41 @@ import * as React from 'react'
 import { Suspense } from 'react'
 import { memoToggleFor, toggleMemo } from '../components/memo-toggle.js'
 import { type CertBlockMode, renderCertBlock } from '../components/render-cert-block.js'
-import { CERT_STRINGS_VERSION, type ResolvedBlockTheme } from '../components/render-def.js'
+import { CERT_STRINGS_VERSION } from '../components/render-def.js'
 import { type CertPayload, renderVerdict } from '../contract/kernel.js'
 import {
 	type DeliveredFace,
 	type DesignPin,
+	deliveryLoading,
 	getVerifiedDelivery,
 	parseDesignPin,
 	readVerifiedDelivery,
+	rememberDeliveryUnreachable,
+	unreachableDelivery,
 	type VerifiedDelivery,
 } from '../verify/get-verified-delivery.js'
+import {
+	acceptedCardBinding,
+	type CardBinding,
+	type CardDocumentV1,
+	type CardPartName,
+	cardDigestFor,
+	cardDigestMatches,
+	cardMatchesPlacement,
+	cardPartsFor,
+	parseCardDocument,
+} from './card-contract.js'
 import { CARD_READER_CSS } from './card-reader-css.js'
+import {
+	CARD_FALLBACK_REASONS,
+	type CardFallbackDetail,
+	type CardFallbackReason,
+	reportCardFallbackInBrowser,
+	reportCardFallbackOnServer,
+} from './card-report.js'
 import type { BuilderCertChromeData, CertChromeRenderDef } from './cert-chrome-data.js'
 import { BUILDER_CERT_CHROME_KEYS } from './cert-chrome-data.js'
+import { ContractCardFace } from './contract-card.js'
 import {
 	type DeliveredFaceHashes,
 	deliveredFaceDigest,
@@ -43,10 +65,9 @@ import {
 	faceHashesFor,
 	showsWholeCard,
 } from './delivered-face.js'
-import { cardDeliveryRuntime } from './delivery-runtime.js'
+import { cardDeliveryRuntime, cardResolveKidFor } from './delivery-runtime.js'
 import { envelopeCardHtml, envelopeCardInput, isReaderFaceDef } from './envelope-face.js'
 import {
-	type FallbackFace,
 	type PageRecord,
 	pageHoldsServerHtml,
 	pageRecordFor,
@@ -100,11 +121,13 @@ export interface CertReviewCardProps extends Partial<BuilderCertChromeData> {
 		readonly context?: { readonly certrevDesignPin?: unknown } | null
 	} | null
 	/**
-	 * 1.2.0: opt in to a Delivery read FROM THE BROWSER for a card the server did not render (a client-side navigation,
-	 * Builder's editor). Off by default: the card then never makes a request from the browser, so a brand's
-	 * Content-Security-Policy needs no CertREV origin, and such a card paints the block's own options face. Turning it
-	 * on needs the Delivery API's origin in the page's `connect-src`. Not a Builder input: a brand sets it in code, on
-	 * a wrapper of this component.
+	 * A Delivery read FROM THE BROWSER for a card the server did not render (a client-side navigation, Builder's editor).
+	 * 2.0.0: ON by default (absent or `true`): it is the only way CertREV's server-rendered card exists after an in-app
+	 * navigation, and it needs the Delivery API's origin (`https://portal.certrev.com`) in the page's `connect-src`, one
+	 * of the four CSP sources 2.0 asks for. A read the policy blocks is a read that did not reach CertREV: nothing, and a
+	 * reported `delivery_unreachable` (2.0.1; 2.0.0 painted the block's options face). `false`: no request from the
+	 * browser, and such a card prints nothing and reports `client_read_off`. Not a Builder input: a brand sets it in code,
+	 * on a wrapper of this component.
 	 */
 	clientRead?: boolean
 }
@@ -121,28 +144,6 @@ export interface CertReviewCardProps extends Partial<BuilderCertChromeData> {
  */
 function text(value: unknown): string {
 	return typeof value === 'string' ? value : ''
-}
-
-/** The same rule where ABSENT and EMPTY are different renders (`authorTitle`, `bio`). */
-function optionalText(value: unknown): string | undefined {
-	return text(value) || undefined
-}
-
-/**
- * The fused credential pair — accepted ONLY when both halves are present AND both are strings.
- *
- * The R1 gate ("a credential never displays without its dated verification") is THIS FUNCTION,
- * not the type: the pair arrives as untyped CMS JSON, and the old truthiness check keyed the
- * whole pair off the OBJECT, so `{credential:'MD'}` forwarded `verifiedAt: undefined` into the
- * renderer and crashed. Anything malformed — a half pair, a bare string, an array, a number
- * where a date belongs — degrades to the name-only face, which is the honest render of a
- * delivery whose verification cannot be read.
- */
-function fusedCredential(pair: BuilderCertChromeData['credentialVerification'] | undefined) {
-	if (!pair || typeof pair !== 'object') return null
-	const credential = text(pair.credential)
-	const verifiedAt = text(pair.verifiedAt)
-	return credential && verifiedAt ? { credential, verifiedAt } : null
 }
 
 /**
@@ -173,15 +174,80 @@ export function acceptedDeliveryMarker(value: unknown): { readonly baseUrl: stri
  * flight; React 18 (no `use`) gets the promise thrown, the Suspense protocol it supports. Either
  * way the retry finds the settled read in the cache through `readVerifiedDelivery`, so it never
  * suspends on a second promise.
+ *
+ * 2.0.2, on a server (`suspendOnServer`): the render waits at most the runtime's `serverWaitMs` (300 ms). Past it, the
+ * placement's failure is remembered in the cache (so every render in the failure window answers at once, even where the
+ * runtime abandons the read when the response ends), the render prints nothing (`delivery_unreachable`), and the read
+ * runs on: when it lands, the next render paints it. A render that finds a read of the placement already running that it
+ * did not start (another request's, a background refresh, or a second card of the placement on the same page: React
+ * gives a component no way to tell these apart) never waits on it: it is `'skipped'` and prints a marker only
+ * (`SkippedRead`), which the same card instance re-renders while hydrating and replaces with the page's verified seed
+ * right after.
  */
-const inflightReads = new Map<string, Promise<VerifiedDelivery>>()
-function suspendOn(key: string, start: () => Promise<VerifiedDelivery>): VerifiedDelivery {
-	let pending = inflightReads.get(key)
+/** The reads a render is suspended on, per runtime cache (a fresh runtime, a fresh page in a test, starts with none). */
+const inflightReadsByCache = new WeakMap<object, Map<string, Promise<VerifiedDelivery>>>()
+
+function suspendOn(cache: object, key: string, start: () => Promise<VerifiedDelivery>): VerifiedDelivery {
+	let reads = inflightReadsByCache.get(cache)
+	if (!reads) {
+		reads = new Map()
+		inflightReadsByCache.set(cache, reads)
+	}
+	let pending = reads.get(key)
 	if (!pending) {
-		pending = start().finally(() => inflightReads.delete(key))
-		inflightReads.set(key, pending)
+		const own = reads
+		pending = start().finally(() => own.delete(key))
+		reads.set(key, pending)
 	}
 	return suspendUntil(pending)
+}
+
+function suspendOnServer(
+	key: string,
+	read: Parameters<typeof getVerifiedDelivery>[0],
+	waitMs: number | undefined,
+): VerifiedDelivery | 'skipped' {
+	if (deliveryLoading(read)) return 'skipped'
+	return suspendOn(read.cache ?? inflightReadsByCache, key, () => {
+		const loaded = getVerifiedDelivery(read)
+		if (waitMs === undefined || !Number.isFinite(waitMs) || waitMs <= 0) return loaded
+		return new Promise<VerifiedDelivery>((resolve) => {
+			const timer = setTimeout(() => {
+				rememberDeliveryUnreachable(read)
+				resolve(unreachableDelivery())
+			}, waitMs)
+			loaded.then(
+				(settled) => {
+					clearTimeout(timer)
+					resolve(settled)
+				},
+				() => {
+					clearTimeout(timer)
+					resolve(unreachableDelivery())
+				},
+			)
+		})
+	})
+}
+
+/** 2.0.2: the attribute a skipped server render's marker carries: the card instance's `useId`. */
+export const SKIPPED_ATTRIBUTE = 'data-certrev-skipped'
+
+/**
+ * 2.0.2: what a server render prints when it did not wait for a read it did not start: a hidden marker naming the card
+ * instance, and no record (it knows nothing about the placement, so it must never stand in for another card's record).
+ * Not a failure: nothing is reported or remembered.
+ */
+function SkippedRead({ instance }: { readonly instance: string }) {
+	return <div hidden {...{ [SKIPPED_ATTRIBUTE]: instance }} />
+}
+
+/** 2.0.2: whether the live document holds this card instance's skipped marker (it is hydrating one). */
+function skippedInDocument(instance: string): boolean {
+	for (const el of Array.from(document.querySelectorAll(`[${SKIPPED_ATTRIBUTE}]`))) {
+		if (el.getAttribute(SKIPPED_ATTRIBUTE) === instance) return true
+	}
+	return false
 }
 
 /** `use` where React has it (19), else the thrown promise (18). */
@@ -308,9 +374,13 @@ function EnvelopeFace(props: {
 
 type PhotoPerson = 'expert' | 'author'
 
-/** The reader face paints the author's avatar small (`.certrev-r-face.sm`); every other avatar is the expert's. */
+/**
+ * Whose avatar a broken photo is. The banner's two bylines take the same face (1.3.1; the author's was the small
+ * `.certrev-r-face.sm` before), so the person is read from the byline: the author's carries the plain "Written by"
+ * role, the reviewer's "Reviewed by" (`.on`), and the sidebar's and the memo's reviewer has no role at all.
+ */
 function photoPerson(img: HTMLImageElement): PhotoPerson {
-	return img.parentElement?.classList.contains('sm') ? 'author' : 'expert'
+	return img.closest('.certrev-r-by')?.querySelector('.certrev-r-role:not(.on)') ? 'author' : 'expert'
 }
 
 interface EnvelopeCardProps {
@@ -379,11 +449,14 @@ function deliveredFaceFor(
 	renderDef: CertChromeRenderDef | null,
 	face: DeliveredFace | undefined,
 	props: EnvelopeCardProps,
+	/** 2.0.0: the hashes the read computed (`VerifiedDelivery.faceHashes`): then nothing suspends here. */
+	hashed?: DeliveredFaceHashes | null,
 ): DeliveredFace | undefined {
 	if (!face || props.design || !showsWholeCard(props.part)) return undefined
 	const digest = deliveredFaceDigest(payload.content, renderDef, face)
 	if (!digest) return undefined
-	return deliveredFaceMatches(suspendOnFaceHashes(face), digest) ? face : undefined
+	const hashes = hashed !== undefined ? hashed : suspendOnFaceHashes(face)
+	return deliveredFaceMatches(hashes, digest) ? face : undefined
 }
 
 /**
@@ -433,64 +506,155 @@ function paintEnvelope(
 	return <EnvelopeFace html={renderCertBlock(input)} defVersion={defVersion} seed={seed} />
 }
 
-const FALLBACK_LAYOUTS: readonly string[] = ['banner', 'sidebar', 'floating']
-
-/**
- * The options face a block with the delivery marker paints in place of the envelope (1.2.0), or null. Its placement is
- * the block's own `mode`, else its def's layout, as the envelope face's is, else the banner bridge. A pinned card (the
- * canary replica) paints it too, so the replica shows what a brand's page shows when CertREV is not reached; its
- * record names the pin and says `'options'`, so a capture can never take it for the pinned design.
- */
-function fallbackFace(props: EnvelopeCardProps): string | null {
-	const { block } = props
-	const layout = block.renderDef?.layout
-	const mode =
-		typeof block.mode === 'string' && FALLBACK_LAYOUTS.includes(block.mode)
-			? block.mode
-			: typeof layout === 'string' && FALLBACK_LAYOUTS.includes(layout)
-				? (layout as CertBlockMode)
-				: undefined
-	return optionsFaceHtml(block, mode)
-}
-
-/** The block's options face, stamped with a fallback record when the server wrote one (`ssr-seed.ts`). */
-function OptionsFace(props: { readonly block: CertReviewCardProps; readonly html: string; readonly record?: string }) {
-	return (
-		<div
-			data-certrev-cert-chrome=""
-			// The two provenance stamps the crawl monitor reads — emitted ONLY when the delivery
-			// carried the right type, so a mistyped option leaves the attribute off instead of
-			// stamping "[object Object]" as a version.
-			data-certrev-strings-version={optionalText(props.block.stringsVersion)}
-			data-certrev-def-version={typeof props.block.renderDef?.v === 'number' ? props.block.renderDef.v : undefined}
-			{...(props.record === undefined ? {} : { [SEED_ATTRIBUTE]: props.record })}
-			// biome-ignore lint/security/noDangerouslySetInnerHtml: renderCertBlock is the escaping-safe SSR string renderer
-			dangerouslySetInnerHTML={{ __html: props.html }}
-		/>
-	)
-}
-
 /** Where the server painted no face, an empty hidden element carries the record that says so. */
 function NoFace(props: { readonly record: string }) {
 	return <div hidden {...{ [SEED_ATTRIBUTE]: props.record }} />
 }
 
-/** What a card with no verified envelope paints: the options face when CertREV was not reached, else nothing. */
-function settleWithoutEnvelope(props: EnvelopeCardProps, unreachable: boolean): React.ReactElement {
-	const html = unreachable ? fallbackFace(props) : null
-	const face: FallbackFace = html === null ? 'none' : 'options'
+/**
+ * 2.0.0: reports one fallback (`card-report.ts`) and renders nothing (no element, no marker: it changes no byte of the
+ * page). On a server it reports as it renders; in a browser, once it has mounted. 2.0.1: the report is also a beacon to
+ * `origin`, the delivery origin the block reads (none: CertREV's production origin).
+ */
+function FallbackReport(props: {
+	readonly detail: CardFallbackDetail
+	readonly server: boolean
+	readonly origin?: string
+}) {
+	const { detail, server, origin } = props
+	if (server) reportCardFallbackOnServer(detail, origin)
+	React.useEffect(() => {
+		reportCardFallbackInBrowser(detail, origin)
+	}, [detail, origin])
+	return null
+}
+
+/** A face with its fallback report beside it. */
+function withReport(
+	face: React.ReactElement | null,
+	reason: CardFallbackReason,
+	props: EnvelopeCardProps,
+	server: boolean,
+	certId?: string,
+	status?: number,
+): React.ReactElement {
+	const detail: CardFallbackDetail = {
+		reason,
+		platform: 'builder',
+		externalId: props.externalId,
+		...(certId === undefined ? {} : { certId }),
+		...(status === undefined ? {} : { status }),
+	}
+	return (
+		<>
+			{face}
+			<FallbackReport detail={detail} server={server} origin={props.baseUrl} />
+		</>
+	)
+}
+
+/**
+ * 2.0.0: what a contract-1 (or unsupported-contract) placement prints, decided by the SIGNED binding (`card-contract.ts`):
+ * the card when the served document hashes to the signed digest and names this design version, certificate and
+ * placement; else nothing, and the reason. Suspends once while WebCrypto hashes a document it has not seen.
+ */
+type ContractOutcome =
+	| { readonly kind: 'card'; readonly card: CardDocumentV1; readonly names: CardPartName[] }
+	| { readonly kind: 'none'; readonly reason?: CardFallbackReason }
+
+function contractOutcome(
+	binding: CardBinding | 'unsupported',
+	rawCard: unknown,
+	payload: CertPayload,
+	props: EnvelopeCardProps,
+	/** The digest the read computed (`VerifiedDelivery.cardDigest`): then nothing suspends here. */
+	digested?: string | null,
+): ContractOutcome {
+	if (binding === 'unsupported') return { kind: 'none', reason: 'card_unsupported_contract' }
+	// CertREV's replica pin: the signed card was painted for one design version; another pin gets nothing.
+	if (props.design && props.design.version !== binding.defVersion) return { kind: 'none', reason: 'card_pin_mismatch' }
+	if (rawCard === undefined || rawCard === null) return { kind: 'none', reason: 'card_missing' }
+	const card = parseCardDocument(rawCard)
+	if (!card || !cardMatchesPlacement(card, binding, payload, props.externalId)) {
+		return { kind: 'none', reason: 'card_verify_failed' }
+	}
+	let digest: string | null
+	if (digested !== undefined) {
+		digest = digested
+	} else {
+		// A page's seed: the one suspension of this render (a render that read waits on nothing but its read).
+		const memo = cardDigestFor(card)
+		digest = memo.settled ? memo.settled.digest : suspendUntil(memo.pending)
+	}
+	if (!cardDigestMatches(digest, binding)) return { kind: 'none', reason: 'card_verify_failed' }
+	// A block with nothing of this design to print (a memo block of a memo-less card, or of a sidebar design) prints
+	// nothing, by design: not a fallback.
+	const names = cardPartsFor(card, props.part)
+	return names.length === 0 ? { kind: 'none' } : { kind: 'card', card, names }
+}
+
+/** The `'none'` record of a contract-1 placement, with its reason when it is a fallback. */
+function contractNone(
+	props: EnvelopeCardProps,
+	reason: CardFallbackReason | undefined,
+	server: boolean,
+	certId: string,
+): React.ReactElement {
 	const record = serializeFallback({
 		baseUrl: props.baseUrl,
 		externalId: props.externalId,
 		...(props.design ? { design: props.design } : {}),
-		face,
+		face: 'none',
+		...(reason ? { reason } : {}),
 	})
-	return html === null ? <NoFace record={record} /> : <OptionsFace block={props.block} html={html} record={record} />
+	const face = <NoFace record={record} />
+	return reason ? withReport(face, reason, props, server, certId) : face
 }
 
 /**
+ * What a card with no verified envelope paints: nothing, and a `'none'` record. 2.0.1: CertREV not reached prints
+ * nothing too (it painted the block's export-time options through 2.0.0), and the record names `delivery_unreachable`
+ * so the browser reports it as well (with CertREV's HTTP status when it answered with one); an unknown kid is reported as
+ * `unknown_key`, and (2.0.1) an envelope that does not verify as `envelope_verify_failed`. A definitive no (revoked,
+ * expired, for another entry, not found) prints nothing, by design, unreported.
+ */
+function settleWithoutEnvelope(
+	props: EnvelopeCardProps,
+	verdict: { readonly unreachable: boolean; readonly reason?: string; readonly status?: number },
+	server: boolean,
+): React.ReactElement {
+	const reason: CardFallbackReason | undefined = verdict.unreachable
+		? 'delivery_unreachable'
+		: verdict.reason === 'unknown_key'
+			? 'unknown_key'
+			: verdict.reason !== undefined && ENVELOPE_VERIFY_FAILURES.has(verdict.reason)
+				? 'envelope_verify_failed'
+				: undefined
+	const record = serializeFallback({
+		baseUrl: props.baseUrl,
+		externalId: props.externalId,
+		...(props.design ? { design: props.design } : {}),
+		face: 'none',
+		...(reason ? { reason } : {}),
+	})
+	const none = <NoFace record={record} />
+	return reason
+		? withReport(none, reason, props, server, undefined, verdict.unreachable ? verdict.status : undefined)
+		: none
+}
+
+/** 2.0.1: the kernel's suppress reasons that mean the envelope itself did not verify (reported, never silent). */
+const ENVELOPE_VERIFY_FAILURES: ReadonlySet<string> = new Set([
+	'invalid_signature',
+	'unsupported_alg',
+	'platform_mismatch',
+	'content_drift',
+	'unsupported_contract_version',
+])
+
+/**
  * Paint what the page's record for this placement says: a seed its envelope (judged at the browser's clock first when
- * `judge`), an `'options'` record the options face, a `'none'` record nothing.
+ * `judge`), a `'none'` record nothing, and (2.0.1) a 2.0.0 server's `'options'` record nothing too.
  */
 function paintRecord(
 	record: PageRecord,
@@ -506,9 +670,24 @@ function paintRecord(
 				return null
 			}
 		}
+		const { seed } = record
+		// 2.0.0: a seed whose signed binding names a contract prints the card it carries, only after the browser has
+		// checked it against that binding itself; otherwise nothing. Never a 1.3.1 face for such a placement.
+		const binding = acceptedCardBinding(seed.payload.content)
+		if (binding !== null) {
+			const outcome = contractOutcome(binding, seed.card, seed.payload, props)
+			if (outcome.kind === 'card')
+				return <ContractCardFace card={outcome.card} names={outcome.names} seed={record.raw} origin={props.baseUrl} />
+			// Hydrating over the card the server printed, which the browser could not confirm (no WebCrypto): adopt the
+			// server's element; the render right after hydration prints nothing in its place.
+			if (!judge && outcome.reason === 'card_verify_failed' && seed.card !== undefined)
+				return <ServerFaceUntilHydrated />
+			// Nothing of this design for this block (a memo block of a sidebar card): nothing, and no record of its own.
+			if (outcome.reason === undefined) return null
+			return contractNone(props, outcome.reason, false, seed.payload.certId)
+		}
 		// 1.3.0: a seed that names a delivered face repaints it only after the browser hashes it against the seed
 		// payload's own digest; otherwise the seed paints what 1.2.1 paints for it.
-		const { seed } = record
 		const delivered = deliveredFaceFor(seed.payload, seed.renderDef, seed.face, props)
 		if (delivered && seed.renderDef) {
 			return <DeliveredEnvelopeFace face={delivered} defVersion={seed.renderDef.v} seed={record.raw} />
@@ -517,18 +696,21 @@ function paintRecord(
 		if (seed.face && !judge) return <ServerFaceUntilHydrated />
 		return paintEnvelope(seed.payload, seed.renderDef, props, record.raw)
 	}
-	const html = record.fallback.face === 'options' ? fallbackFace(props) : null
-	return html === null ? (
-		<NoFace record={record.raw} />
-	) : (
-		<OptionsFace block={props.block} html={html} record={record.raw} />
-	)
+	const none = <NoFace record={record.raw} />
+	// 2.0.1: an `'options'` record (a page a 2.0.0 server rendered while CertREV was not reached) prints nothing too.
+	if (record.fallback.face === 'options') return withReport(none, 'delivery_unreachable', props, false)
+	// 2.0.0: a contract-1 placement's record names why it printed nothing; the browser reports it too.
+	const reason = record.fallback.reason
+	return isFallbackReason(reason) ? withReport(none, reason, props, false) : none
 }
 
-/** What a card the client mounts with no record and no `clientRead` paints: the options face, or nothing. */
-function clientMountFace(props: EnvelopeCardProps): React.ReactElement | null {
-	const html = fallbackFace(props)
-	return html === null ? null : <OptionsFace block={props.block} html={html} />
+function isFallbackReason(value: unknown): value is CardFallbackReason {
+	return typeof value === 'string' && (CARD_FALLBACK_REASONS as readonly string[]).includes(value)
+}
+
+/** 2.0.1: a card the client mounts with no record and `clientRead` off prints nothing (2.0.0: the options face). */
+function clientMountFace(props: EnvelopeCardProps): React.ReactElement {
+	return withReport(null, 'client_read_off', props, false)
 }
 
 const pendingRecord = () => 'pending' as const
@@ -549,7 +731,29 @@ function StreamedRecordCard(props: EnvelopeCardProps) {
 		pendingRecord,
 	)
 	if (record === 'pending') return null
-	if (record === 'done') return clientMountFace(props)
+	const context = { platform: 'builder', externalId: props.externalId, now: new Date(rt.now()) }
+	// 2.0.0: the page loaded with no record for this placement: with `clientRead` (the default), the one read.
+	if (record === 'done') return props.clientRead ? readAndPaint(props, context, true) : clientMountFace(props)
+	return paintRecord(record, props, context, true)
+}
+
+/**
+ * 2.0.2 (final review R2-1): a card whose server render skipped its read. While hydrating, its marker as the server
+ * printed it. After, the record the page holds for its placement (the seed the card that did the read printed), also
+ * when that record streams in after this card hydrated; nothing while it has not arrived, and nothing if the page loads
+ * without one. It reads nothing.
+ */
+function SkippedThenRecord(props: EnvelopeCardProps & { readonly instance: string; readonly hydrating: boolean }) {
+	const rt = cardDeliveryRuntime()
+	// In render, not in an effect, as `StreamedRecordCard` does.
+	watchStreamedRecords()
+	const record = React.useSyncExternalStore(
+		subscribeStreamedRecords,
+		() => streamedRecordFor(props.baseUrl, props.externalId, props.design),
+		pendingRecord,
+	)
+	if (props.hydrating) return <SkippedRead instance={props.instance} />
+	if (record === 'pending' || record === 'done') return null
 	const context = { platform: 'builder', externalId: props.externalId, now: new Date(rt.now()) }
 	return paintRecord(record, props, context, true)
 }
@@ -577,27 +781,28 @@ function useHydrating(): boolean {
  * storefront whose CSP `connect-src` does not name CertREV (e.l.f.'s live policy) never sees a request or a violation
  * from it, and a page never loses its card for want of one.
  *
- *  - Server: read (up to `CARD_DELIVERY_TIMEOUT_MS`, a fresh or stale-while-revalidating cache first), verify and paint
+ *  - Server: read (2.0.2: waiting at most `CARD_SERVER_WAIT_MS`, never behind another request's read; a fresh or stale-while-revalidating cache, or a remembered failure, first), verify and paint
  *    as through 1.1.1, and write a record of what it painted (`ssr-seed.ts`):
  *     - a verified envelope: its face and the envelope seed (less the fields the def hides, and with no signature if
  *       it hid any);
- *     - CertREV not reached (a timeout, a network error, a 5xx, a body that is not JSON): the block's own options face,
- *       as 0.5.x painted it, and an `'options'` record (a pinned card too: the record names its pin);
+ *     - CertREV not reached (a timeout, a network error, a 5xx, a body that is not JSON) with no verified answer inside
+ *       the stale window: nothing, and a `'none'` record naming `delivery_unreachable` (2.0.1; through 2.0.0 the
+ *       block's own options face and an `'options'` record);
  *     - a definitive no (revoked, expired, unverifiable, for another entry, not found): nothing, and a `'none'` record
  *       on an empty hidden element.
  *  - Browser, the page carries this placement's record: paint what it says. A seed paints its envelope; while
  *    hydrating the server's verdict stands (the tree is the server's, byte for byte), and once hydrated the lifecycle
- *    and subject are judged at the browser's clock, so a card that expired since the server render is taken down. An
- *    `'options'` record paints the options face, a `'none'` record nothing. This holds when React renders the card
+ *    and subject are judged at the browser's clock, so a card that expired since the server render is taken down. A
+ *    `'none'` record, and (2.0.1) a 2.0.0 server's `'options'` record, print nothing. This holds when React renders the card
  *    again on the client after a hydration error elsewhere on the page: the record is still in the document (or in
  *    the page's memory of it), so the browser repaints the server's answer and reads nothing.
  *  - Browser, hydrating with no record: server HTML from before 1.2.0 painted nothing here, so nothing.
  *  - Browser, a card mounted on the client with no record (a client-side navigation to an article this page never
- *    server-rendered, Builder's editor): the block's options face, pinned or not. With `clientRead`, instead, the
- *    one read, settled exactly as on the server.
+ *    server-rendered, Builder's editor): with `clientRead` (the default), the one read, settled exactly as on the
+ *    server; with `clientRead={false}`, nothing (`client_read_off`; 2.0.0: the block's options face).
  *  - Browser, the same while the document is still loading (1.2.1; React rendered the card on the client before the
- *    server's streamed record arrived, `ssr-seed.ts`): nothing until the record arrives, then what it says; the
- *    options face, or nothing, if the page loads without one (`StreamedRecordCard`). `clientRead` reads as above.
+ *    server's streamed record arrived, `ssr-seed.ts`): nothing until the record arrives, then what it says; if the page
+ *    loads without one, what a client mount does (`StreamedRecordCard`). `clientRead` reads as above.
  *
  * WHICH OF THE TWO FIRST CASES THIS RENDER IS (server or browser) is decided from what the render can observe, with
  * no switch a test could set. A server render and a hydration are both "hydrating" to React and both see a `document`
@@ -617,6 +822,8 @@ function useHydrating(): boolean {
 function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 	const rt = cardDeliveryRuntime()
 	const hydrating = useHydrating()
+	// 2.0.2: this card instance's id, the same on the server and while hydrating (`SkippedRead`).
+	const instance = React.useId()
 	// Latched at mount: this instance hydrated server HTML (as opposed to a client mount).
 	const [hydratedMount] = React.useState(hydrating)
 	// The clock is read per render, so the lifecycle is judged NOW, not when the envelope was fetched.
@@ -631,15 +838,33 @@ function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 	// 1.2.1, latched at mount: a client mount with no record and no `clientRead` while the page is still loading waits
 	// for a record the server may still be streaming, for the card's whole life (so it never swaps components when the
 	// record lands).
+	// 2.0.0: whatever `clientRead` says: a card that read instead of waiting would miss the record the server streams.
 	const [awaitsStream] = React.useState(
-		() => inBrowser && !hydrating && fromPage === undefined && !props.clientRead && document.readyState === 'loading',
+		() => inBrowser && !hydrating && fromPage === undefined && document.readyState === 'loading',
 	)
+	// 2.0.2, latched at mount: this instance is hydrating a server render that skipped its read (`SkippedRead`).
+	const [skippedMount] = React.useState(() => inBrowser && hydrating && skippedInDocument(instance))
+	if (skippedMount) return <SkippedThenRecord {...props} instance={instance} hydrating={hydrating} />
 	if (awaitsStream) return <StreamedRecordCard {...props} />
 	if (inBrowser) {
 		if (fromPage) return paintRecord(fromPage, props, context, !hydrating)
 		if (hydratedMount) return null
 		if (!props.clientRead) return clientMountFace(props)
 	}
+	return readAndPaint(props, context, inBrowser, instance)
+}
+
+/**
+ * The Delivery read and its paint: a server render's, or a browser's (`clientRead`). Suspends on the read, and (1.3.0)
+ * on a delivered face's hashes or (2.0.0) on a card document's digest.
+ */
+function readAndPaint(
+	props: EnvelopeCardProps,
+	context: Parameters<typeof renderVerdict>[1],
+	inBrowser: boolean,
+	instance = '',
+): React.ReactElement | null {
+	const rt = cardDeliveryRuntime()
 	const { design } = props
 	const read = {
 		baseUrl: props.baseUrl,
@@ -648,15 +873,30 @@ function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 		context,
 		cache: rt.cache,
 		design,
-		resolveKid: rt.resolveKid,
+		resolveKid: cardResolveKidFor(rt, props.baseUrl),
 		fetchImpl: rt.fetchImpl(),
 		timeoutMs: rt.timeoutMs,
 	}
 	const key = design
 		? `${props.baseUrl}|${props.externalId}|design=${design.version}|${design.brand ?? ''}`
 		: `${props.baseUrl}|${props.externalId}`
-	const settled = readVerifiedDelivery(read) ?? suspendOn(key, () => getVerifiedDelivery(read))
-	if (settled.verdict.decision !== 'render') return settleWithoutEnvelope(props, settled.unreachable === true)
+	const settled =
+		readVerifiedDelivery(read) ??
+		(inBrowser
+			? suspendOn(rt.cache, key, () => getVerifiedDelivery(read))
+			: suspendOnServer(key, read, rt.serverWaitMs))
+	if (settled === 'skipped') return <SkippedRead instance={instance} />
+	if (settled.verdict.decision !== 'render') {
+		return settleWithoutEnvelope(
+			props,
+			{
+				unreachable: settled.unreachable === true,
+				reason: settled.verdict.reason,
+				...(settled.status === undefined ? {} : { status: settled.status }),
+			},
+			!inBrowser,
+		)
+	}
 	// The face is painted from the seed's payload (what the def hides is already out of it), so the server's HTML and
 	// the browser's, which paints from the seed, are the same bytes and neither holds a hidden field.
 	const seed = seedFor({
@@ -667,9 +907,29 @@ function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 		signature: settled.signature,
 		renderDef: settled.renderDef,
 	})
+	// 2.0.0: a placement whose signed binding names a contract prints CertREV's card, or nothing; never a face of its own.
+	const binding = acceptedCardBinding(seed.payload.content)
+	if (binding !== null) {
+		const outcome = contractOutcome(binding, settled.card, seed.payload, props, settled.cardDigest)
+		if (outcome.kind === 'card') {
+			return (
+				<ContractCardFace
+					card={outcome.card}
+					names={outcome.names}
+					seed={serializeSeed({ ...seed, card: outcome.card as unknown as Readonly<Record<string, unknown>> })}
+					origin={props.baseUrl}
+				/>
+			)
+		}
+		// Nothing of this design for this block, by design: nothing at all, and NO record. A record here would sit under the
+		// same placement as the block that printed the card (a split header and memo pair) and, read last on hydration,
+		// would take that block's card down (break-it B2).
+		if (outcome.reason === undefined) return null
+		return contractNone(props, outcome.reason, !inBrowser, seed.payload.certId)
+	}
 	// 1.3.0: the server-rendered face the Delivery API served beside the envelope, when its bytes hash to the digest the
 	// verified payload signs; the seed then carries it, so the browser can repaint (and re-check) the same face.
-	const delivered = deliveredFaceFor(seed.payload, seed.renderDef, settled.face, props)
+	const delivered = deliveredFaceFor(seed.payload, seed.renderDef, settled.face, props, settled.faceHashes)
 	if (delivered && seed.renderDef) {
 		return (
 			<DeliveredEnvelopeFace
@@ -683,116 +943,40 @@ function EnvelopeCertReviewCard(props: EnvelopeCardProps) {
 }
 
 export function CertReviewCard(props: CertReviewCardProps) {
-	// 1.1.0: a block that carries the delivery marker paints from the signed envelope and the
-	// brand's def, never from the options beside it. No marker (every entry exported before 1.1.0)
-	// takes the options path below, unchanged from 1.0.3.
-	// 1.2.0-canary.5: a design pin (CertREV's canary replica only) fails closed. One that cannot be read renders
-	// nothing, and so does one on a block without the delivery marker: the options face is never the pinned design.
-	// 1.2.0: where the envelope cannot be had (CertREV not reached, or no server render and no `clientRead`), a block
-	// with the marker paints this options face too, pinned or not: see `EnvelopeCertReviewCard`.
+	// 1.1.0: a block that carries the delivery marker paints from the signed envelope and the brand's def, never from
+	// the options beside it. 2.0.1: a block WITHOUT the marker (an entry exported before 1.1.0, a block dropped in by
+	// hand) prints nothing at all and reports `no_marker`; through 2.0.0 it painted its export-time options (a reviewer
+	// name, a credential, a memo, a verify link nobody had signed). A marker this client does not accept, or a block
+	// with no Builder entry to read for, prints nothing and reports `marker_invalid`.
+	// 1.2.0-canary.5: a design pin (CertREV's canary replica only) that cannot be read renders nothing.
 	const design = parseDesignPin(props.builderContext?.context?.certrevDesignPin)
 	if (design === 'invalid') return null
-	if (props.delivery != null) {
-		const marker = acceptedDeliveryMarker(props.delivery)
-		const entryId = text(props.builderContext?.content?.id)
-		if (!marker || !entryId) return null
-		return (
-			<Suspense fallback={null}>
-				<EnvelopeCertReviewCard
-					baseUrl={marker.baseUrl}
-					externalId={entryId}
-					mode={props.mode}
-					part={props.part}
-					design={design}
-					block={props}
-					clientRead={props.clientRead === true}
-				/>
-			</Suspense>
-		)
-	}
-	if (design) return null
-
-	const html = optionsFaceHtml(props, 'banner')
-	if (html === null) return null // no chrome pre-cert (or an unreadable delivery)
-	return <OptionsFace block={props} html={html} />
+	const entryId = text(props.builderContext?.content?.id)
+	if (props.delivery == null) return <BlockReport reason="no_marker" externalId={entryId} />
+	const marker = acceptedDeliveryMarker(props.delivery)
+	if (!marker || !entryId) return <BlockReport reason="marker_invalid" externalId={entryId} />
+	return (
+		<Suspense fallback={null}>
+			<EnvelopeCertReviewCard
+				baseUrl={marker.baseUrl}
+				externalId={entryId}
+				mode={props.mode}
+				part={props.part}
+				design={design}
+				block={props}
+				clientRead={props.clientRead !== false}
+			/>
+		</Suspense>
+	)
 }
 
-/**
- * The options face's HTML (1.0.3's, unchanged), or null when the block lacks a reviewer or a certificate link. `bridge`
- * is the placement a block with no `mode` gets: `'banner'` for a block without the delivery marker (the bridge below);
- * the def's layout for a marked block's fallback (`fallbackFace`).
- */
-function optionsFaceHtml(props: CertReviewCardProps, bridge: CertBlockMode | undefined): string | null {
-	const reviewerName = text(props.reviewerName)
-	const verifyUrl = text(props.verifyUrl)
-	if (!reviewerName || !verifyUrl) return null
-
-	// Name-only face when the pair is unreadable, or when the brand set showCredentials:false.
-	const showCred = props.display?.showCredentials !== false
-	const withCred = showCred ? fusedCredential(props.credentialVerification) : null
-
-	const tokens = props.renderDef?.tokens
-	const theme: Partial<ResolvedBlockTheme> | undefined = tokens
-		? {
-				accentColor: optionalText(tokens.accentColor),
-				surface: optionalText(tokens.surface),
-				cornerRadius: optionalText(tokens.cornerRadius),
-				fontSlot: optionalText(tokens.fontSlot) as ResolvedBlockTheme['fontSlot'] | undefined,
-				// v2 brand-ink (post-demo): the bar + free-content ink follow the def.
-				barInk: optionalText(tokens.barInk),
-				inkColor: optionalText(tokens.inkColor),
-			}
-		: undefined
-
-	return renderCertBlock({
-		// COMPATIBILITY BRIDGE, NOT THE DESIGN. Delete this fallback once the exporter emits an
-		// explicit `mode` and existing entries have been backfilled; until then it must stay.
-		//
-		// `renderCertBlock` owns the ONE placement default (absent or unrecognised ⇒ sidebar) and
-		// that decision STANDS: it is what a direct caller gets, and `sidebar` is the registered
-		// input's `defaultValue`, so every block created in the editor from now on carries an
-		// explicit `mode` and never reaches this line.
-		//
-		// The problem is the entries that already exist. `mode` is a PLACEMENT input, not one of
-		// the 20 wire keys (`BUILDER_CERT_CHROME_KEYS`), and the exporter emits only the wire
-		// projection (`options: { ...certData }`), so every entry exported to date has NO `mode`
-		// key at all. Through 0.5.5 this line read `?? 'banner'` and those entries rendered the
-		// banner face. Removing it in 1.0.0 did not give them the renderer's default in the
-		// abstract; it silently repainted live pages from banner to sidebar, with no entry edit
-		// and no version pin to protect them, because their install line is unpinned.
-		//
-		// So this is a bridge for pre-existing entries, NOT a reversal of the sidebar default.
-		// The three-copies-of-a-default problem that motivated removing it is still real and is
-		// still fixed: the helper text and the wire type's doc comment no longer name a default,
-		// and this line names one only for input the renderer can no longer distinguish from a
-		// deliberate choice. The exporter writing `mode` is what retires it.
-		mode: props.mode ?? bridge ?? 'banner',
-		theme,
-		// First-class banner memo split — renderCertBlock composes the requested
-		// part directly; no string-splitting. Ignored outside banner mode, and an unrecognised
-		// value is normalised to 'full' there, same as `mode` — not here.
-		...(props.part ? { part: props.part } : {}),
-		facts: {
-			authorName: optionalText(props.authorName) ?? 'Editorial',
-			authorTitle: optionalText(props.authorTitle),
-			reviewerName,
-			credential: withCred?.credential ?? '',
-			credentialVerifiedAt: withCred?.verifiedAt ?? '',
-			certifiedAt: text(props.certifiedAt),
-			memo: text(props.memo),
-			bio: optionalText(props.bio),
-			profileUrl: text(props.reviewerProfileUrl),
-			certificateUrl: verifyUrl,
-			// The compliance disclosures are CONSTANTS the renderer owns — a delivered cue is
-			// IGNORED (an editor cannot retype the FTC copy into something friendlier), and the
-			// scope line is not forwarded at all. The ONE thing honored is an explicit `null`:
-			// the pro-bono reviewer has no compensation to disclose, so the cue is omitted
-			// rather than replaced by the compensated constant (the modal already gets this
-			// right — a card claiming "Compensated expert" over a volunteer is an FTC-facing
-			// falsehood, not a cosmetic default).
-			compensationCue: props.compensationCue === null ? null : undefined,
-		},
-	})
+/** 2.0.1: a block with nothing to read reports why, to CertREV's production origin (it has no delivery origin). */
+function BlockReport(props: { readonly reason: CardFallbackReason; readonly externalId: string }) {
+	const detail = React.useMemo<CardFallbackDetail>(
+		() => ({ reason: props.reason, platform: 'builder', externalId: props.externalId }),
+		[props.reason, props.externalId],
+	)
+	return <FallbackReport detail={detail} server={typeof document === 'undefined'} />
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,2 +1,3 @@
 node_modules/
 dist/
+packages/cert-block/e2e/.out

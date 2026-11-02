@@ -200,10 +200,10 @@ describe('the initials at every avatar site', () => {
 		expect(avatarSpans(html)).toEqual([`<span class="certrev-r-face lg">${svg('AQ')}</span>`])
 	})
 
-	it('the banner: the writer sm with the writer name, the reviewer with no size class, and the memo reviewer lg', () => {
+	it('the banner: the writer and the reviewer on the same plain face (the writer with the writer name), and the memo reviewer lg', () => {
 		const html = paint(contentWith({ photo: undefined, authorPhoto: undefined }), 'banner')
 		expect(avatarSpans(html)).toEqual([
-			`<span class="certrev-r-face sm">${svg('MP')}</span>`,
+			`<span class="certrev-r-face">${svg('MP')}</span>`,
 			`<span class="certrev-r-face">${svg('AQ')}</span>`,
 			`<span class="certrev-r-face lg">${svg('AQ')}</span>`,
 		])
@@ -218,7 +218,7 @@ describe('the initials at every avatar site', () => {
 			contentWith({ photo: undefined, authorPhoto: undefined, authorName: 'Prof. Sam Writer' }),
 			'banner',
 		)
-		expect(avatarSpans(html)[0]).toBe(`<span class="certrev-r-face sm">${svg('SW')}</span>`)
+		expect(avatarSpans(html)[0]).toBe(`<span class="certrev-r-face">${svg('SW')}</span>`)
 	})
 
 	it('a name with < or & is escaped at the site, and nowhere raw', () => {
@@ -239,7 +239,7 @@ describe('the initials at every avatar site', () => {
 			part: 'header',
 		})
 		// the writer byline needs a name to show; "Dr." is one, with no initials to take
-		expect(avatarSpans(html)).toContain(`<span class="certrev-r-face sm">${SILHOUETTE}</span>`)
+		expect(avatarSpans(html)).toContain(`<span class="certrev-r-face">${SILHOUETTE}</span>`)
 	})
 })
 
@@ -273,7 +273,7 @@ describe('the photo and the initials, by def and display', () => {
 			expect(spans.every((span) => span.includes('<text '))).toBe(true)
 		}
 		expect(avatarSpans(paint(contentWith(photos), 'banner', { hidden: ['reviewerPhoto'] }))).toEqual([
-			`<span class="certrev-r-face sm">${svg('MP')}</span>`,
+			`<span class="certrev-r-face">${svg('MP')}</span>`,
 			`<span class="certrev-r-face">${svg('AQ')}</span>`,
 			`<span class="certrev-r-face lg">${svg('AQ')}</span>`,
 		])
