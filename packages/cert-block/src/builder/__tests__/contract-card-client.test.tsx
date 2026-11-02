@@ -319,6 +319,57 @@ describe('the hosted runtime', () => {
 		expect(scripts[0].defer).toBe(true)
 	})
 
+	it.each(
+		CASES,
+	)('2.1.1 %s: the server’s HTML has no runtime <script src>; hydrating it injects the runtime exactly once, and a re-render does not again', async (name) => {
+		const fixture = withRuntime(contractFixture(name))
+		const body = contractBody(issuer, fixture)
+		const html = await serverHtml(body)
+		// No parser-inserted script of any kind but the JSON-LD graph (data, never executed); none here.
+		expect(html).not.toMatch(/<script[^>]*\ssrc=/)
+		browser(body)
+		const container = mountServerHtml(html)
+		expect(document.querySelectorAll('script')).toHaveLength(0)
+		const { recoverable, consoleErrors } = await hydrate(container)
+		expect(recoverable).toEqual([])
+		expect(consoleErrors).toBe(0)
+		const injected = () => Array.from(document.querySelectorAll('script')) as HTMLScriptElement[]
+		expect(injected()).toHaveLength(1)
+		const [script] = injected()
+		expect(script.parentElement).toBe(document.head)
+		expect(script.hasAttribute('data-certrev-card-runtime')).toBe(true)
+		expect(script.getAttribute('src')).toBe(fixture.card.assets.runtime?.src)
+		expect(script.getAttribute('integrity')).toBe(fixture.card.assets.runtime?.integrity)
+		expect(script.getAttribute('crossorigin')).toBe('anonymous')
+		expect(script.defer).toBe(true)
+		// A later client mount of the same card on the page does not load it again.
+		await clientMount(block())
+		expect(injected()).toHaveLength(1)
+	})
+
+	it('2.1.1: a hydrated split banner (header block and memo block) injects the runtime once, from the header block', async () => {
+		const fixture = withRuntime(contractFixture('banner-elf-like'))
+		const body = contractBody(issuer, fixture)
+		const page = (
+			<div>
+				{block({ part: 'header' })}
+				<p>The article.</p>
+				{block({ part: 'memo' })}
+			</div>
+		)
+		// Warm the server's read so both blocks print (a cold read skips the memo block: 2.0.2 R1-1).
+		await serverHtml(body, page)
+		const html = await serverHtml(body, page)
+		expect(html).not.toMatch(/<script[^>]*\ssrc=/)
+		browser(body)
+		const container = mountServerHtml(html)
+		const { recoverable } = await hydrate(container, page)
+		expect(recoverable).toEqual([])
+		const scripts = Array.from(document.querySelectorAll('script[data-certrev-card-runtime]'))
+		expect(scripts).toHaveLength(1)
+		expect(scripts[0].parentElement).toBe(document.head)
+	})
+
 	it('a runtime already running (its global guard) is not injected again', async () => {
 		;(document as unknown as Record<symbol, unknown>)[Symbol.for('certrev.card-runtime')] = true
 		browser(contractBody(issuer, withRuntime(contractFixture('floating-elf-like'))))

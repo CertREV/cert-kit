@@ -626,7 +626,7 @@ describe('an in-app navigation (no server render for the next article)', () => {
 describe('a split banner (a header block first in the body, a memo block just before the references)', () => {
 	it.each(
 		VIEWPORTS,
-	)('at $name px the header block prints the head, its card, both dialogs and the runtime; the memo block its memo only; the memo’s controls open the page’s one dialog; the default hints move neither', async (viewport) => {
+	)('at $name px the header block prints the head, its card and both dialogs (2.1.1: the runtime is injected, not printed); the memo block its memo only; the memo’s controls open the page’s one dialog; the default hints move neither', async (viewport) => {
 		const w = await open(viewport)
 		try {
 			await w.page.goto(`${server.origin}${article('replica-split').path}`)
@@ -636,7 +636,8 @@ describe('a split banner (a header block first in the body, a memo block just be
 					Array.from(el.children).map((c) => c.getAttribute('data-certrev-part') ?? c.tagName.toLowerCase()),
 				),
 			)
-			expect(wrappers).toEqual([['style', 'top', 'dialog-expert', 'dialog-certificate', 'script'], ['bottom']])
+			// 2.1.1: no runtime <script> in the header block (the card injects it into the head).
+			expect(wrappers).toEqual([['style', 'top', 'dialog-expert', 'dialog-certificate'], ['bottom']])
 			const cell = `split-${viewport.name}`
 			// 2.0.1: the document's default hints (the card at the start of the content, the memo before the references) are
 			// where the export put both blocks, so after the page has settled nothing has moved.
@@ -826,6 +827,55 @@ describe('CSP: exactly the four CertREV sources', () => {
 				}
 				evidence[`csp-without-${directive}`] = { violations: w.violations }
 				expect(w.violations.length).toBeGreaterThan(0)
+			} finally {
+				await w.context.close()
+				server.csp = STRICT
+			}
+		},
+		120_000,
+	)
+})
+
+describe("2.1.1: script-src 'nonce-…' 'strict-dynamic' (e.l.f.'s policy): no violation, the runtime injected once, dialogs work", () => {
+	it.each([
+		['banner', 'replica-banner', '[data-certrev-part="bottom"]'],
+		['sidebar', 'replica-sidebar', '[data-certrev-part="rail"]'],
+		['floating', 'replica-floating', '[data-certrev-part="pill"]'],
+		['split banner', 'replica-split', '[data-certrev-part="bottom"]'],
+	])(
+		'%s: server-rendered and hydrated under the policy',
+		async (label, entryId, partSelector) => {
+			server.csp = { ...STRICT, strictDynamic: true }
+			const w = await open(VIEWPORTS[0])
+			try {
+				// The browser's own record of every violation (what sends a CSP report), beside the console's.
+				await w.page.addInitScript(() => {
+					const seen: string[] = []
+					;(window as unknown as { __csp: string[] }).__csp = seen
+					document.addEventListener('securitypolicyviolation', (e) =>
+						seen.push(`${e.effectiveDirective} ${e.blockedURI}`),
+					)
+				})
+				const response = await w.page.goto(`${server.origin}${article(entryId).path}`)
+				expect(response?.headers()['content-security-policy']).toMatch(/script-src 'nonce-[^']+' 'strict-dynamic';/)
+				await settle(w.page)
+				const scripts = await w.page.evaluate(() => ({
+					inWrappers: Array.from(document.querySelectorAll('[data-certrev-face="card"] script')).map(
+						(el) => el.getAttribute('type') ?? 'classic',
+					),
+					injected: Array.from(document.head.querySelectorAll('script[data-certrev-card-runtime]')).map((el) =>
+						el.getAttribute('src'),
+					),
+				}))
+				expect(scripts.inWrappers.filter((t) => t !== 'application/ld+json')).toEqual([])
+				expect(scripts.injected).toEqual([side.runtime.src])
+				expect(w.requests.filter((r) => r === side.runtime.src)).toHaveLength(1)
+				const dialogs = await exerciseDialogs(w.page, entryId, partSelector, `strict-dynamic-${entryId}`)
+				const events = await w.page.evaluate(() => (window as unknown as { __csp: string[] }).__csp)
+				evidence[`strict-dynamic ${label}`] = { scripts, dialogs, violations: w.violations, events }
+				expect(w.violations).toEqual([])
+				expect(events).toEqual([])
+				expect(w.errors).toEqual([])
 			} finally {
 				await w.context.close()
 				server.csp = STRICT
