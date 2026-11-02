@@ -14,13 +14,26 @@
  * never legitimately carry renders nothing (see `formatCertDisplayDate`).
  */
 
-import { FTC_DISCLOSURE_LINE } from "./ftc-disclosure.js";
+import { FTC_DISCLOSURE_LINE, FTC_DISCLOSURE_LINE_TEXT_ONLY } from "./ftc-disclosure.js";
 
 /** The compensation cue (guide "line A"), byte-verbatim from portal `COMPENSATED_EXPERT_CUE`. */
 export const COMPENSATED_EXPERT_CUE = "Compensated expert";
 
 /** The FTC scope disclaimer, re-exported from the FTC SoT (portal `CERT_SCOPE_LINE = FTC_DISCLOSURE_LINE`). */
 export const CERT_SCOPE_LINE = FTC_DISCLOSURE_LINE;
+
+/** 2.1.0: the text-only scope line (portal `FTC_DISCLOSURE_LINE_TEXT_ONLY`), for a review that covered the text only. */
+export const CERT_SCOPE_LINE_TEXT_ONLY = FTC_DISCLOSURE_LINE_TEXT_ONLY;
+
+/**
+ * 2.1.0: the scope line for the signed `content.expert.reviewScope`. Only an exact `"text"` is the text-only line; absent,
+ * null, `"text_and_sources"` or any other value is `CERT_SCOPE_LINE`, as 2.0.2 printed it. The same rule as
+ * `certScopeLineFor` in `../components/render-def.ts`, repeated because `src/modal/` imports nothing from `src/components/`
+ * (it is bundled standalone into `certrev-cert.js`).
+ */
+export function scopeLineForReview(reviewScope: unknown): typeof CERT_SCOPE_LINE | typeof CERT_SCOPE_LINE_TEXT_ONLY {
+	return reviewScope === "text" ? CERT_SCOPE_LINE_TEXT_ONLY : CERT_SCOPE_LINE;
+}
 
 /**
  * Format a timestamp the way every cert byline renders dates ("Jun 14, 2026", en-US short month,

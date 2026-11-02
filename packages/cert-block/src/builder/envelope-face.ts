@@ -15,6 +15,8 @@
  *    only with the dated verification beside it; no date, no credential (the name-only face);
  *  - the compensation cue's PRESENCE is the only thing read; the words are the locked constant,
  *    and an absent or null cue is the pro-bono face with no cue;
+ *  - the review scope (2.1.0) is the signed `expert.reviewScope`: `'text'` prints the text-only scope line, anything else
+ *    the full one;
  *  - the def's `hidden` set removes only what is hideable (`HIDEABLE_FIELDS`); a def cannot hide
  *    the scope line, the credential verification or the certificate link.
  *
@@ -33,7 +35,13 @@ import {
 	type RenderCertBlockInput,
 	renderCertBlock,
 } from '../components/render-cert-block.js'
-import { accentFg, HIDEABLE_FIELDS, isOpaqueHexColor, type ResolvedBlockTheme } from '../components/render-def.js'
+import {
+	accentFg,
+	type CertReviewScope,
+	HIDEABLE_FIELDS,
+	isOpaqueHexColor,
+	type ResolvedBlockTheme,
+} from '../components/render-def.js'
 import type { CertContent } from '../contract/kernel.js'
 import { type ReaderLayout, renderReaderFace } from '../reader/render.js'
 import type { CertChromeRenderDef } from './cert-chrome-data.js'
@@ -61,6 +69,10 @@ const MODES: readonly CertBlockMode[] = ['banner', 'sidebar', 'floating']
 
 function isMode(v: unknown): v is CertBlockMode {
 	return typeof v === 'string' && (MODES as readonly string[]).includes(v)
+}
+
+function isReviewScope(v: unknown): v is CertReviewScope {
+	return v === 'text' || v === 'text_and_sources'
 }
 
 function text(v: unknown): string {
@@ -174,6 +186,9 @@ export function envelopeCardInput(
 			certificateUrl: verifyUrl,
 			// Presence only: a cue string renders the locked constant; absent or null is pro-bono.
 			compensationCue: optionalText(expert.compensationCue) ? undefined : null,
+			// 2.1.0: what the review covered, as signed. Only a value this version knows is carried; absent stays absent, so
+			// an envelope signed before the field existed maps to exactly the 2.0.2 input.
+			...(isReviewScope(expert.reviewScope) ? { reviewScope: expert.reviewScope } : {}),
 		},
 	}
 }

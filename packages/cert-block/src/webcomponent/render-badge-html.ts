@@ -22,9 +22,9 @@ import {
 } from '../components/format.js'
 import { CERTREV_LINK_REL } from '../components/rel.js'
 import {
-	CERT_SCOPE_LINE,
 	CERT_STRINGS_VERSION,
 	type CertRenderDef,
+	certScopeLineFor,
 	resolveRenderTheme,
 	themeCssVarDeclarations,
 } from '../components/render-def.js'
@@ -88,6 +88,8 @@ function attr(name: string, value: string | null | undefined): string {
 export function renderBadgeHtml(payload: CertPayload, opts: RenderBadgeOptions = {}): string {
 	const content: LooseContent = payload?.content ?? {}
 	const expert = content.expert ?? null
+	// 2.1.0: the locked scope line the signed `expert.reviewScope` picks ('text' is the text-only line).
+	const scopeLine = certScopeLineFor((expert as { readonly reviewScope?: unknown } | null)?.reviewScope)
 	const display = resolveDisplay(content.display ?? undefined, opts.accentColor, opts.renderDef)
 	const theme = resolveRenderTheme(opts.renderDef)
 	const style = badgeFace(opts.badgeStyle ?? display.badgeStyle)
@@ -155,14 +157,15 @@ export function renderBadgeHtml(payload: CertPayload, opts: RenderBadgeOptions =
 	// regardless of a render-def, matching the Shopify/WordPress engine fix. The
 	// cue's "expert" links to the reviewer profile; the whole cue tag-strips to the
 	// byte-verbatim COMPENSATED_EXPERT_CUE. The scope line is byte-verbatim
-	// CERT_SCOPE_LINE (its curly apostrophe U+2019 survives escapeHtml untouched).
+	// CERT_SCOPE_LINE (its curly apostrophe U+2019 survives escapeHtml untouched), or 2.1.0's CERT_SCOPE_LINE_TEXT_ONLY
+	// when the signed `expert.reviewScope` is 'text' (`certScopeLineFor`).
 	const cueInner = profileUrl
 		? `Compensated <a class="${C}__cue-link" href="${escapeAttribute(profileUrl)}" rel="${CERTREV_LINK_REL}">expert</a>`
 		: 'Compensated expert'
 	const disclosure =
 		`<div class="${C}__disclosure">` +
 		`<span class="${C}__compensated-cue">${cueInner}</span>` +
-		`<p class="${C}__ftc" data-ftc-disclosure><span data-ftc-line>${escapeHtml(CERT_SCOPE_LINE)}</span></p>` +
+		`<p class="${C}__ftc" data-ftc-disclosure><span data-ftc-line>${escapeHtml(scopeLine)}</span></p>` +
 		`</div>`
 
 	const verify = verifyUrl

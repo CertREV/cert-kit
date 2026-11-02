@@ -273,7 +273,10 @@ function escapeAttribute(value: string): string {
 	return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-/** The runtime's tag, or '' when the document names none. */
+/**
+ * The runtime's tag, or '' when the document names none. 2.1.1: the Builder card no longer prints it (`cardHtml`); the
+ * card loads the runtime from the browser (`injectCardRuntime`). Kept, unchanged, for any other caller.
+ */
 export function cardRuntimeTag(card: CardDocumentV1): string {
 	const runtime = card.assets.runtime
 	if (!runtime) return ''
@@ -322,15 +325,20 @@ export function cardGraphTag(card: CardDocumentV1): string {
 
 /**
  * Exactly what a block prints inside its wrapper: its parts in page order and, only in the block holding the document's
- * first part (`cardCarriesAssets`), the head fragment before them and both dialogs (expert, then certificate), the
- * runtime's tag and (2.0.1) the page's graph after. So a split banner (a header block and a memo block) prints the head, the dialogs and the runtime
+ * first part (`cardCarriesAssets`), the head fragment before them and both dialogs (expert, then certificate) and
+ * (2.0.1) the page's graph after. So a split banner (a header block and a memo block) prints the head and the dialogs
  * once, in the header block, with no coordination between the blocks and with JavaScript off; the runtime finds a
- * control's dialog anywhere on the page by its placement. Every byte but the runtime tag is the document's own.
+ * control's dialog anywhere on the page by its placement. Every byte is the document's own, but the graph's tag.
+ *
+ * 2.1.1: no runtime tag. A `<script src>` the HTML parser meets is blocked by a policy whose `script-src` is a nonce with
+ * `'strict-dynamic'` (it carries no nonce, and `'strict-dynamic'` ignores host sources), which logged one violation and
+ * one CSP report on every page view. The block holding the assets loads the runtime from the browser instead
+ * (`injectCardRuntime`, in `ContractCardFace`'s layout effect, as 2.0.x did beside the tag), which such a policy allows.
  */
 export function cardHtml(card: CardDocumentV1, names: readonly CardPartName[]): string {
 	let parts = ''
 	for (const name of names) parts += card.parts[name] ?? ''
 	if (!cardCarriesAssets(card, names)) return parts
 	const dialogs = (card.dialogs.expert ?? '') + (card.dialogs.certificate ?? '')
-	return card.assets.head + parts + dialogs + cardRuntimeTag(card) + cardGraphTag(card)
+	return card.assets.head + parts + dialogs + cardGraphTag(card)
 }

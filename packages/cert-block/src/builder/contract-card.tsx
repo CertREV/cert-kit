@@ -3,7 +3,7 @@
  *
  * The block's wrapper holds, as its `dangerouslySetInnerHTML`, exactly `cardHtml(card, names)`: the block's part hosts
  * in page order and, in the block holding the document's first part, the head fragment, both CertREV dialog hosts and
- * the runtime's tag (`card-contract.ts`).
+ * the page's graph (`card-contract.ts`). 2.1.1: no runtime tag; the card loads the runtime itself (below).
  * Each host is a `<certrev-card>` with a declarative shadow root (`<template shadowrootmode="open">`), which the
  * browser's HTML parser attaches as it reads the server's page: the card is complete with JavaScript off, and no page
  * rule reaches inside it. React never reconciles the hosts (they are not React children), so the hosted runtime may
@@ -16,10 +16,11 @@
  *    declarative shadow DOM at all) gets each root attached from its template (`attachShadow` with the template's mode
  *    and options, then the template's content). A host that already has its root is left alone, so a hydrated card,
  *    whose roots the parser attached, is not touched.
- *  - LOAD THE RUNTIME a React-inserted `<script>` never runs: once per page, into `document.head`, with its SRI
- *    integrity and `crossorigin="anonymous"`, unless the runtime is already running (its global guard) or already
- *    injected. Only the block that prints the runtime's tag loads it (`cardCarriesAssets`). The server's HTML carries
- *    the same tag in that block's wrapper, which the parser runs; the runtime's init is idempotent, so it starts once.
+ *  - LOAD THE RUNTIME: once per page, into `document.head`, with its SRI integrity and `crossorigin="anonymous"`, unless
+ *    the runtime is already running (its global guard) or already injected. Only the block that prints the page's
+ *    assets loads it (`cardCarriesAssets`), on a client mount and on hydration of the server's page alike. 2.1.1: the
+ *    server's HTML no longer carries the runtime's tag, so this is the one load: a script the page's own (nonced)
+ *    bundle inserts is what a `'nonce-…' 'strict-dynamic'` policy allows, where a parser-inserted tag is blocked.
  * Both run in a layout effect, before the browser paints the inserted card, so a client-mounted card never shows an
  * empty frame; the roots are checked after every commit of the block, whatever React wrote. React writes the card only
  * when its HTML changes: the `dangerouslySetInnerHTML` object is kept per string, since React 19 rewrites `innerHTML`
