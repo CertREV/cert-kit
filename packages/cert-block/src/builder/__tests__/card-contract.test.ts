@@ -224,7 +224,7 @@ describe('cardHtml: exactly the document’s bytes; the head and both dialogs on
 		)
 	})
 
-	it('a split banner prints the head, both dialogs and the runtime once: in the header block; the memo block its part only', () => {
+	it('a split banner prints the head and both dialogs once: in the header block; the memo block its part only; no runtime tag (2.1.1)', () => {
 		const card = {
 			...banner.card,
 			assets: {
@@ -235,11 +235,14 @@ describe('cardHtml: exactly the document’s bytes; the head and both dialogs on
 				},
 			},
 		}
+		// The tag itself is still exported, unchanged, for any other caller; the Builder card no longer prints it.
 		const tag = cardRuntimeTag(card)
 		expect(tag).not.toBe('')
 		expect(cardHtml(card, ['top'])).toBe(
-			card.assets.head + card.parts.top + card.dialogs.expert + card.dialogs.certificate + tag,
+			card.assets.head + card.parts.top + card.dialogs.expert + card.dialogs.certificate,
 		)
+		expect(cardHtml(card, ['top'])).not.toContain(tag)
+		expect(cardHtml(card, ['top'])).not.toContain('<script')
 		expect(cardHtml(card, ['bottom'])).toBe(card.parts.bottom)
 	})
 

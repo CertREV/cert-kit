@@ -49,7 +49,7 @@
  */
 import { asText } from '../components/escape.js'
 import { CERTREV_LINK_REL } from '../components/rel.js'
-import { CERT_SCOPE_LINE, CERT_STRINGS_VERSION, COMPENSATED_EXPERT_CUE } from '../components/render-def.js'
+import { CERT_STRINGS_VERSION, COMPENSATED_EXPERT_CUE, certScopeLineFor } from '../components/render-def.js'
 import type { CertContent } from '../contract/kernel.js'
 import { readerFace } from './face.js'
 import {
@@ -115,6 +115,13 @@ interface Facts {
 	/** The joined credential labels, '' when there are none or the rung shows none (named, minimal). */
 	readonly creds: string
 	readonly hasCue: boolean
+	/**
+	 * The scope sentence, by the signed `expert.reviewScope` (2.1.0, `certScopeLineFor`: `'text'` is the text-only line,
+	 * anything else the full one). It is DIRECT text of the scope element (the demo's `<span class="dg-scope">`), which
+	 * carries the `data-ftc-line` marker itself: no inner span, so the element's `.certrev-r-scope em` cue and the sentence
+	 * are leaves of one element, as the demo paints them. The marker is on exactly one element per render, as before.
+	 */
+	readonly scope: string
 	readonly illus: boolean
 	/** Whether the memo is printed: there is one, and the rung is the memo rung. */
 	readonly hasMemo: boolean
@@ -161,6 +168,7 @@ function readFacts(input: ReaderFaceInput): Facts {
 		showPhoto,
 		creds: rung === 'named' || minimal ? '' : labels.join(', '),
 		hasCue,
+		scope: certScopeLineFor(expert.reviewScope),
 		illus: input.illustrative === true && !hasCue,
 		hasMemo: !isBlank(content.memo) && rung === 'memo',
 		toned: isTonedStyle(style),
@@ -208,13 +216,6 @@ function scopeLead(f: Facts): string {
 	if (f.illus) return '<em>Illustrative example</em> · <!-- -->'
 	return ''
 }
-
-/**
- * The scope sentence is DIRECT text of the scope element (the demo's `<span class="dg-scope">`), which carries the
- * `data-ftc-line` marker itself: no inner span, so the element's `.certrev-r-scope em` cue and the sentence are leaves of
- * one element, as the demo paints them. The marker is on exactly one element per render, as before.
- */
-const SCOPE = CERT_SCOPE_LINE
 
 /**
  * The muted credential line, empty when the reviewer has no displayed credential (so no "verified" claim prints).
@@ -296,7 +297,7 @@ function bannerCard(f: Facts): string {
 	}
 
 	// POR-9317: the memo card carries the scope line when there is a memo; with none this card is the sole claim face.
-	const scope = scopeOn ? `<div class="certrev-r-scope" data-ftc-disclosure data-ftc-line>${SCOPE}</div>` : ''
+	const scope = scopeOn ? `<div class="certrev-r-scope" data-ftc-disclosure data-ftc-line>${f.scope}</div>` : ''
 
 	return (
 		`${sectionOpen(f, true, f.minimal ? 'Expert reviewed' : credentialAria(f))}\n  <div class="certrev-r-card">\n` +
@@ -324,7 +325,7 @@ function bannerMemo(f: Facts): string {
 		`        <blockquote>${esc(f.content.memo)}</blockquote>${links}</div>\n    </div>\n` +
 		'    <div class="certrev-r-rule"></div>\n    <div class="certrev-r-vfoot">\n' +
 		`      <span class="certrev-r-verified">${readerLogo('mono', 17, '')}Verified by <b>CertREV</b></span>\n` +
-		`      <span class="certrev-r-scope" data-ftc-disclosure data-ftc-line>${scopeLead(f)}${SCOPE}</span>\n    </div>\n  </div>\n</section>`
+		`      <span class="certrev-r-scope" data-ftc-disclosure data-ftc-line>${scopeLead(f)}${f.scope}</span>\n    </div>\n  </div>\n</section>`
 	)
 }
 
@@ -364,7 +365,7 @@ function sidebar(f: Facts): string {
 		`${open}<div class="certrev-r-side-body">\n      <div class="certrev-r-by">${avatar}<div>\n` +
 		`          <b>${esc(f.ename)}${f.creds !== '' ? `<!-- -->, <!-- -->${esc(f.creds)}` : ''}</b>${verifiedLine(f, false)}</div>\n      </div>` +
 		`${fold}${more}` +
-		`<div class="certrev-r-scope" data-ftc-disclosure data-ftc-line>${scopeLead(f)}${SCOPE}</div>\n    </div>` +
+		`<div class="certrev-r-scope" data-ftc-disclosure data-ftc-line>${scopeLead(f)}${f.scope}</div>\n    </div>` +
 		`${links}</div>\n</section>`
 	)
 }

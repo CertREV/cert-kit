@@ -158,7 +158,7 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 		expect(memo?.inner).toBe(fixture.card.parts.bottom)
 	})
 
-	it('a two-block page (header under the hero, memo before the references) prints one head, one dialog set and one runtime (the lead’s ruling, relay 074dbd2c8ef3)', async () => {
+	it('a two-block page (header under the hero, memo before the references) prints one head and one dialog set, and no runtime tag (the lead’s ruling, relay 074dbd2c8ef3; 2.1.1)', async () => {
 		const fixture = contractFixture('banner-elf-like')
 		const runtime = {
 			src: 'https://portal.certrev.com/api/cert/v1/runtime/card-runtime.0123456789abcdef.js',
@@ -182,7 +182,8 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 		const cold = await serve(contractBody(issuer, { ...fixture, card, doc } as ContractFixture), page)
 		expect(cold.match(/data-certrev-cert-chrome=""/g)?.length).toBe(1)
 		expect(cold).toContain('data-certrev-skipped=')
-		expect(cold.match(/<script src="https:\/\/portal\.certrev\.com\/api\/cert\/v1\/runtime\//g)?.length).toBe(1)
+		// 2.1.1: the server's HTML carries no runtime tag (the browser loads it: `contract-card-client.test.tsx`).
+		expect(cold).not.toMatch(/<script[^>]*\ssrc=/)
 		const html = await renderToHtml(page)
 		expect(delivery.calls).toHaveLength(1)
 		// Counted in the printed markup (the seeds hold the document escaped, never as tags).
@@ -192,9 +193,9 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 		expect(count(/<certrev-card[^>]*data-certrev-part="dialog-certificate"/g)).toBe(1)
 		expect(count(/<dialog id="expert"/g)).toBe(1)
 		expect(count(/<dialog id="cert"/g)).toBe(1)
-		expect(count(/<script src="https:\/\/portal\.certrev\.com\/api\/cert\/v1\/runtime\//g)).toBe(1)
+		expect(count(/<script[^>]*\ssrc=/g)).toBe(0)
 		expect(count(/data-certrev-cert-chrome=""/g)).toBe(2)
-		// The page reads: head, card, dialogs, runtime (the header block); the article; the memo; the references.
+		// The page reads: head, card, dialogs (the header block); the article; the memo; the references.
 		const at = (needle: string) => html.indexOf(needle)
 		expect(at('<style data-certrev-card-head>')).toBeLessThan(at(card.parts.top))
 		expect(at(card.parts.top)).toBeLessThan(at('<p>The article.</p>'))
@@ -219,7 +220,7 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 		expect(warn).not.toHaveBeenCalled()
 	})
 
-	it('the runtime, once the portal serves it, is in the block’s HTML after the dialogs', async () => {
+	it('2.1.1: the runtime the portal serves is not in the block’s HTML (no parser-inserted <script src>, which a nonce + strict-dynamic policy blocks)', async () => {
 		const fixture = contractFixture('floating-elf-like')
 		const runtime = {
 			src: 'https://portal.certrev.com/api/cert/v1/runtime/card-runtime.0123456789abcdef.js',
@@ -228,9 +229,9 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 		const card = { ...fixture.card, assets: { ...fixture.card.assets, runtime } }
 		const doc = sha256Hex(canonicalizeJson(card))
 		const html = await serve(contractBody(issuer, { ...fixture, card, doc } as ContractFixture))
-		expect(cardWrapper(html)?.inner).toBe(
-			`${expectedCardHtml(card, ['pill'])}<script src="${runtime.src}" integrity="${runtime.integrity}" crossorigin="anonymous" defer></script>`,
-		)
+		expect(cardWrapper(html)?.inner).toBe(expectedCardHtml(card, ['pill']))
+		// The seed still carries the document (its `assets.runtime` included) as escaped data; no element names it.
+		expect(html).not.toMatch(/<script[^>]*\ssrc=/)
 	})
 })
 

@@ -5,6 +5,53 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 2.1.1 · 2026-11-02
+
+**A storefront whose `script-src` is a per-request nonce with `'strict-dynamic'` logs no Content-Security-Policy
+violation for the card.** The visual output is unchanged: every part, dialog, head fragment and JSON-LD graph the
+Builder card prints is 2.1.0's, byte for byte. On Builder the server's HTML no longer carries the runtime's tag; the
+card loads the runtime from the browser, as it already did beside the tag. No integration change, and the same four
+Content-Security-Policy sources.
+
+- **Why.** 2.0.0 to 2.1.0 printed CertREV's runtime as `<script src integrity crossorigin="anonymous" defer>` in the
+  block that carries the page's assets. A parser-inserted script carries no nonce, and `'strict-dynamic'` ignores host
+  sources (`https://portal.certrev.com`), so such a policy blocked it: one violation and one CSP report on every page
+  view. The card kept working, because its layout effect also injected the runtime, which the policy allows.
+- **Now.** `cardHtml` prints the head fragment, the parts, both dialogs and the graph, nothing else. The same block
+  injects the runtime once per page into `document.head` (`injectCardRuntime`: its SRI integrity,
+  `crossorigin="anonymous"`, `defer`), on hydration of the server's page and on a client mount alike, unless the runtime
+  already runs. A script inserted by the page's own nonced bundle is what `'strict-dynamic'` trusts. A page whose policy
+  lists `https://portal.certrev.com` in `script-src`, or has no policy, loads the same runtime once, as before (2.0.x
+  could load it twice on such a page, the tag and the injection; its init is idempotent).
+- **With JavaScript off** the card is complete, as before: the runtime never ran there.
+- **A drop-in on 2.1.0 and on 2.0.1**: same `certRevCertComponent` and registration (`CertREV Cert`, the same 22
+  inputs), no new prop, no new peer dependency, the same `exports` map and runtime exports. `cardRuntimeTag` stays
+  exported, unchanged, for any other caller.
+
+## 2.1.0 · 2026-10-30
+
+**The card says what the expert actually reviewed.** When CertREV signs `content.expert.reviewScope: 'text'` (the
+article has no references or sources section, so the review covered its text only), every face prints the text-only
+scope line, the portal's `FTC_DISCLOSURE_LINE_TEXT_ONLY` byte for byte: "Independent editorial review of this
+article’s text. Not a product endorsement, nor medical advice." (Owen, Console decision af5b0db5, 2026-10-30.)
+
+- **Absent, or `'text_and_sources'`, prints exactly what 2.0.2 prints**, byte for byte: every envelope signed before the
+  field existed, and every article with sources. Any other value (a hostile type, a scope this version does not know)
+  prints the full line too. Every golden and snapshot of 2.0.2 is unchanged.
+- **One rule on every path that prints the line** (`certScopeLineFor`; the standalone modal bundle repeats it as
+  `scopeLineForReview`): `renderCertBlock` (banner memo card, sidebar, custom face; a new optional
+  `CertBlockFacts.reviewScope` fact, which picks the locked line and never supplies its words), the Builder card's
+  envelope face (server render, hydration and a client read, from the verified payload), the reader face, both
+  dialogs of the modal (`certrev-cert.js`), `<CertBadge>` and the `<certrev-badge>` web component. The contract-1 card
+  and the delivered face print CertREV's server-rendered document, which carries the right line already.
+- **A drop-in on 2.0.2**: same `certRevCertComponent` and registration (`CertREV Cert`, the same 22 inputs), no new
+  prop, no new peer dependency, the same `exports` map and runtime exports, the same four Content-Security-Policy
+  sources. The Builder block's `scopeLine` input stays a wire field the card does not read (2.0.1 retired the options
+  face).
+- **WordPress does not share this face**: plugin 2.0.x prints the card document the portal renders and loads the
+  portal's card runtime. The portal's hosted `/embed/certrev-cert.js` is this package's modal bundle as vendored by the
+  portal; it carries the rule once the portal's pin moves to 2.1.0.
+
 ## 2.0.2 · 2026-10-29
 
 **A CertREV outage never slows a brand's page by more than a fraction of a second.** A drop-in on 2.0.1: same package,

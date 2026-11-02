@@ -26,9 +26,9 @@ import { safeHttpUrl } from './escape.js'
 import { credentialSuffix, dedupeCredential, expertNameWithCredentials, formatDate, resolveDisplay } from './format.js'
 import { CERTREV_LINK_REL } from './rel.js'
 import {
-	CERT_SCOPE_LINE,
 	CERT_STRINGS_VERSION,
 	type CertRenderDef,
+	certScopeLineFor,
 	resolveRenderTheme,
 	themeCssVarDeclarations,
 } from './render-def.js'
@@ -98,6 +98,8 @@ export function CertBadge(props: CertBadgeProps) {
 	const style = props.badgeStyle ?? display.badgeStyle
 	const verifyUrl = safeHttpUrl(content.verifyUrl)
 	const profileUrl = safeHttpUrl(content.expert.profileUrl)
+	// 2.1.0: the locked scope line the signed `expert.reviewScope` picks ('text' is the text-only line).
+	const scopeLine = certScopeLineFor((content.expert as { readonly reviewScope?: unknown }).reviewScope)
 	const certifiedLabel = formatDate(content.certifiedAt)
 	const updatedLabel = formatDate(content.contentModifiedAt)
 	// Composed name + suffix, so the suffix drops a credential the stored display name already
@@ -189,7 +191,8 @@ export function CertBadge(props: CertBadgeProps) {
 			    the compliance BASELINE — it lands regardless of a render-def, matching the
 			    Shopify/WordPress engine fix. The cue's "expert" links to the reviewer's
 			    CertREV profile (the whole cue tag-strips to the byte-verbatim
-			    COMPENSATED_EXPERT_CUE). The scope line is byte-verbatim CERT_SCOPE_LINE. */}
+			    COMPENSATED_EXPERT_CUE). The scope line is byte-verbatim CERT_SCOPE_LINE, or
+			    CERT_SCOPE_LINE_TEXT_ONLY for a signed reviewScope of 'text' (2.1.0). */}
 			<div className={`${ROOT_CLASS}__disclosure`}>
 				<span className={`${ROOT_CLASS}__compensated-cue`}>
 					Compensated{' '}
@@ -202,7 +205,7 @@ export function CertBadge(props: CertBadgeProps) {
 					)}
 				</span>
 				<p className={`${ROOT_CLASS}__ftc`} data-ftc-disclosure>
-					<span data-ftc-line>{CERT_SCOPE_LINE}</span>
+					<span data-ftc-line>{scopeLine}</span>
 				</p>
 			</div>
 
