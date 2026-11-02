@@ -518,7 +518,7 @@ browser hydrates from it:
 - **Where the server had no envelope to paint, it writes what it painted instead**, in the same attribute: a
   record `{ v: 1, baseUrl, externalId, design?, face }` with no payload, no signature and no def. The browser keeps
   that face through hydration and any later render of the same placement, and reads nothing:
-  - **CertREV not reached** (a 5xx, a body that is not an envelope, a network error, the 8 s deadline): the
+  - **CertREV not reached** (a 5xx, a body that is not an envelope, a network error, the deadline; 2.0.2: the server's 300 ms wait): the
     block's own options face, the card 0.5.x and 1.0.x painted from the same fields, with `face: "options"`. Its
     placement is the block's `mode`, else its def's `layout`, else the banner. A page never loses its card to an
     outage. A pinned card (below) paints it too, with a record naming its pin. A block whose options cannot
@@ -567,7 +567,10 @@ browser hydrates from it:
 - **The server's read** waits up to 8 s (the verifier's own default stays 3 s). Its cache keeps a certificate for
   60 s, then serves it for up to 5 minutes more while one background refresh runs or while CertREV cannot be
   reached; a refusal (revoked, expired) lands as soon as its refresh does. A cold placement waits once; a warm one
-  never waits.
+  never waits. **2.0.2:** a server render waits at most 300 ms for a cold read (the read itself runs on, up to 8 s,
+  and is cached when it lands), never waits behind another request's read of the same placement, and a failure is
+  remembered 60 s per placement and process, so a hanging CertREV costs a page at most one 300 ms wait per placement
+  per minute. 2.0.1 already keeps a certificate 30 s, and 30 s more while it is refreshed (see the CHANGELOG).
 - **A reviewer photo the browser cannot load** (a CSP `img-src` without the photo's origin, a 404) is repainted as
   the person's initials, the same bytes the face paints for a hidden photo (below), with no request and no change to
   the record.
@@ -1023,7 +1026,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`2.0.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`2.0.2`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.
