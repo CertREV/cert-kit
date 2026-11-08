@@ -473,15 +473,11 @@ the `delivery` marker (an options-only block) never reads the envelope, so it st
 - **Brand tokens** are an allow-list, as the Shopify and WordPress twins' are. The accent and bar ink must
   be a `#RGB` or `#RRGGBB` string; the corner radius a bare `0` or one non-negative `px`, `rem`, `em` or `%`
   length. Anything else (a named colour, `rgb()`, a negative or unitless radius, a value with a quote, a
-  comment opener or a bracket) paints the default, navy `#0a1b3f` and `12px` (the design guide's memo-rung defaults,
+  comment opener or a bracket) paints the default, navy `#0a1b3f` and `12px` (the design guide's card defaults,
   also what a face with no def paints; 1.3.0 painted `#0A1B3F` and `14px`), and never reaches the `style`
   attribute. The font is one of five stacks (`sans`, `serif`, `grotesk`, `mono`, `system`); an unknown slot paints
   sans. A def with an ink (`inkColor`), or a surface (`surface`) that is not white, is a **toned** face: each
   valid colour is written as `--cr-sf` / `--cr-ink` on the root, which gains the class `certrev-r-toned`.
-- **The rung.** The def's `rung` decides how much the card prints: `memo` (and any value the face does not know,
-  or none) is the whole card; `credentialed` prints no memo, bio or photo (so no memo card, and the banner is the
-  memo-less card with the scope line and the profile and certificate row); `named` also drops the credential;
-  `minimal` is the accent band and the links only. The floating pill is the same on every rung.
 - **The sidebar folds on a phone.** The card's bio and memo are printed twice: as the card's own pair, and again
   inside a closed `<details class="certrev-r-more">` whose toggle reads "Read the expert memo" ("About the
   expert" when there is a bio and no memo; no fold with neither). At 640px and under the stylesheet hides the
@@ -1004,7 +1000,7 @@ alongside each modal module. The load-bearing ones:
 - **`builder/__tests__/delivery-card-hydrate.test.tsx`** + **`builder/__tests__/ssr-seed.test.tsx`** (1.2.0): a server-rendered delivery card hydrates on both faces with zero browser reads, no mismatch and the same nodes; its seed is the served envelope and still verifies; revoked and browser-clock-expired cards come down; a later client mount reuses the page's seed; the server's options and none records are kept through hydration and through React's client re-render after a hydration error, with no read; a client mount with no record makes no read and paints the options face or nothing, and only with `clientRead` reads once, or renders nothing and logs nothing when the read is refused; a reviewer photo that fails to load repaints as initials; the seed and fallback-record parsers refuse malformed records and each other's; the design pin is part of the seed's key; a hidden `reviewerPhoto` or `memo`, or `display.showExpertPhoto: false` (the photo URLs), is absent from the whole server HTML and the seed carries no signature; every server render in these files runs under jsdom with no server switch; and the card's inlined reader stylesheet names no font URL. **`builder/__tests__/delivery-card.test.tsx`** pins the unreachable cases to the 1.0.3 options face byte for byte, and the 8 s deadline and the stale window; **`verify/__tests__/cache.test.ts`** the cache's stale-while-revalidate, stale-if-error and in-flight limit. **`reader/__tests__/reader-initials.test.ts`** pins the initials bytes (honorifics, escaping, hidden and missing photos, `showExpertPhoto`, the empty name).
 - **`builder/__tests__/delivered-face.test.tsx`** + **`builder/__tests__/delivered-face-client.test.tsx`** + **`builder/__tests__/delivered-face-use.test.tsx`** (1.3.0): the delivered face paints, server and browser (hydration, a client mount over the page's record, a streamed record, `clientRead`), only when its hashes match the signed digest for the def served, on an unpinned whole-card block; every other delivery, and a browser that cannot hash, renders what the unmodified 1.2.1 card rendered for the same input, byte for byte, seed included (`__golden__/delivered-face-1.2.1.json`, `__golden__/delivered-face-client-1.2.1.json`); a tampered digest suppresses.
 - **`builder/__tests__/streamed-record-card.test.tsx`** (1.2.1): a card the client renders while the page loads paints nothing, then the record the stream adds, to the document (#421) or to the server's `<html>` after React replaced it (#423, with and without `MutationObserver`), and what a client mount paints once the page loads with none; pinned, options, none and expired records; no read; hydration, `clientRead` and a loaded page unchanged.
-- **`reader/__tests__/reader-one-face.test.ts`** + **`reader-golden.test.ts`** + **`reader-differential.test.ts`** (1.3.1): the reader face is byte-equal to the portal's own Liquid harness on its 11 golden pages and 399 edge cells, among them every rung, the sidebar's phone fold, toned faces and a face with no design (`pnpm refresh:reader` re-copies them from a portal checkout).
+- **`reader/__tests__/reader-one-face.test.ts`** + **`reader-golden.test.ts`** + **`reader-differential.test.ts`** (1.3.1): the reader face is byte-equal to the portal's own Liquid harness on its 11 golden pages and 323 edge cells, among them the sidebar's phone fold, toned faces and a face with no design (`pnpm refresh:reader` re-copies them from a portal checkout).
 - **`builder/__tests__/card-contract.test.ts`**, **`contract-card.test.tsx`**, **`contract-card-client.test.tsx`** (2.0.0):
   the contract-1 card on the portal's own card documents (`__fixtures__/contract-v1/`, painted by its
   `buildCardDocument`; `scripts/card-fixtures.portal.ts` regenerates them): the binding, the shape check, the digest held
@@ -1030,7 +1026,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`2.1.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`3.0.0`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.

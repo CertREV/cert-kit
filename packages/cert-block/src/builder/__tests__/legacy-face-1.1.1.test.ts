@@ -15,6 +15,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { stripLegacyDefKeys, stripLegacyStamp } from '../../__tests__/legacy-stamp.js'
 import { renderCertBlock } from '../../components/render-cert-block.js'
 import { parseRenderDef } from '../../verify/get-verified-delivery.js'
 import type { CertChromeRenderDef } from '../cert-chrome-data.js'
@@ -25,6 +26,15 @@ const GOLDEN = JSON.parse(readFileSync(new URL('./__golden__/envelope-face-1.1.1
 	generatedFrom: string
 	parsed: Record<string, unknown>
 	cases: Record<string, { bytes: number; sha256: string; html: string }>
+}
+
+// 1.1.1 printed a `data-certrev-rung` stamp and copied the frozen `preset` / `rung` keys; 3.0.0 does neither. The
+// golden file is untouched: it is read through the two strip helpers, so every other byte still has to match.
+for (const name of Object.keys(GOLDEN.parsed)) GOLDEN.parsed[name] = stripLegacyDefKeys(GOLDEN.parsed[name])
+for (const entry of Object.values(GOLDEN.cases)) {
+	entry.html = stripLegacyStamp(entry.html)
+	entry.bytes = Buffer.byteLength(entry.html)
+	entry.sha256 = createHash('sha256').update(entry.html).digest('hex')
 }
 
 /** What 1.2.0 keeps of a raw def beyond what 1.1.1 kept: only `face` (a string) and `accentFg` (a valid ink). */

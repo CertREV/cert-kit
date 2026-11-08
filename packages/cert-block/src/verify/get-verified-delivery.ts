@@ -253,15 +253,15 @@ export function designPinFromUrl(url: string | URL): { design: string; designBra
 
 /**
  * The def sibling, shape-checked. Anything that is not the metafield shape is null, which paints
- * the preset default (the same thing an absent def paints): a def is presentation, never a claim,
+ * the default face (the same thing an absent def paints): a def is presentation, never a claim,
  * so a malformed one degrades the styling and nothing else. The TOKEN VALUES are not judged here;
  * `resolveBlockTheme` re-validates each at paint time and drops what is not a safe value.
  */
 export function parseRenderDef(value: unknown): CertChromeRenderDef | null {
 	if (!isRecord(value)) return null
-	const { v, preset, rung, tokens, hidden, barInkFg, accentFg, face: faceName, layout, customFace } = value
+	const { v, tokens, hidden, barInkFg, accentFg, face: faceName, layout, customFace } = value
 	if (typeof v !== 'number' || !Number.isFinite(v)) return null
-	if (!isString(preset) || !isString(rung) || !isRecord(tokens)) return null
+	if (!isRecord(tokens)) return null
 	if (!Array.isArray(hidden) || !hidden.every(isString)) return null
 	if (layout !== undefined && !isString(layout)) return null
 	let face: CertChromeRenderDef['customFace']
@@ -277,8 +277,6 @@ export function parseRenderDef(value: unknown): CertChromeRenderDef | null {
 	}
 	return {
 		v,
-		preset,
-		rung,
 		tokens: tokenOut,
 		...(barInkFg === '#141414' || barInkFg === '#ffffff' ? { barInkFg } : {}),
 		// 1.2.0: the reader face's two keys. 1.1.x dropped both; they are kept only when well-formed, so a def that

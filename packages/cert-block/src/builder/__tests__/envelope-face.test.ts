@@ -36,9 +36,14 @@ describe('layoutFor', () => {
 describe('faceFromDef', () => {
 	it('places every field except the hideable ones the def hides', () => {
 		expect(faceFromDef(def, 'banner')).toEqual({
-			rung: 'standard',
 			placedFields: CERT_FACE_FIELDS.filter((f) => f !== 'reviewerPhoto'),
 		})
+	})
+
+	it('a def that still carries the legacy preset and rung keys gives the same face', () => {
+		const legacy = { ...def, preset: 'memo', rung: 'minimal' } as never
+		expect(faceFromDef(legacy, 'banner')).toEqual(faceFromDef(def, 'banner'))
+		expect(faceFromDef(legacy, 'banner')).not.toHaveProperty('rung')
 	})
 
 	it('ignores a hide on a field that is not hideable', () => {
@@ -49,7 +54,6 @@ describe('faceFromDef', () => {
 
 	it('a custom layout places exactly its composition', () => {
 		expect(faceFromDef({ ...def, customFace: { placedFields: ['memo', 'scopeLine'] } }, 'custom')).toEqual({
-			rung: 'standard',
 			placedFields: ['memo', 'scopeLine'],
 		})
 	})

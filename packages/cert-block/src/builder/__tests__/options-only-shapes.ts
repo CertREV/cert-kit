@@ -8,6 +8,7 @@
  * Data only: nothing here imports the card, so the 1.0.3 generator can load this file unchanged.
  */
 
+// `preset` and `rung`: the frozen constants the portal still sends (ignored here; the 1.2.1 goldens pin the echo).
 const renderDef = {
 	v: 7,
 	preset: 'memo',

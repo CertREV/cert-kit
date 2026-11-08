@@ -144,7 +144,7 @@ export interface CertDisplayConfig {
  *               drop the verification" is unrepresentable by construction.
  *  - `fused`  — a single pre-composed, inseparable string (the credentialed byline);
  *               rendered verbatim, never re-assembled at a call site.
- *  - `locked` — CertREV owns it: required-and-unremovable when the rung demands it (the
+ *  - `locked` — CertREV owns it: required-and-unremovable when the face names a reviewer (the
  *               compensation cue, the scope line) or fixed chrome. Never brand-editable,
  *               never in the themeable token allowlist.
  *
@@ -172,8 +172,8 @@ export interface CertCredential {
 	 *  envelopes (no class stamped) verify unchanged. */
 	readonly complianceClass?: ComplianceClass
 	/** v0.2: does this field form a pre-click endorsement impression on the article face?
-	 *  Any claim-bearing field pulls the compensation cue + scope line on-face (the
-	 *  claim-scaled ladder). Optional for pre-v0.2 back-compat. */
+	 *  Any claim-bearing field pulls the compensation cue + scope line on-face.
+	 *  Optional for pre-v0.2 back-compat. */
 	readonly claimBearing?: boolean
 }
 

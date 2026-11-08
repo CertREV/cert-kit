@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { act, type ReactElement } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { stripLegacyEcho } from '../../__tests__/legacy-stamp.js'
 import { CERT_STRINGS_VERSION } from '../../components/render-def.js'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
 import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
@@ -45,11 +46,15 @@ const goldenFile = (name: string) =>
 	}
 const SERVER = goldenFile('delivered-face-1.2.1.json')
 const CLIENT = goldenFile('delivered-face-client-1.2.1.json')
+// The 1.2.1 seeds echoed the frozen `preset` / `rung`; 3.0.0 reads and keeps neither. The files are untouched.
+for (const name of Object.keys(CLIENT.seedsWithFace) as DefName[]) {
+	CLIENT.seedsWithFace[name] = stripLegacyEcho(CLIENT.seedsWithFace[name])
+}
 
 const expand = (g: typeof SERVER, name: string) => {
 	const at = g.cases[name]
 	if (at === undefined) throw new Error(`no golden for ${name}`)
-	return g.outputs[at].split(g.readerCssPlaceholder).join(SERVER.readerCss)
+	return stripLegacyEcho(g.outputs[at].split(g.readerCssPlaceholder).join(SERVER.readerCss))
 }
 /** What 1.2.1 rendered in a browser (jsdom's `innerHTML`) for one client case. */
 const golden121 = (name: string) => expand(CLIENT, name)

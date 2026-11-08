@@ -34,7 +34,7 @@ export interface RenderBadgeOptions {
 	readonly accentColor?: string
 	readonly badgeStyle?: 'full' | 'compact'
 	/**
-	 * The brand render-def. ABSENT → the badge renders the CertREV preset
+	 * The brand render-def. ABSENT → the badge renders the CertREV
 	 * default (theme output byte-identical to un-themed). PRESENT → validated
 	 * themeable tokens are emitted as `--certrev-*` CSS vars + subtractive
 	 * visibility applies. Mirrors `<CertBadge>`'s `renderDef` prop exactly.
