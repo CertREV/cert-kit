@@ -4,6 +4,13 @@ The signed-envelope contract. Semver contract: **the canonical byte contract (RF
 the payload) and the fail-closed `VerdictKernel` semantics never change in a patch or minor**;
 payload extensions are additive (old edges suppress unknown shapes: fail-closed by design).
 
+## 0.7.0 · 2026-11-08
+
+- **No claim-strength vocabulary.** The `locked` field-class comment no longer speaks of a rung: a locked field
+  (the compensation cue, the scope line) is required and unremovable when the face names a reviewer. A documentation
+  change only: no type, schema, payload or canonical-byte change, and every 0.6.x envelope verifies as before. Released
+  with `@certrev/cert-block` 3.0.0, which drops the `preset` / `rung` concept.
+
 ## 0.6.0 · 2026-10-18
 
 - **An optional signed `content.faceDigest`.** `{ v: 1, defVersion, html, css }`: the lowercase hex
