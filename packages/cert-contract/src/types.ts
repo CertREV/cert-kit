@@ -144,7 +144,7 @@ export interface CertDisplayConfig {
  *               drop the verification" is unrepresentable by construction.
  *  - `fused`  — a single pre-composed, inseparable string (the credentialed byline);
  *               rendered verbatim, never re-assembled at a call site.
- *  - `locked` — CertREV owns it: required-and-unremovable when the rung demands it (the
+ *  - `locked` — CertREV owns it: required-and-unremovable when the face names a reviewer (the
  *               compensation cue, the scope line) or fixed chrome. Never brand-editable,
  *               never in the themeable token allowlist.
  *

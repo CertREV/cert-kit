@@ -1,6 +1,6 @@
 {
 	"name": "@certrev/cert-block",
-	"version": "2.1.1",
+	"version": "3.0.0",
 	"description": "Headless render edge for the CertREV CertDeliveryEnvelope: SSR-safe React cert components, a framework-agnostic <certrev-badge> Web Component, a schema.org JSON-LD projector, and a fail-closed verify layer over the shared VerdictKernel.",
 	"repository": {
 		"type": "git",
@@ -76,7 +76,7 @@
 		"test:replica": "vitest run --config vitest.e2e.config.ts"
 	},
 	"dependencies": {
-		"@certrev/cert-contract": "^0.6.0"
+		"@certrev/cert-contract": "^0.7.0"
 	},
 	"peerDependencies": {
 		"react": ">=18.0.0"
