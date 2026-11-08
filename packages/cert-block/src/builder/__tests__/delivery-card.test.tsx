@@ -202,7 +202,7 @@ describe('with the delivery marker: the envelope face', () => {
 		return renderCertBlock({
 			mode: 'banner',
 			theme: accent ? { accentColor: accent, accentFg: '#ffffff' } : {},
-			face: { rung: 'standard', placedFields: placed },
+			face: { placedFields: placed },
 			responsive: true,
 			facts: {
 				authorName: 'Sam Writer',

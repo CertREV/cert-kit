@@ -25,8 +25,8 @@
  *   2. SUBTRACTIVE field-visibility: a brand may only HIDE preset-placed,
  *      brand-toggleable fields (`reviewerPhoto`, `memo`) — never add a field the
  *      preset doesn't place. Locked fields (cue, scope, links) can never be hidden.
- *   3. The two always-on COMPLIANCE strings a claim-bearing face carries on EVERY
- *      rung (design guide §3): the compensation cue and the FTC scope line, both
+ *   3. The two always-on COMPLIANCE strings a claim-bearing face always
+ *      carries (design guide §3): the compensation cue and the FTC scope line, both
  *      byte-verbatim (the scope line's curly apostrophe U+2019 is load-bearing).
  *
  * FAIL-SAFE: when NO render-def is supplied the THEMING layer contributes nothing
@@ -83,9 +83,9 @@ export type BadgeVisibilityFieldId = (typeof HIDEABLE_FIELDS)[number]
 /**
  * A brand render-def as it reaches the render edge — the RESOLVED projection the
  * portal's `getActiveRenderDef` → cert-chrome/builder-export path carries (mirrors
- * the Shopify `certrev.render_def` metafield `{v, preset, rung, tokens, hidden}`;
+ * the Shopify `certrev.render_def` metafield `{v, tokens, hidden}`;
  * cert-block needs only the theming inputs). Every field is OPTIONAL: an absent
- * `renderDef`, an absent token, or an invalid token all fall back to the preset
+ * `renderDef`, an absent token, or an invalid token all fall back to the
  * default (fail-safe).
  */
 export interface CertRenderDef {

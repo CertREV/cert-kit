@@ -30,8 +30,6 @@
 export interface CertChromeRenderDef {
 	/** Monotonic per-brand def version → the `data-certrev-def-version` stamp. */
 	readonly v: number
-	readonly preset: string
-	readonly rung: string
 	/**
 	 * The resolved themeable tokens (the baked metafield's `tokens`) — includes the v2
 	 * `barInk`/`inkColor`, so this is a superset of the input `CertThemeTokens` (which

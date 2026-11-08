@@ -115,9 +115,9 @@ export function themeFromDef(def: CertChromeRenderDef | null): Partial<ResolvedB
 /** The face a def asks for: its custom composition, or every field minus the hideable ones it hides. */
 export function faceFromDef(def: CertChromeRenderDef | null, layout: CertBlockLayout): CertBlockFace | undefined {
 	if (!def) return undefined
-	if (layout === 'custom') return { rung: def.rung, placedFields: [...(def.customFace?.placedFields ?? [])] }
+	if (layout === 'custom') return { placedFields: [...(def.customFace?.placedFields ?? [])] }
 	const hidden = new Set(def.hidden.filter((id) => (HIDEABLE_FIELDS as readonly string[]).includes(id)))
-	return { rung: def.rung, placedFields: CERT_FACE_FIELDS.filter((id) => !hidden.has(id)) }
+	return { placedFields: CERT_FACE_FIELDS.filter((id) => !hidden.has(id)) }
 }
 
 /**

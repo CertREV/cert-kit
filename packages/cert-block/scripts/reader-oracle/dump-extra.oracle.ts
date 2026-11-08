@@ -375,40 +375,10 @@ add({
 })
 
 // ── cert-block 1.3.1: the portal's one face ─────────────────────────────────────────────────────────────────────
-// The rung (the design guide's tier). `credentialed` and `named` print no memo, bio or photo (named: no credential
-// either), the memo card is not printed, and the banner is the memo-less card; `minimal` is the band and the links
-// only; any other value is the memo rung. The pill is the same on every rung.
-const rungDef = (rung: unknown, layout: 'banner' | 'sidebar' | 'floating') =>
-	({ ...readerDef(NAVY, [], layout), rung }) as never
-const RUNG_VARIANTS: Record<string, { over?: Over; illustrative?: boolean }> = {
-	full: {},
-	'no-memo': { over: { memo: null } },
-	'no-links': { over: { expert: { profileUrl: null }, root: { verifyUrl: 'javascript:alert(1)' } } },
-	'no-profile': { over: { expert: { profileUrl: null } } },
-	'pro-bono': { over: { expert: { compensationCue: null } } },
-	'illustrative-no-cue': { over: { expert: { compensationCue: null } }, illustrative: true },
-	'illustrative-cue-wins': { illustrative: true },
-	'no-credential': { over: { expert: { credentials: [] } } },
-	'no-photo-no-bio': { over: { expert: { photoUrl: null, bio: null }, author: { photoUrl: null } } },
-	'author-same': { over: { author: { name: 'Dr. Avery Quinlan' } } },
-	'no-certified': { over: { root: { certifiedAt: '' } } },
-	hostile: { over: hostile },
-}
-for (const rung of ['credentialed', 'named', 'minimal'] as const) {
-	for (const layout of ['banner', 'sidebar'] as const) {
-		for (const [name, v] of Object.entries(RUNG_VARIANTS)) {
-			add({
-				id: `x.${layout}.rung-${rung}-${name}`,
-				layout,
-				def: rungDef(rung, layout),
-				...(v.over ? { over: v.over } : {}),
-				...(v.illustrative ? { illustrative: true } : {}),
-			})
-		}
-	}
-	add({ id: `x.floating.rung-${rung}`, layout: 'floating', def: rungDef(rung, 'floating') })
-}
-// A rung the face does not know is the memo rung; so is none, an empty string, a different case and a non-string.
+// The portal still sends the two frozen legacy keys (`preset`, `rung`) to renderers already in the field. This face
+// ignores both, so a value it never knew (or none) paints the same card; these cells pin that.
+const legacyDef = (rung: unknown, layout: 'banner' | 'sidebar' | 'floating') =>
+	({ ...readerDef(NAVY, [], layout), preset: 'memo', rung }) as never
 for (const [name, rung] of [
 	['memo', 'memo'],
 	['standard', 'standard'],
@@ -420,11 +390,11 @@ for (const [name, rung] of [
 	['array', ['minimal']],
 ] as const) {
 	for (const layout of ['banner', 'sidebar'] as const) {
-		add({ id: `x.${layout}.rung-unknown-${name}`, layout, def: rungDef(rung, layout) })
+		add({ id: `x.${layout}.legacy-key-${name}`, layout, def: legacyDef(rung, layout) })
 	}
 }
 for (const layout of ['banner', 'sidebar'] as const) {
-	add({ id: `x.${layout}.rung-absent`, layout, def: { ...readerDef(NAVY, [], layout), rung: undefined } as never })
+	add({ id: `x.${layout}.legacy-key-absent`, layout, def: { ...readerDef(NAVY, [], layout), preset: 'memo' } as never })
 }
 
 // The sidebar's phone fold: the bio and the memo are printed twice, once as the card's own pair and once inside a closed
@@ -438,7 +408,6 @@ side('fold-blank-memo-and-bio', { memo: '   ', expert: { bio: '  ' } })
 side('fold-bio-only-hidden-bio', { memo: null, display: { showBio: false } })
 side('fold-memo-no-bio', { expert: { bio: null } })
 side('fold-def-hides-bio', undefined, NAVY, ['bio'])
-side('fold-def-hides-memo', undefined, NAVY, ['memo'])
 side('fold-memo-markup', { memo: `Memo <b>"x"</b> & 'y' </details><p>`, expert: { bio: `Bio </details> & "q"` } })
 side('fold-memo-number', { memo: 42 as never })
 
@@ -469,7 +438,7 @@ for (const [id, tokens] of Object.entries(TONED)) {
 	}
 }
 
-// A face with no design: no def at all, or one that sets nothing (the design guide's memo-rung defaults paint, and a null
+// A face with no design: no def at all, or one that sets nothing (the design guide's card defaults paint, and a null
 // def stamps no def version). The layout is the def's own (`layout`), so a null def can only be the banner.
 add({ id: 'x.banner.no-def-null', layout: 'banner', def: null })
 for (const layout of ['banner', 'sidebar', 'floating'] as const) {
@@ -479,7 +448,7 @@ for (const layout of ['banner', 'sidebar', 'floating'] as const) {
 	add({
 		id: `x.${layout}.def-empty-tokens`,
 		layout,
-		def: { ...rawDef({ tokens: {}, rung: undefined, hidden: undefined }), ...lay },
+		def: { ...rawDef({ tokens: {}, hidden: undefined }), ...lay },
 	})
 }
 

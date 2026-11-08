@@ -43,7 +43,7 @@ export interface CertBadgeProps {
 	/** Override the badge style independent of the signed display config. */
 	readonly badgeStyle?: 'full' | 'compact'
 	/**
-	 * The brand render-def. ABSENT → the badge renders the CertREV preset
+	 * The brand render-def. ABSENT → the badge renders the CertREV
 	 * default (fail-safe; theme output byte-identical to un-themed). PRESENT → its
 	 * validated themeable tokens are emitted as `--certrev-*` CSS custom properties
 	 * and its subtractive hide-set removes brand-toggleable fields. Invalid tokens
