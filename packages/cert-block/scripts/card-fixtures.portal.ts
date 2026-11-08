@@ -4,7 +4,8 @@
  *
  * It imports the PORTAL's modules (`@/lib/...`), so it runs inside a CertREV/portal checkout that has the card document
  * (lead mission certrev-0a99cc1c5bef, branch v1-core), never here: copy it to the portal's `scripts/` and run
- *   SKIP_ENV_VALIDATION=1 npx tsx scripts/card-fixtures.portal.ts <out-dir>
+ *   SKIP_ENV_VALIDATION=1 npx tsx scripts/card-fixtures.portal.ts <out-dir> <masked-brand>
+ * `<masked-brand>` is the slug of one of the portal's masked fixture brands (required, no default).
  * then copy `<out-dir>/*.json` to `src/builder/__tests__/__fixtures__/contract-v1/`.
  * Writes one JSON per case: { source, case, certId, subject, content, lifecycle, renderDef, card, doc }.
  * `content` is the facts the card was painted from (no faceDigest); the cert-kit test signs a payload with this content
@@ -23,14 +24,15 @@ import { readerDef } from '@/lib/cert-render/reader/reader-test-kit'
 import { assertCompliantRender } from '@/lib/design-guide'
 
 const out = process.argv[2]
-if (!out) throw new Error('usage: gen-card-fixtures.ts <out-dir>')
+const maskedBrandSlug = process.argv[3]
+if (!out || !maskedBrandSlug) throw new Error('usage: card-fixtures.portal.ts <out-dir> <masked-brand>')
 mkdirSync(out, { recursive: true })
 
 const ENTRY_ID = 'entry-fixture-1'
 const NOW = new Date('2026-06-22T00:00:00.000Z')
 const source = execSync('git rev-parse HEAD').toString().trim()
 
-const s = maskedSource(maskedBrand('yise'))
+const s = maskedSource(maskedBrand(maskedBrandSlug))
 const payload = buildPayload({
 	certId: s.certId,
 	subject: { ...s.subject, platform: 'builder', externalId: ENTRY_ID },
