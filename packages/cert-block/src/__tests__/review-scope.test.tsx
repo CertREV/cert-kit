@@ -62,7 +62,7 @@ const PATHS: Record<string, (p: CertPayload) => string> = {
 		return renderCertBlock({
 			...input,
 			mode: 'custom',
-			face: { rung: 'memo', placedFields: ['bylineCredentialed', 'memo', 'scopeLine', 'compensationCue'] },
+			face: { placedFields: ['bylineCredentialed', 'memo', 'scopeLine', 'compensationCue'] },
 		})
 	},
 	'Builder envelope face (no def)': (p) => envelopeCardHtml(p.content, null, { mode: 'sidebar' }),
@@ -71,7 +71,7 @@ const PATHS: Record<string, (p: CertPayload) => string> = {
 	'reader banner memo card': (p) => renderReaderFace({ content: p.content, layout: 'banner', part: 'memo' }),
 	'reader sidebar': (p) => renderReaderFace({ content: p.content, layout: 'sidebar' }),
 	'Builder envelope face (reader def)': (p) =>
-		envelopeCardHtml(p.content, { v: 1, face: 'reader', rung: 'memo', hidden: [] } as never, { mode: 'sidebar' }),
+		envelopeCardHtml(p.content, { v: 1, face: 'reader', hidden: [] } as never, { mode: 'sidebar' }),
 	'certificate dialog': (p) => renderCertDialogInner(p.content as never) ?? '',
 	'expert dialog': (p) => renderExpertDialogInner(p.content as never) ?? '',
 	'<CertBadge>': (p) => renderToStaticMarkup(<CertBadge payload={p} />),

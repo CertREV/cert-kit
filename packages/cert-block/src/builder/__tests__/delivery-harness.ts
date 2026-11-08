@@ -21,7 +21,11 @@ export const DELIVERY_URL = `${BASE}/api/cert/v1/delivery/builder/${ENTRY_ID}`
 /** A fixed render clock, well inside the fixture's lifecycle. */
 export const T0 = Date.parse('2026-09-26T12:00:00.000Z')
 
-/** An e.l.f.-shaped def: the memo preset, a black accent, the reviewer photo hidden. */
+/**
+ * An e.l.f.-shaped def: a black accent, the reviewer photo hidden. `preset` and `rung` are the two frozen constants the
+ * portal still sends for renderers already in the field: this release reads neither, but the card's seed echoes the
+ * served def verbatim and the 1.2.1 goldens pin that echo, so the wire shape stays as it is delivered.
+ */
 export const ELF_LIKE_DEF = {
 	v: 4,
 	preset: 'memo',

@@ -60,7 +60,7 @@
  * (`resolveBlockTheme`) and only ever emitted as strict hex / length / enum-stack.
  *
  * PLACED-FIELDS STRICTNESS (WS-B): Visibility is decided by the engine's
- * `placedFields` alone; `rung` is a stamp, never a branch; an absent face
+ * `placedFields` alone; an absent face
  * grandfathers the 0.3.0 full-facts render byte-for-byte.
  */
 
@@ -94,14 +94,12 @@ export type CertBlockMode = 'banner' | 'sidebar' | 'floating'
 export type CertBlockLayout = CertBlockMode | 'custom'
 
 /**
- * The portal engine's resolved face (assertCompliantRender output). `rung` is
- * INFORMATIONAL ONLY — stamped as data, NEVER branched on for visibility.
+ * The portal engine's resolved face (assertCompliantRender output).
  * `placedFields` is the single source of what renders. Plain strings (not a closed
  * union) so a future engine field id degrades to "not painted here" instead of a
  * type break.
  */
 export interface CertBlockFace {
-	readonly rung: string
 	readonly placedFields: readonly string[]
 }
 
@@ -492,22 +490,13 @@ function rootStyle(theme: ResolvedBlockTheme): string {
 	].join(';')
 }
 
-function root(
-	mode: CertBlockLayout,
-	theme: ResolvedBlockTheme,
-	inner: string,
-	face?: CertBlockFace,
-	responsive = false,
-): string {
-	// The rung is an OBSERVABILITY stamp for the crawl monitor — only emitted when a
-	// face is present, so the grandfathered (face-absent) output stays byte-identical.
-	const rungAttr = face ? ` data-certrev-rung="${escapeAttribute(face.rung)}"` : ''
+function root(mode: CertBlockLayout, theme: ResolvedBlockTheme, inner: string, responsive = false): string {
 	// The phone face (1.1.0): the scope its rules key on, and the rules, only when asked for.
 	const responsiveAttr = responsive ? ' data-certrev-responsive' : ''
 	const style = responsive ? RESPONSIVE_STYLE : ''
 	return (
 		`<div class="certrev-cert certrev-cert--${mode}" data-certrev-mode="${mode}" ` +
-		`data-certrev-strings-version="${CERT_STRINGS_VERSION}"${rungAttr}${responsiveAttr} style="${rootStyle(theme)}">${style}${inner}</div>`
+		`data-certrev-strings-version="${CERT_STRINGS_VERSION}"${responsiveAttr} style="${rootStyle(theme)}">${style}${inner}</div>`
 	)
 }
 
@@ -878,13 +867,13 @@ export function renderCertBlock(input: RenderCertBlockInput): string {
 					: part === 'memo'
 						? memoCard
 						: bannerHeaderCard(facts, placed, responsive) + memoCard
-			return root('banner', theme, inner, face, responsive)
+			return root('banner', theme, inner, responsive)
 		}
 		case 'floating':
 			// The pill has no memo and no columns: nothing on it changes on a phone.
-			return root('floating', theme, floatingPill(facts, placed), face)
+			return root('floating', theme, floatingPill(facts, placed))
 		case 'custom':
-			return root('custom', theme, renderCustomFace(facts, placed, responsive), face, responsive)
+			return root('custom', theme, renderCustomFace(facts, placed, responsive), responsive)
 		// THE default placement, named here and nowhere else: the declared default and the
 		// runtime fallback are the same line, so they cannot drift apart. Naming `sidebar` as a
 		// real case also keeps the exhaustiveness read over CertBlockLayout honest — a reader
@@ -892,6 +881,6 @@ export function renderCertBlock(input: RenderCertBlockInput): string {
 		// biome-ignore lint/complexity/noUselessSwitchCase: the redundancy IS the mechanism (see above)
 		case 'sidebar':
 		default:
-			return root('sidebar', theme, sidebarCard(facts, placed, responsive), face, responsive)
+			return root('sidebar', theme, sidebarCard(facts, placed, responsive), responsive)
 	}
 }

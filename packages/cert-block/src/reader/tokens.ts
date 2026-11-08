@@ -10,7 +10,7 @@
  *
  * The values land inside a double-quoted `style` attribute, and they are held to the allow-list the Liquid snippet and
  * the PHP twin's def parser hold them to: a colour is `#RGB` or `#RRGGBB`, a radius one non-negative px / rem / em / %
- * length or a bare `0`, and anything else paints the default (navy `#0a1b3f`, 12px: the design guide's memo-rung
+ * length or a bare `0`, and anything else paints the default (navy `#0a1b3f`, 12px: the design guide's card
  * defaults, as the plugin and the hosted embed paint a face with no design). A denylist of characters is not enough: a
  * quote, a backslash, a comment opener or a bracket left in a value hides the `;` that ends it and swallows the
  * declarations after it. The variable names are the reader stylesheet's (`reader.css`), which `.certrev-reader`
@@ -23,9 +23,9 @@
 import { asText } from '../components/escape.js'
 import { esc, rec, textOr } from './helpers.js'
 
-/** The accent when the def has none: the design guide's memo-rung default (CertREV navy). */
+/** The accent when the def has none: the design guide's card default (CertREV navy). */
 const DEFAULT_ACCENT = '#0a1b3f'
-/** The corner when the def has none: the design guide's memo-rung default. */
+/** The corner when the def has none: the design guide's card default. */
 const DEFAULT_RADIUS = '12px'
 /** The foreground the def bakes for a light accent; anything else is the white default. */
 const DARK_INK = '#141414'

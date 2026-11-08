@@ -101,8 +101,6 @@
 			},
 			"renderDef": {
 				"v": 2,
-				"preset": "memo",
-				"rung": "memo",
 				"tokens": {
 					"accentColor": "#000000",
 					"surface": "#ffffff",
@@ -220,8 +218,6 @@
 			},
 			"renderDef": {
 				"v": 2,
-				"preset": "memo",
-				"rung": "memo",
 				"tokens": {
 					"accentColor": "#000000",
 					"surface": "#ffffff",
@@ -329,8 +325,6 @@
 			},
 			"renderDef": {
 				"v": 2,
-				"preset": "minimal",
-				"rung": "minimal",
 				"tokens": {
 					"accentColor": "#136f99",
 					"surface": "#ffffff",

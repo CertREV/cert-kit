@@ -84,7 +84,6 @@ it('S1 wire dump at 66ff75e4e1: a real placer-minted Builder 200 and the signed 
 	const def = await setBrandRenderDef(
 		brand.id,
 		{
-			presetRef: 'memo',
 			tokenOverrides: { accentColor: '#123456' },
 			fieldVisibility: { hidden: ['reviewerPhoto'] },
 			custom_layout: null,

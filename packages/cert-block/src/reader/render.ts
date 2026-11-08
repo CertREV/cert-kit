@@ -14,13 +14,10 @@
  * Nothing in the legacy `renderCertBlock` is read or changed here.
  *
  * Since 1.3.1 it also follows the portal's ONE FACE, as the Shopify snippets and the WordPress plugin paint it:
- *  - the def's `rung` (credentialed and named: no memo, bio or photo, so the memo card is not printed and the banner
- *    and sidebar are the memo-less card; named: no credential either; minimal: the band and the links only; any other
- *    value is the memo rung);
  *  - the sidebar's phone fold: the bio and the memo are printed twice, once as the card's own pair and once inside a
  *    closed `<details class="certrev-r-more">` (the stylesheet shows one or the other: 640px and under, the fold);
  *  - a TONED def (an ink, or a surface that is not white) adds `certrev-r-toned` to the root and `--cr-sf` / `--cr-ink`
- *    to its style (`tokens.ts`); a def with no design paints the memo-rung defaults;
+ *    to its style (`tokens.ts`); a def with no design paints the card defaults;
  *  - the banner's author takes the same 42px face as the reviewer, and the credential date never breaks
  *    (`<span class="certrev-r-nw">`).
  *
@@ -97,8 +94,6 @@ export interface ReaderFaceInput {
  */
 
 /** What every section of one render shares: the facts read once from the envelope and the def. */
-type Rung = 'memo' | 'credentialed' | 'named' | 'minimal'
-
 interface Facts {
 	readonly content: Rec
 	readonly expert: Rec
@@ -106,13 +101,9 @@ interface Facts {
 	readonly def: unknown
 	readonly certId: string
 	readonly ename: string
-	/** The def's rung: `memo` unless it says `minimal`, `named` or `credentialed` (any other value is the memo rung). */
-	readonly rung: Rung
-	/** The minimal rung: the band and the links, nothing else. */
-	readonly minimal: boolean
-	/** Whether a photo may be painted: neither `reviewerPhoto` hidden nor `showExpertPhoto: false`, and the memo rung. */
+	/** Whether a photo may be painted: neither `reviewerPhoto` hidden nor `showExpertPhoto: false`. */
 	readonly showPhoto: boolean
-	/** The joined credential labels, '' when there are none or the rung shows none (named, minimal). */
+	/** The joined credential labels, '' when there are none. */
 	readonly creds: string
 	readonly hasCue: boolean
 	/**
@@ -123,7 +114,7 @@ interface Facts {
 	 */
 	readonly scope: string
 	readonly illus: boolean
-	/** Whether the memo is printed: there is one, and the rung is the memo rung. */
+	/** Whether the memo is printed: there is one. */
 	readonly hasMemo: boolean
 	/** Whether the root carries `certrev-r-toned` (the token style says so). */
 	readonly toned: boolean
@@ -140,9 +131,7 @@ function readFacts(input: ReaderFaceInput): Facts {
 	const def = input.def
 	const rd = rec(def)
 
-	const rung: Rung = rd.rung === 'minimal' || rd.rung === 'named' || rd.rung === 'credentialed' ? rd.rung : 'memo'
-	const minimal = rung === 'minimal'
-	const showPhoto = disp.showExpertPhoto !== false && !contains(rd.hidden, 'reviewerPhoto') && rung === 'memo'
+	const showPhoto = disp.showExpertPhoto !== false && !contains(rd.hidden, 'reviewerPhoto')
 
 	// POR-9738: each credential's cardLabel over its bare abbreviation, joined with ', ' (labels are not trimmed).
 	const labels: string[] = []
@@ -163,14 +152,12 @@ function readFacts(input: ReaderFaceInput): Facts {
 		def,
 		certId: asText(input.certId),
 		ename: textOr(expert.displayName),
-		rung,
-		minimal,
 		showPhoto,
-		creds: rung === 'named' || minimal ? '' : labels.join(', '),
+		creds: labels.join(', '),
 		hasCue,
 		scope: certScopeLineFor(expert.reviewScope),
 		illus: input.illustrative === true && !hasCue,
-		hasMemo: !isBlank(content.memo) && rung === 'memo',
+		hasMemo: !isBlank(content.memo),
 		toned: isTonedStyle(style),
 		purl: cleaned(safeUrl(expert.profileUrl)),
 		vurl: cleaned(safeUrl(content.verifyUrl)),
@@ -199,7 +186,7 @@ const anchor = (href: string, modal: string, label: string): string =>
  * name the wording stays one leaf.
  */
 function profileLabel(f: Facts): string {
-	const first = f.minimal ? '' : cleaned(firstName(f.ename))
+	const first = cleaned(firstName(f.ename))
 	return first !== '' ? `View <!-- -->${esc(first)}<!-- -->&rsquo;s profile` : 'View profile'
 }
 
@@ -242,7 +229,7 @@ function bannerCard(f: Facts): string {
 	const author = rec(f.content.author)
 	const authorName = textOr(author.name)
 	const authorTitle = textOr(author.title)
-	const hasAuthor = f.disp.showAuthor !== false && authorName !== '' && authorName !== f.ename && !f.minimal
+	const hasAuthor = f.disp.showAuthor !== false && authorName !== '' && authorName !== f.ename
 	// Both bylines take the same 42px face, photo or initials, at every width.
 	const avatar = (photo: unknown, name: string): string =>
 		readerFace({ photo, show: f.showPhoto, name, size: '', width: 84 })
@@ -254,18 +241,14 @@ function bannerCard(f: Facts): string {
 	const expertBy =
 		`<div class="certrev-r-by">${avatar(f.expert.photoUrl, f.ename)}<div>\n            <b>${esc(f.ename)}</b>` +
 		`${verifiedLine(f, true)}<span class="certrev-r-role on">Reviewed by</span>\n          </div>\n        </div>`
-	// The minimal rung is the band and the links: no bylines, no date, no cue, no scope line.
-	const bys = f.minimal
-		? ''
-		: `<div class="certrev-r-bys${hasAuthor ? '' : ' solo'}">${authorBy}${expertBy}\n      </div>`
+	const bys = `<div class="certrev-r-bys${hasAuthor ? '' : ' solo'}">${authorBy}${expertBy}\n      </div>`
 
 	const certifiedAt = f.content.certifiedAt
-	const certified = f.minimal || isBlank(certifiedAt) ? '' : cleaned(longDate(certifiedAt))
-	const hasCue = f.hasCue && !f.minimal
-	const illus = f.illus && !f.minimal
-	// Without a printed memo (none, or a rung that prints none) this card is the sole claim face and carries the scope line.
+	const certified = isBlank(certifiedAt) ? '' : cleaned(longDate(certifiedAt))
+	const hasCue = f.hasCue
+	const illus = f.illus
+	// Without a printed memo (none) this card is the sole claim face and carries the scope line.
 	const noMemo = !f.hasMemo
-	const scopeOn = noMemo && !f.minimal
 
 	// A memo-less article gets the profile and certificate row, so the certificate stays reachable.
 	let links = ''
@@ -278,7 +261,7 @@ function bannerCard(f: Facts): string {
 	}
 
 	const hasFoot = certified !== '' || hasCue || illus
-	const rule = hasFoot || scopeOn ? '<div class="certrev-r-rule"></div>' : ''
+	const rule = hasFoot || noMemo ? '<div class="certrev-r-rule"></div>' : ''
 
 	let foot = ''
 	if (hasFoot) {
@@ -297,11 +280,11 @@ function bannerCard(f: Facts): string {
 	}
 
 	// POR-9317: the memo card carries the scope line when there is a memo; with none this card is the sole claim face.
-	const scope = scopeOn ? `<div class="certrev-r-scope" data-ftc-disclosure data-ftc-line>${f.scope}</div>` : ''
+	const scope = noMemo ? `<div class="certrev-r-scope" data-ftc-disclosure data-ftc-line>${f.scope}</div>` : ''
 
 	return (
-		`${sectionOpen(f, true, f.minimal ? 'Expert reviewed' : credentialAria(f))}\n  <div class="certrev-r-card">\n` +
-		`    <div class="certrev-r-cap">${readerLogo(f.fg === '#ffffff' ? 'white' : 'mono', 18, 'CertREV')}Expert reviewed${f.minimal ? '' : ' &amp; certified'}</div>\n` +
+		`${sectionOpen(f, true, credentialAria(f))}\n  <div class="certrev-r-card">\n` +
+		`    <div class="certrev-r-cap">${readerLogo(f.fg === '#ffffff' ? 'white' : 'mono', 18, 'CertREV')}Expert reviewed &amp; certified</div>\n` +
 		`    <div class="certrev-r-cap-body">\n      ${bys}` +
 		`${links}${rule}${foot}${scope}</div>\n  </div>\n</section>`
 	)
@@ -344,12 +327,9 @@ function sidebar(f: Facts): string {
 				'</div>'
 			: ''
 	const open =
-		`${sectionOpen(f, true, f.minimal ? 'Expert reviewed' : credentialAria(f))}\n  <div class="certrev-r-side">\n` +
+		`${sectionOpen(f, true, credentialAria(f))}\n  <div class="certrev-r-side">\n` +
 		`    <div class="certrev-r-cap center">${readerLogo(f.fg === '#ffffff' ? 'white' : 'mono', 18, 'CertREV')}Expert reviewed</div>\n    `
-	// The minimal rung is the band and the links: no body at all.
-	if (f.minimal) return `${open}${links}</div>\n</section>`
-
-	const bio = f.disp.showBio !== false && !isBlank(f.expert.bio) && f.rung === 'memo' ? asText(f.expert.bio) : ''
+	const bio = f.disp.showBio !== false && !isBlank(f.expert.bio) ? asText(f.expert.bio) : ''
 	const avatar = readerFace({ photo: f.expert.photoUrl, show: f.showPhoto, name: f.ename, size: 'lg', width: 112 })
 	// The bio and the memo are printed twice: as the card's own pair, and again inside a closed <details> the stylesheet
 	// shows instead on a phone (640px and under; owner decision 3d0838a4, plugin 1.8.3). The disclosure and both links

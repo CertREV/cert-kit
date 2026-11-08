@@ -56,8 +56,6 @@
 	},
 	"renderDef": {
 		"v": 7,
-		"preset": "memo",
-		"rung": "memo",
 		"tokens": {
 			"accentColor": "#000000",
 			"surface": "#ffffff",

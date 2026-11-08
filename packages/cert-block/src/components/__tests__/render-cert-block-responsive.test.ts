@@ -10,6 +10,7 @@
 
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { stripLegacyStamp } from '../../__tests__/legacy-stamp.js'
 import {
 	MEMO_COLLAPSE_LABEL,
 	MEMO_COLLAPSE_MIN_CHARS,
@@ -23,6 +24,8 @@ import { LONG_MEMO, RENDER_SHAPES } from './render-cert-block-shapes.js'
 const golden = JSON.parse(
 	readFileSync(new URL('./__golden__/render-cert-block-1.0.3.json', import.meta.url), 'utf8'),
 ) as { generatedFrom: string; golden: Record<string, string> }
+// 1.0.3 stamped `data-certrev-rung`; 3.0.0 does not. The golden file stays as recorded.
+for (const name of Object.keys(golden.golden)) golden.golden[name] = stripLegacyStamp(golden.golden[name] ?? '')
 
 const shape = (name: string) => RENDER_SHAPES[name] as unknown as RenderCertBlockInput
 const phone = (name: string) => renderCertBlock({ ...shape(name), responsive: true })

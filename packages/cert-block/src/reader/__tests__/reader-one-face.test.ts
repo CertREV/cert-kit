@@ -6,9 +6,8 @@
  *    pair, and again inside a closed `<details class="certrev-r-more">` whose toggle reads "Read the expert memo" (or
  *    "About the expert" when there is a bio and no memo; no fold at all with neither). The stylesheet shows one or
  *    the other: wider than 640px the pair, at 640px and under the fold. The scope line, the cue and both links never fold.
- *  - THE RUNG. `credentialed` and `named` print no memo, bio or photo (named: no credential either), so there is no
- *    memo card and the banner is the memo-less card; `minimal` is the band and the links; any other value is the memo
- *    rung.
+ *  - NO RUNG. The portal's frozen `preset` and `rung` keys, sent for renderers already in the field, are ignored: the
+ *    card is always the memo card.
  *  - A TONED FACE. A def with an ink, or a surface that is not white, adds `certrev-r-toned` to every section root.
  *
  * Every case is held to the portal's own Liquid harness (`fixtures/oracle-extra.json`, `fixtures/golden/`) byte for
@@ -145,84 +144,9 @@ describe("the sidebar's phone fold", () => {
 	})
 })
 
-describe('the rung', () => {
-	const RUNGS = ['credentialed', 'named'] as const
-
-	it.each(
-		RUNGS,
-	)('%s: no memo card, and a banner that is the memo-less card with the scope line and the links', (rung) => {
-		const html = port(`x.banner.rung-${rung}-full`)
-		expect(sections(html)).toHaveLength(1)
-		expect(html).not.toContain('Expert memo')
-		expect(html).not.toContain('<blockquote>')
-		expect(html).toContain('<div class="certrev-r-links">')
-		expect(html).toContain('data-ftc-disclosure data-ftc-line')
-		expect(html).toContain('Expert reviewed &amp; certified')
-		expect(html).not.toMatch(/<img src="https:\/\/cdn\.example\.test\/masked\//) // no photo on this rung
-	})
-
-	it.each(RUNGS)('%s: the sidebar prints no bio, memo, fold or photo', (rung) => {
-		const html = port(`x.sidebar.rung-${rung}-full`)
-		expect(html).not.toContain('<p>')
-		expect(html).not.toContain('<blockquote>')
-		expect(html).not.toContain('certrev-r-more')
-		expect(html).not.toMatch(/<img src="https:\/\/cdn\.example\.test\/masked\//)
-		expect(html).toContain('data-ftc-disclosure data-ftc-line')
-	})
-
-	it('credentialed keeps the credential line; named drops it (banner and sidebar)', () => {
-		for (const layout of ['banner', 'sidebar']) {
-			expect(port(`x.${layout}.rung-credentialed-full`), layout).toContain('Credential verified by CertREV')
-			const named = port(`x.${layout}.rung-named-full`)
-			expect(named, layout).not.toContain('Credential verified')
-			expect(named, layout).not.toContain('RDN')
-		}
-		expect(port('x.banner.rung-named-full')).toContain('aria-label="Content reviewed by Dr. Avery Quinlan"')
-	})
-
-	it('minimal: a banner of the band and the links only', () => {
-		const html = port('x.banner.rung-minimal-full')
-		expect(sections(html)).toHaveLength(1)
-		expect(html).toContain('aria-label="Expert reviewed"')
-		expect(html).toContain('Expert reviewed</div>')
-		expect(html).not.toContain('&amp; certified')
-		for (const absent of [
-			'certrev-r-bys',
-			'certrev-r-by"',
-			'certrev-r-foot',
-			'certrev-r-rule',
-			'certrev-r-scope',
-			'Written by',
-		]) {
-			expect(html, absent).not.toContain(absent)
-		}
-		expect(html).toContain('>View profile</a>')
-		expect(html).toContain('>View certificate</a>')
-	})
-
-	it('minimal: a sidebar of the band and the links only', () => {
-		const html = port('x.sidebar.rung-minimal-full')
-		expect(html).toContain('aria-label="Expert reviewed"')
-		for (const absent of [
-			'certrev-r-side-body',
-			'certrev-r-by',
-			'certrev-r-scope',
-			'<p>',
-			'<blockquote>',
-			'<details',
-		]) {
-			expect(html, absent).not.toContain(absent)
-		}
-		expect(html).toContain('>View Profile</a>')
-		expect(html).toContain('>View Certificate</a>')
-	})
-
-	it('the floating pill is the same on every rung', () => {
-		const [first, ...rest] = ['credentialed', 'named', 'minimal'].map((rung) => port(`x.floating.rung-${rung}`))
-		expect(first).toContain('<div class="certrev-r-pill">')
-		for (const pill of rest) expect(pill).toBe(first)
-	})
-
+describe('the legacy preset and rung keys', () => {
+	// The portal still sends `preset` and `rung` to renderers already in the field. This face never reads them: a def
+	// that carries them, with any value, paints the card it paints without them.
 	it.each([
 		'memo',
 		'standard',
@@ -232,16 +156,31 @@ describe('the rung', () => {
 		'number',
 		'null',
 		'array',
-	])('a rung of kind %s is the memo rung: the memo card, the bio and the fold all print', (name) => {
-		const banner = port(`x.banner.rung-unknown-${name}`)
+	])('a legacy rung of kind %s is ignored: the memo card, the bio and the fold all print', (name) => {
+		const banner = port(`x.banner.legacy-key-${name}`)
 		expect(sections(banner)).toHaveLength(2)
 		expect(banner).toContain('Expert memo')
-		expect(DETAILS.exec(port(`x.sidebar.rung-unknown-${name}`))?.[1]).toBe('Read the expert memo')
+		expect(DETAILS.exec(port(`x.sidebar.legacy-key-${name}`))?.[1]).toBe('Read the expert memo')
 	})
 
-	it('a def with no rung at all is the memo rung', () => {
-		expect(sections(port('x.banner.rung-absent'))).toHaveLength(2)
-		expect(DETAILS.exec(port('x.sidebar.rung-absent'))?.[1]).toBe('Read the expert memo')
+	it('a def with a legacy preset and no rung paints the memo card', () => {
+		expect(sections(port('x.banner.legacy-key-absent'))).toHaveLength(2)
+		expect(DETAILS.exec(port('x.sidebar.legacy-key-absent'))?.[1]).toBe('Read the expert memo')
+	})
+
+	it.each([
+		'banner',
+		'sidebar',
+		'floating',
+	] as const)('%s: a def carrying the legacy keys paints the same bytes as one without them, whatever the rung says', (layout) => {
+		const base = { v: 1, tokens: { accentColor: '#0A1B3F', cornerRadius: '12px' }, hidden: [], layout, face: 'reader' }
+		const { content } = cell('x.banner.legacy-key-memo')
+		const input = (def: unknown) => ({ def, layout, certId, content })
+		const clean = renderReaderFace(input(base))
+		expect(clean).not.toBe('')
+		for (const rung of ['memo', 'minimal', 'named', 'credentialed', 'standard', 7, null]) {
+			expect(renderReaderFace(input({ ...base, preset: 'minimal', rung })), String(rung)).toBe(clean)
+		}
 	})
 })
 
@@ -290,7 +229,7 @@ describe('a toned face', () => {
 	})
 })
 
-describe('a face with no design paints the memo-rung defaults', () => {
+describe('a face with no design paints the card defaults', () => {
 	it('a null def: navy #0a1b3f, 12px, the sans stack, and no def version', () => {
 		const html = port('x.banner.no-def-null')
 		expect(html).toContain(

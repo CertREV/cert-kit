@@ -13,6 +13,7 @@
 
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { stripLegacyEcho } from '../../__tests__/legacy-stamp.js'
 import { CERT_STRINGS_VERSION } from '../../components/render-def.js'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
 import { acceptedFaceDigest, sha256HexUtf8, showsWholeCard } from '../delivered-face.js'
@@ -58,12 +59,16 @@ const SERVER = JSON.parse(
 const CLIENT = JSON.parse(
 	readFileSync(new URL('./__golden__/delivered-face-client-1.2.1.json', import.meta.url), 'utf8'),
 ) as { readonly seedsWithFace: Record<DefName, string> }
+// The 1.2.1 seeds echoed the frozen `preset` / `rung`; 3.0.0 reads and keeps neither. The file is untouched.
+for (const name of Object.keys(CLIENT.seedsWithFace) as DefName[]) {
+	CLIENT.seedsWithFace[name] = stripLegacyEcho(CLIENT.seedsWithFace[name])
+}
 
 /** What 1.2.1 streamed for one server case, with the reader stylesheet put back. */
 const golden121 = (name: string): string => {
 	const at = SERVER.cases[name]
 	if (at === undefined) throw new Error(`no golden for ${name}`)
-	return SERVER.outputs[at].split(SERVER.readerCssPlaceholder).join(SERVER.readerCss)
+	return stripLegacyEcho(SERVER.outputs[at].split(SERVER.readerCssPlaceholder).join(SERVER.readerCss))
 }
 
 /**
