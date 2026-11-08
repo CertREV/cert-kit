@@ -6,7 +6,7 @@
  * The brand-render projection of the cert envelope — the OPTIONS
  * of a brand's native cert component (the registered `CertReviewCard`) on
  * a headless blocks-mode entry (Builder.io). CertREV serves the data + the ready-made
- * strings; the brand renders it within the design-guide ladder (enforced live by the
+ * strings; the brand renders it within the design guide's rules (enforced live by the
  * crawl monitor + the MSA anti-stripping teeth).
  *
  * SINGLE SOURCE: this type is HOMED HERE so the portal's cert-chrome exporter,
