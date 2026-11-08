@@ -47,7 +47,7 @@ const allFields = [
 ]
 
 /** The e.l.f.-shaped def as the envelope face maps it: black accent, no reviewer photo. */
-const elfFace = { rung: 'standard', placedFields: allFields.filter((f) => f !== 'reviewerPhoto') }
+const elfFace = { placedFields: allFields.filter((f) => f !== 'reviewerPhoto') }
 const elfTheme = { accentColor: '#000000', accentFg: '#ffffff' }
 
 export const RENDER_SHAPES: Readonly<Record<string, Record<string, unknown>>> = {
@@ -67,6 +67,6 @@ export const RENDER_SHAPES: Readonly<Record<string, Record<string, unknown>>> = 
 	sidebarLongElf: { mode: 'sidebar', theme: elfTheme, face: elfFace, facts },
 	sidebarShort: { mode: 'sidebar', face: elfFace, facts: { ...facts, memo: SHORT_MEMO } },
 	floating: { mode: 'floating', face: elfFace, facts },
-	customLong: { mode: 'custom', face: { rung: 'standard', placedFields: ['label', 'memo', 'certificateLink'] }, facts },
+	customLong: { mode: 'custom', face: { placedFields: ['label', 'memo', 'certificateLink'] }, facts },
 	escapedMemo: { mode: 'banner', facts: { ...facts, memo: `${LONG_MEMO} <script>alert(1)</script> & "quoted"` } },
 }

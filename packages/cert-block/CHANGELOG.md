@@ -5,6 +5,28 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 3.0.0 · 2026-11-08
+
+**Claim strength is no longer a concept: the `preset` and `rung` of a render def, the `rung` of a face and the
+`data-certrev-rung` stamp are removed.** This is a major release because it changes the rendered output (the stamp is
+gone) and the public types. A card paints exactly what the memo face painted before: on the banner, the sidebar and the
+inline-collapsed layouts the whole card (memo, bio, photo, credential, scope line and links); the floating layout is the
+pill (label, Profile and Certificate links), as it always was; a custom layout paints its `customFace.placedFields`.
+The disclosure and FTC wording is unchanged, byte for byte.
+
+- **Removed.** `CertChromeRenderDef.preset` and `.rung`; `CertBlockFace.rung`; the `data-certrev-rung="..."` attribute
+  `renderCertBlock` printed on the root whenever a face was passed (a face-less render never printed it); the reader
+  face's rung (`minimal`, `named` and `credentialed` no longer exist as ways to paint less than the card).
+- **A delivered def is read without them.** `parseRenderDef` no longer requires, copies or returns `preset` or `rung`:
+  a def without them now parses (it was `null`), and a def with them parses to the same object, the two keys ignored as
+  any other extra key. The portal keeps sending both as two frozen constants for renderers already in the field.
+  `faceFromDef` returns `{ placedFields }` only.
+- **Behaviour you may notice.** A def that still says `rung: 'minimal'`, `'named'` or `'credentialed'` paints the whole
+  card, as any other value always did. Output that carried the stamp is otherwise the same bytes without
+  ` data-certrev-rung="..."`.
+- **Migration.** Delete `preset` and `rung` from any `CertChromeRenderDef` or `CertBlockFace` literal you build; read
+  nothing from them. `@certrev/cert-contract` is `^0.7.0` (a documentation-only change there).
+
 ## 2.1.1 · 2026-11-02
 
 **A storefront whose `script-src` is a per-request nonce with `'strict-dynamic'` logs no Content-Security-Policy

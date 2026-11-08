@@ -45,8 +45,6 @@ describe('serializeSeed / parseSeed', () => {
 		signature: { alg: 'ed25519', kid: 'k', sig: 's', signedAt: '2026-09-26T00:00:00.000Z' },
 		renderDef: {
 			v: 4,
-			preset: 'memo',
-			rung: 'standard',
 			tokens: { accentColor: '#000000' },
 			hidden: ['reviewerPhoto'],
 		},

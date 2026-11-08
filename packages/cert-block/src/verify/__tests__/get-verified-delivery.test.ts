@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
+import { stripLegacyDefKeys } from '../../__tests__/legacy-stamp.js'
 import { DELIVERED_FACE, matchingBody } from '../../builder/__tests__/delivered-face-shapes.js'
 import {
 	builderSubject,
@@ -66,6 +67,9 @@ function setup(first?: () => Response | Promise<Response>, staleMs?: number) {
 	}
 }
 
+/** What the verified read returns for `ELF_LIKE_DEF`: the frozen `preset` / `rung` keys it carries are not kept. */
+const PARSED_ELF_LIKE_DEF = stripLegacyDefKeys(ELF_LIKE_DEF)
+
 describe('deliveryUrl / deliveryCacheKey', () => {
 	it('builds the Delivery route and encodes the id', () => {
 		expect(deliveryUrl(`${BASE}/`, 'builder', ENTRY_ID)).toBe(DELIVERY_URL)
@@ -104,14 +108,28 @@ describe('parseRenderDef', () => {
 			}),
 		).toEqual({
 			v: 4,
-			preset: 'memo',
-			rung: 'standard',
 			tokens: { accentColor: '#000000', surface: '#fff' },
 			barInkFg: '#ffffff',
 			hidden: ['reviewerPhoto'],
 			layout: 'custom',
 			customFace: { placedFields: ['memo', 'scopeLine'] },
 		})
+	})
+
+	it('ignores the legacy preset and rung keys the portal still sends: a def with them parses to the same object', () => {
+		const plain = parseRenderDef(ELF_LIKE_DEF)
+		expect(plain).not.toBeNull()
+		for (const legacy of [
+			{ preset: 'memo', rung: 'memo' },
+			{ preset: 'minimal', rung: 'minimal' },
+			{ preset: 7, rung: null },
+			{ preset: undefined, rung: undefined },
+		]) {
+			const parsed = parseRenderDef({ ...ELF_LIKE_DEF, ...legacy })
+			expect(parsed).toEqual(plain)
+			expect(parsed).not.toHaveProperty('preset')
+			expect(parsed).not.toHaveProperty('rung')
+		}
 	})
 
 	it('drops a barInkFg that is not one of the two inks', () => {
@@ -123,8 +141,6 @@ describe('parseRenderDef', () => {
 		['an array', [ELF_LIKE_DEF]],
 		['a string v', { ...ELF_LIKE_DEF, v: '4' }],
 		['a non-finite v', { ...ELF_LIKE_DEF, v: Number.NaN }],
-		['no preset', { ...ELF_LIKE_DEF, preset: undefined }],
-		['no rung', { ...ELF_LIKE_DEF, rung: 1 }],
 		['tokens not an object', { ...ELF_LIKE_DEF, tokens: '#000' }],
 		['hidden a string', { ...ELF_LIKE_DEF, hidden: 'reviewerPhoto' }],
 		['hidden with a non-string', { ...ELF_LIKE_DEF, hidden: ['reviewerPhoto', 1] }],
@@ -140,7 +156,7 @@ describe('getVerifiedDelivery', () => {
 		const t = setup()
 		const got = await getVerifiedDelivery(t.opts())
 		expect(got.verdict.decision).toBe('render')
-		expect(got.renderDef).toEqual(ELF_LIKE_DEF)
+		expect(got.renderDef).toEqual(PARSED_ELF_LIKE_DEF)
 		expect(t.delivery.calls).toEqual([DELIVERY_URL])
 	})
 
@@ -251,7 +267,7 @@ describe('getVerifiedDelivery', () => {
 		const payload = issuer.envelope().payload
 		const cached: CachedDelivery = { kind: 'verified', payload, renderDef: parseRenderDef(ELF_LIKE_DEF) }
 		const ctx = { platform: 'builder', externalId: ENTRY_ID }
-		expect(settleDelivery(cached, { ...ctx, now: new Date(T0) }).renderDef).toEqual(ELF_LIKE_DEF)
+		expect(settleDelivery(cached, { ...ctx, now: new Date(T0) }).renderDef).toEqual(PARSED_ELF_LIKE_DEF)
 		expect(settleDelivery(cached, { ...ctx, externalId: 'other', now: new Date(T0) })).toEqual({
 			verdict: { decision: 'suppress', reason: 'subject_mismatch' },
 			renderDef: null,
@@ -530,7 +546,7 @@ describe('getVerifiedDelivery: the face sibling (1.3.0)', () => {
 		t.delivery.respond(() => json(matchingBody(t.issuer)))
 		const first = await getVerifiedDelivery(t.opts())
 		expect(first.verdict.decision).toBe('render')
-		expect(first.renderDef).toEqual(ELF_LIKE_DEF)
+		expect(first.renderDef).toEqual(PARSED_ELF_LIKE_DEF)
 		expect(first.face).toEqual(DELIVERED_FACE)
 		expect(t.cache.peek(deliveryCacheKey(t.opts()))).toMatchObject({ kind: 'verified', face: DELIVERED_FACE })
 		t.advance(30_000)

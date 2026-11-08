@@ -433,7 +433,7 @@ describe('reviewer name — honorific stripping (Liquid parity)', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WS-B — placedFields-strict rendering: visibility is the engine's face alone,
-// `rung` is a stamp (never a branch), and an ABSENT face grandfathers 0.3.0.
+// and an ABSENT face grandfathers 0.3.0.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Every engine field id renderCertBlock knows how to paint. */
@@ -453,36 +453,32 @@ const ALL_FIELDS = [
 ] as const
 
 /** A full claim face (everything placed) — the strict analogue of the grandfathered full-facts render. */
-const FULL_FACE: CertBlockFace = { rung: 'credentialed', placedFields: [...ALL_FIELDS] }
-
-/** Drop the observability-only rung attribute so a strict render can be compared to its grandfathered twin. */
-function stripRung(html: string): string {
-	return html.replace(/ data-certrev-rung="[^"]*"/g, '')
-}
+const FULL_FACE: CertBlockFace = { placedFields: [...ALL_FIELDS] }
 
 /** A face placing everything EXCEPT the given ids. */
 function faceExcept(...omit: string[]): CertBlockFace {
-	return { rung: 'credentialed', placedFields: ALL_FIELDS.filter((f) => !omit.includes(f)) }
+	return { placedFields: ALL_FIELDS.filter((f) => !omit.includes(f)) }
 }
 
 describe('WS-B: face-absent grandfathers the 0.3.0 full-facts render byte-for-byte', () => {
 	for (const mode of MODES) {
-		it(`${mode}: a full-face strict render === the grandfathered render (modulo the rung stamp)`, () => {
+		it(`${mode}: a full-face strict render === the grandfathered render `, () => {
 			const grandfathered = renderCertBlock({ mode, facts: FACTS })
 			const strictFull = renderCertBlock({ mode, facts: FACTS, face: FULL_FACE })
-			// the ONLY difference a full face introduces is the observability stamp
-			expect(strictFull).toContain('data-certrev-rung="credentialed"')
-			expect(stripRung(strictFull)).toBe(grandfathered)
+			expect(strictFull).toBe(grandfathered)
 		})
 	}
 
-	it('an absent face emits NO rung attribute (grandfather stays byte-clean)', () => {
+	it('no face, and no mode of a face, prints a data-certrev-rung attribute (the stamp is gone)', () => {
 		expect(renderCertBlock({ mode: 'banner', facts: FACTS })).not.toContain('data-certrev-rung')
+		for (const mode of MODES) {
+			expect(renderCertBlock({ mode, facts: FACTS, face: FULL_FACE }), mode).not.toContain('data-certrev-rung')
+		}
 	})
 })
 
 describe('WS-B: strict placedFields — a minimal face renders only what it placed', () => {
-	const MINIMAL: CertBlockFace = { rung: 'minimal', placedFields: ['label', 'profileLink', 'certificateLink'] }
+	const MINIMAL: CertBlockFace = { placedFields: ['label', 'profileLink', 'certificateLink'] }
 
 	it('custom: [label, profileLink, certificateLink] paints exactly those, nothing else', () => {
 		const html = renderCertBlock({ mode: 'custom', facts: FACTS, face: MINIMAL })
@@ -499,9 +495,8 @@ describe('WS-B: strict placedFields — a minimal face renders only what it plac
 		expect(html).not.toContain(CERT_SCOPE_LINE)
 		expect(html).not.toContain(CREDENTIAL_VERIFIED_ATTRIBUTION)
 		expect(visibleText(html)).not.toContain(COMPENSATED_EXPERT_CUE)
-		// the custom face still carries the strict + observability markers
+		// the custom face still carries the strict markers
 		expect(html).toContain('data-certrev-strings-version="2026-07"')
-		expect(html).toContain('data-certrev-rung="minimal"')
 		expect(html).toContain('data-certrev-mode="custom"')
 	})
 
@@ -520,7 +515,6 @@ describe('WS-B: strict placedFields — a minimal face renders only what it plac
 
 describe('WS-B: a claim face paints all disclosures byte-verbatim', () => {
 	const CLAIM: CertBlockFace = {
-		rung: 'memo',
 		placedFields: [
 			'label',
 			'bylineCredentialed',
@@ -553,7 +547,7 @@ describe('WS-B: a claim face paints all disclosures byte-verbatim', () => {
 
 describe('WS-B: the credentialed byline group is all-or-nothing on `bylineCredentialed`', () => {
 	it('sidebar: a PLAIN byline shows the name only — no credential suffix, no attribution/date', () => {
-		const face: CertBlockFace = { rung: 'named', placedFields: ['label', 'bylinePlain', 'reviewerPhoto'] }
+		const face: CertBlockFace = { placedFields: ['label', 'bylinePlain', 'reviewerPhoto'] }
 		const html = renderCertBlock({ mode: 'sidebar', facts: FACTS, face })
 		expect(html).toContain('Jane Doe')
 		expect(html).not.toContain('Jane Doe, MD')
@@ -562,7 +556,7 @@ describe('WS-B: the credentialed byline group is all-or-nothing on `bylineCreden
 	})
 
 	it('sidebar: a CREDENTIALED byline fuses the credential + the grouped attribution/date', () => {
-		const face: CertBlockFace = { rung: 'credentialed', placedFields: ['label', 'bylineCredentialed'] }
+		const face: CertBlockFace = { placedFields: ['label', 'bylineCredentialed'] }
 		const html = renderCertBlock({ mode: 'sidebar', facts: FACTS, face })
 		expect(html).toContain('Jane Doe, MD')
 		expect(html).toContain(CREDENTIAL_VERIFIED_ATTRIBUTION)
@@ -633,25 +627,12 @@ describe('WS-B: custom face — a compliant vertical stack in canonical order', 
 		for (const i of order) expect(i).toBeGreaterThanOrEqual(0)
 		const sorted = [...order].sort((a, b) => a - b)
 		expect(order).toEqual(sorted)
-		// the modal + strings + rung markers ride the same building blocks as the locked layouts
+		// the modal + strings markers ride the same building blocks as the locked layouts
 		expect(html).toContain('data-certrev-modal-open')
 		expect(html).toContain('data-certrev-strings-version="2026-07"')
-		expect(html).toContain('data-certrev-rung="credentialed"')
 		// it is a single flex-column stack
 		expect(html).toContain('flex-direction:column;gap:14px;')
 	})
-})
-
-describe('WS-B: `rung` is a stamp, never a branch — it never changes visibility', () => {
-	for (const mode of ['banner', 'sidebar', 'floating', 'custom'] as CertBlockLayout[]) {
-		it(`${mode}: two faces with the same placedFields but different rung render identical HTML (modulo the rung attr)`, () => {
-			const placedFields = [...ALL_FIELDS]
-			const a = renderCertBlock({ mode, facts: FACTS, face: { rung: 'minimal', placedFields } })
-			const b = renderCertBlock({ mode, facts: FACTS, face: { rung: 'credentialed', placedFields } })
-			expect(a).not.toBe(b) // the rung attr differs
-			expect(stripRung(a)).toBe(stripRung(b)) // …but nothing else does
-		})
-	}
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

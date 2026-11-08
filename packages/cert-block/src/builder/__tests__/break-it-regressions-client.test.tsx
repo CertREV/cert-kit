@@ -42,7 +42,7 @@ const page = () => (
 	</div>
 )
 
-/** A banner document with no memo part (the memo-less rung), re-digested. */
+/** A banner document with no memo part, re-digested. */
 function memoLessBanner(): ContractFixture {
 	const fixture = contractFixture('banner-elf-like')
 	const card = { ...fixture.card, parts: { top: fixture.card.parts.top } }

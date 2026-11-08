@@ -42,8 +42,6 @@ import { OPTIONS_ONLY_SHAPES } from './options-only-shapes.js'
 /** The def the judge's canary brand served: v9, Banners (no `layout`), nothing hidden unless a test says so. */
 const v9 = (hidden: unknown = []) => ({
 	v: 9,
-	preset: 'memo',
-	rung: 'memo',
 	tokens: { accentColor: '#0A1B3F', barInk: '#0A1B3F', fontSlot: 'sans', cornerRadius: '14px', surface: '#ffffff' },
 	barInkFg: '#ffffff',
 	accentFg: '#ffffff',

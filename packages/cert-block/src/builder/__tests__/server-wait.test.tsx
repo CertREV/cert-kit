@@ -332,8 +332,6 @@ describe('SC1/SC2: a warm card never waits, and refreshes off the render path', 
 								json(
 									deliveryBody(issuer.envelope(), {
 										v: 9,
-										preset: 'p',
-										rung: 'r',
 										tokens: { accentColor: '#e6007e' },
 										hidden: [],
 									}),

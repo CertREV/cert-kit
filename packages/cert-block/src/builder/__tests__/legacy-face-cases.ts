@@ -56,6 +56,8 @@ const HOSTILE = {
 
 export const CONTENTS: Readonly<Record<string, CertContent>> = { full: FULL, sparse: SPARSE, hostile: HOSTILE }
 
+// `preset` and `rung` in these defs are the frozen constants the portal still sends: this release ignores them, and the
+// 1.1.1 / 1.2.1 goldens were recorded with them.
 const ELF = { v: 4, preset: 'memo', rung: 'standard', tokens: { accentColor: '#000000' }, hidden: ['reviewerPhoto'] }
 const BRANDED = {
 	v: 2,

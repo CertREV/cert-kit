@@ -1,6 +1,6 @@
 /**
  * The reader's token allow-list (M3): a colour is `#RGB` or `#RRGGBB`, a radius is a bare `0` or one non-negative
- * px / rem / em / % length, and anything else paints the default (navy `#0a1b3f`, 12px: the design guide's memo-rung
+ * px / rem / em / % length, and anything else paints the default (navy `#0a1b3f`, 12px: the design guide's card
  * defaults, which a face with no design also paints; 1.3.0 painted `#0A1B3F` and 14px). The portal's
  * `certrev-reader-tokens` snippet and the PHP twin's def parser hold the same list.
  *
@@ -164,7 +164,7 @@ describe('the style attribute cannot be left', () => {
 	})
 })
 
-describe('a face with no design paints the design guide memo-rung defaults', () => {
+describe('a face with no design paints the design guide card defaults', () => {
 	it.each([undefined, null, {}, { tokens: undefined }, { tokens: {} }, 'nope', 7])('%j', (def) => {
 		expect(readerTokens(def)).toEqual({
 			style: "--cr-ba:#0a1b3f;--cr-ba-fg:#ffffff;--cr-br:12px;--cr-bf:'DM Sans', ui-sans-serif, system-ui, sans-serif",

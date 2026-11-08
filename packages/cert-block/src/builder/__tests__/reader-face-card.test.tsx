@@ -15,6 +15,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { stripLegacyStamp } from '../../__tests__/legacy-stamp.js'
 import { CERTREV_LINK_REL } from '../../components/rel.js'
 import { READER_CSS } from '../../reader/reader-css.generated.js'
 import { renderReaderFace } from '../../reader/render.js'
@@ -363,7 +364,7 @@ describe('every other def paints the 1.1.1 wrapper around the 1.1.1 bytes, with 
 	])('%s', async (name, version) => {
 		delivery.respond(() => json(deliveryBody(issuer.envelope(), RAW_DEFS[name])))
 		const html = await renderToHtml(legacyCard())
-		const golden = GOLDEN.cases[`full.${name}.default`]?.html
+		const golden = stripLegacyStamp(GOLDEN.cases[`full.${name}.default`]?.html ?? '')
 		expect(golden, name).toBeTruthy()
 		expect(withoutSeed(chromeRoot(html) ?? '').startsWith(`${legacyWrapper(version)}${golden}</div>`)).toBe(true)
 		expect(chromeRoot(html)).toContain(' data-certrev-envelope="')
@@ -375,7 +376,7 @@ describe('every other def paints the 1.1.1 wrapper around the 1.1.1 bytes, with 
 	it('an editor-chosen mode on a def with an unknown face still paints the legacy face for that mode', async () => {
 		delivery.respond(() => json(deliveryBody(issuer.envelope(), RAW_DEFS['face-unknown'])))
 		const html = await renderToHtml(legacyCard({ mode: 'sidebar' }))
-		const golden = GOLDEN.cases['full.face-unknown.sidebar']?.html
+		const golden = stripLegacyStamp(GOLDEN.cases['full.face-unknown.sidebar']?.html ?? '')
 		expect(golden).toBeTruthy()
 		expect(withoutSeed(chromeRoot(html) ?? '').startsWith(`${legacyWrapper(2)}${golden}</div>`)).toBe(true)
 	})
