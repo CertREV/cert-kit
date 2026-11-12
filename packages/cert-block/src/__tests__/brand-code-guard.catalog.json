@@ -1,0 +1,284 @@
+{
+	"$comment": "Copy of the portal's scripts/lint-brand-identifiers.catalog.json brands (tokens, domains, ids) for brand-code-guard.test.ts. Refresh when the portal adds a brand.",
+	"brands": [
+		{
+			"brand": "bodi",
+			"tokens": [
+				[
+					"bodi"
+				],
+				[
+					"beachbody"
+				]
+			],
+			"domains": [
+				"bodi.com",
+				"beachbody.com"
+			],
+			"ids": [
+				"a172c6b3-ad0d-4420-beb1-6e399459ac66",
+				"0cd8777f-6c36-4357-a51b-05da7a34009d"
+			]
+		},
+		{
+			"brand": "within",
+			"tokens": [
+				[
+					"agency",
+					"within"
+				]
+			],
+			"caseSensitiveTokens": [
+				"WITHIN"
+			],
+			"notFollowedBy": [
+				" GROUP",
+				" group",
+				" the ",
+				" a ",
+				" an ",
+				" its ",
+				" this ",
+				" that ",
+				" each ",
+				" one ",
+				" any ",
+				" your ",
+				" incorporating ",
+				" which ",
+				" intent"
+			],
+			"literals": [
+				"within"
+			],
+			"ids": [
+				"af7ed7a0-c107-4f7f-9006-47ae0601cfa2",
+				"6c02f9f2-5171-46f9-a7a8-eca4a19f4d27"
+			],
+			"domains": [
+				"within.co"
+			]
+		},
+		{
+			"brand": "yise",
+			"tokens": [
+				[
+					"yise"
+				],
+				[
+					"yseshop"
+				]
+			],
+			"domains": [
+				"yisebeauty.com",
+				"yseshop.myshopify.com"
+			],
+			"ids": [
+				"0073e400-ecae-4155-ae08-57d2d6bf43f2",
+				"e2099208-530b-4557-9d02-74316a54c6dc"
+			]
+		},
+		{
+			"brand": "butcher-box",
+			"tokens": [
+				[
+					"butcherbox"
+				],
+				[
+					"butcher",
+					"box"
+				]
+			],
+			"domains": [
+				"butcherbox.com"
+			],
+			"ids": [
+				"9842bc60-d3e3-4a8c-bc68-066a10ec26a8",
+				"b1c0b9cc-1a1c-4712-a5aa-d73e2f50d8b2"
+			]
+		},
+		{
+			"brand": "intellipure",
+			"tokens": [
+				[
+					"intellipure"
+				],
+				[
+					"intelli",
+					"pure"
+				],
+				[
+					"healthway"
+				]
+			],
+			"domains": [
+				"intellipure.com",
+				"healthway.com"
+			],
+			"ids": [
+				"ef21727d-8a63-4c58-9541-9be57a136443"
+			]
+		},
+		{
+			"brand": "under-luna",
+			"tokens": [
+				[
+					"underluna"
+				],
+				[
+					"under",
+					"luna"
+				]
+			],
+			"domains": [
+				"underluna.com"
+			],
+			"ids": [
+				"abdbd5b1-05bf-4301-b246-45dd39727c14"
+			]
+		},
+		{
+			"brand": "elf-cosmetics",
+			"tokens": [
+				[
+					"elf",
+					"cosmetics"
+				],
+				[
+					"e",
+					"l",
+					"f"
+				],
+				[
+					"elfcosmetics"
+				]
+			],
+			"wordTokens": [
+				"elf"
+			],
+			"domains": [
+				"elfcosmetics.com"
+			],
+			"ids": [
+				"0007913e-fb9a-4ca1-992d-16acd228e3e6",
+				"c057f873-e97e-401e-b7cc-d9ba99981506",
+				"d63ea115-557b-4b8b-a13b-20ec9edfdc8e"
+			]
+		},
+		{
+			"brand": "dr-scholls",
+			"tokens": [
+				[
+					"scholl"
+				],
+				[
+					"scholls"
+				],
+				[
+					"drscholls"
+				]
+			],
+			"domains": [
+				"drscholls.com"
+			],
+			"ids": [
+				"fdd11b49-6e5e-4046-a798-b710209f432d",
+				"a1e9b551-4690-457d-8ecb-88704ccdbcde"
+			]
+		},
+		{
+			"brand": "site-jet",
+			"tokens": [
+				[
+					"sitejet"
+				],
+				[
+					"site",
+					"jet"
+				]
+			],
+			"ids": [
+				"78aface3-3abd-4a2f-ade2-96313ae9e7ac"
+			]
+		},
+		{
+			"brand": "beb-organic",
+			"tokens": [
+				[
+					"beb"
+				],
+				[
+					"beborganic"
+				]
+			],
+			"domains": [
+				"beborganic.com"
+			],
+			"ids": [
+				"531c3ddb-6b1f-4941-906e-04b035ac04df"
+			]
+		},
+		{
+			"brand": "banner-day",
+			"tokens": [
+				[
+					"bannerday"
+				],
+				[
+					"banner",
+					"day"
+				]
+			],
+			"ids": [
+				"0de2fa44-a453-4d83-b4b9-0dca90647fe9"
+			]
+		},
+		{
+			"brand": "vitality-naturals",
+			"tokens": [
+				[
+					"vitality",
+					"naturals"
+				]
+			],
+			"domains": [
+				"vitality-naturals-aygmkte3.myshopify.com"
+			],
+			"ids": [
+				"279cbe58-f8a6-4f81-9730-ccb179d0f9d4"
+			]
+		},
+		{
+			"brand": "chameleon",
+			"tokens": [
+				[
+					"chameleon"
+				]
+			],
+			"domains": [
+				"chameleon.co"
+			],
+			"ids": [
+				"a230b8b5-f85c-4ccb-a9b8-9cdf291c97dd"
+			]
+		},
+		{
+			"brand": "shopify-gmyn4b-u8",
+			"tokens": [
+				[
+					"gmyn4b",
+					"u8"
+				],
+				[
+					"gmyn4b"
+				]
+			],
+			"domains": [
+				"gmyn4b-u8.myshopify.com"
+			],
+			"ids": [
+				"a5e59080-a187-4edb-81dc-5b3902d4fd14"
+			]
+		}
+	]
+}

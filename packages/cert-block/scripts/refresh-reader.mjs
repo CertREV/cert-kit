@@ -3,7 +3,9 @@
  * One-command refresh of everything the reader face copies from the CertREV portal checkout.
  *
  *   node scripts/refresh-reader.mjs --portal <portal repo>            (or CERTREV_PORTAL=<portal repo>)
- *   node scripts/refresh-reader.mjs --portal <portal repo> --oracle   also re-run the portal's Liquid harness
+ *   node scripts/refresh-reader.mjs --portal <portal repo> --oracle --masked-brand <slug>
+ *                                                                     also re-run the portal's Liquid harness, painting
+ *                                                                     the portal's masked fixture brand <slug> (required)
  *
  * It READS the portal and writes only inside packages/cert-block. What it copies, byte for byte:
  *   1. the generated reader stylesheet: the lines of shopify/extensions/certrev-schema/assets/certrev-cert.css from
@@ -165,6 +167,11 @@ for (const name of goldenNames) {
 // ── 3. the oracle (optional) ─────────────────────────────────────────────────────────
 const oracle = {}
 if (process.argv.includes('--oracle')) {
+	const maskedBrandSlug = arg('masked-brand')
+	if (!maskedBrandSlug) {
+		console.error('--oracle needs --masked-brand <slug>: the portal masked fixture brand the oracle paints (no default)')
+		process.exit(2)
+	}
 	const vitest = path.join(portal, 'node_modules', 'vitest', 'vitest.mjs')
 	if (!fs.existsSync(vitest)) {
 		console.error(`--oracle needs the portal's installed vitest (${vitest})`)
@@ -192,7 +199,7 @@ if (process.argv.includes('--oracle')) {
 				'',
 			].join('\n'),
 		)
-		const env = { ...process.env, READER_ORACLE_OUT: work }
+		const env = { ...process.env, READER_ORACLE_OUT: work, READER_ORACLE_MASKED_BRAND: maskedBrandSlug }
 		for (const k of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS', 'ANTHROPIC_API_KEY']) {
 			delete env[k]
 		}

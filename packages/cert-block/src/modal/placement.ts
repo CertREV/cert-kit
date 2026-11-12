@@ -60,7 +60,7 @@ export const TOP_CONTENT_SELECTOR = TOP_ANCHORS.map((a) => a.selector).join(', '
 /** Site-chrome containers a cert wrap must NEVER anchor into. The anchor selectors (`.rte` / `article`
  *  / `main`) are NOT article-exclusive on real merchant themes: a VISIBLE announcement bar, header,
  *  footer, nav, or cart drawer often carries its own `.rte` that precedes the article in document
- *  order — IntelliPure's announcement bar is literally `<div class="announcement__content … rte">`.
+ *  order — a theme's announcement bar can literally be `<div class="announcement__content … rte">`.
  *  `isRenderable` can't reject those (they're visible), so `querySelector('.rte')` returned the
  *  announcement bar and the contributors card was injected there instead of the article (the
  *  "contributors not showing" regression). Placement scopes anchors out of chrome STRUCTURALLY
@@ -107,7 +107,7 @@ export interface PlaceCertResult {
  * are NOT article-exclusive on real merchant themes: a CLOSED cart-drawer / nav / search popup often
  * carries its own `.rte` (e.g. an empty-cart message) that sits BEFORE the article in document order,
  * so `querySelector('.rte')` returns the DRAWER's copy and the cert card gets relocated into a hidden
- * panel — invisible to the reader (observed live on IntelliPure's theme: the card landed in
+ * panel — invisible to the reader (observed live on a Shopify theme: the card landed in
  * `<cart-drawer hidden>`). Skipping hidden matches makes placement fall through to the visible article
  * content for BOTH the top card and the bottom memo.
  *
@@ -128,7 +128,7 @@ function isRenderable(el: Element): boolean {
  * Whether `el` sits inside SITE CHROME (announcement bar / header / footer / nav / cart drawer /
  * modal). Complements `isRenderable`: chrome anchors are usually VISIBLE, so the visibility guard
  * can't reject them — but a cert wrap must never anchor there. This is the guard that keeps the
- * contributors card out of IntelliPure's `.rte`-classed announcement bar.
+ * contributors card out of a `.rte`-classed announcement bar.
  */
 function isInSiteChrome(el: Element): boolean {
 	return el.closest(SITE_CHROME_SELECTOR) !== null
@@ -210,7 +210,7 @@ export function placeWrap(doc: Document, wrap: HTMLElement): PlaceResult {
 		// marker the memo uses at the bottom. `#references` (emitted by the html-generator, always present
 		// on a certified article) lives INSIDE the body-content container, so `closest(TOP_CONTENT_SELECTOR)`
 		// resolves the exact article `.rte` / `article` / `main` — never a same-classed site-chrome element
-		// that merely precedes the article in document order (IntelliPure's `.rte` announcement bar, which
+		// that merely precedes the article in document order (a theme's `.rte` announcement bar, which
 		// is visible so isRenderable can't reject it — the "contributors not showing" regression). This ties
 		// the card + memo to the SAME article region by construction.
 		const refs = doc.querySelector(REFERENCES_SELECTOR)
@@ -237,7 +237,7 @@ export function placeWrap(doc: Document, wrap: HTMLElement): PlaceResult {
 	} else {
 		// Memo → just before the references list when one exists. The references are the reliable
 		// bottom-of-content marker INDEPENDENT of which landmark matched: a theme can have a small hero
-		// <article> BEFORE the content <article> (IntelliPure: `article banner` then `article
+		// <article> BEFORE the content <article> (seen on a live theme: `article banner` then `article
 		// page-width`), and `firstUsableAnchor` matches the hero first — so `afterend(hero)` would
 		// strand the memo at the TOP, above the card. Anchoring off `#references` (the html-generator's
 		// references list, always present on a certified article) avoids that. The old code required the

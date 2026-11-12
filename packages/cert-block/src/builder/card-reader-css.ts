@@ -2,7 +2,7 @@
  * The reader stylesheet as the Builder card inlines it (1.2.0): `READER_CSS` without its remote `@font-face` rules.
  *
  * The portal's reader CSS loads its faces from `https://assets.certrev.com/fonts/…`. A storefront whose CSP
- * `font-src` does not name that origin (e.l.f.'s live policy names `'self' data:` and a list of font CDNs, no
+ * `font-src` does not name that origin (one live storefront's policy names `'self' data:` and a list of font CDNs, no
  * CertREV origin) refuses each load and logs a violation, and the text falls back anyway. So the card ships only the
  * `local()` fallback faces (Arial or Times New Roman under each family's metric overrides), which need no CSP at all:
  * the face looks the same as it does on a page that blocks the remote fonts, with nothing refused. The portal and the

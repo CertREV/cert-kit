@@ -778,7 +778,7 @@ function useHydrating(): boolean {
 
 /**
  * 1.2.0: the card never reads the Delivery API from the browser unless the brand opts in (`clientRead`), so a
- * storefront whose CSP `connect-src` does not name CertREV (e.l.f.'s live policy) never sees a request or a violation
+ * storefront whose CSP `connect-src` does not name CertREV (as on a live Hydrogen storefront) never sees a request or a violation
  * from it, and a page never loses its card for want of one.
  *
  *  - Server: read (2.0.2: waiting at most `CARD_SERVER_WAIT_MS`, never behind another request's read; a fresh or stale-while-revalidating cache, or a remembered failure, first), verify and paint

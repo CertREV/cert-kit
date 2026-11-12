@@ -2,8 +2,8 @@
  * The server render's envelope seed (1.2.0): what lets a hydrated delivery card paint with NO browser read.
  *
  * Through 1.1.1 the browser re-read the Delivery API for every card it hydrated, because nothing handed the server's
- * read to it. A storefront whose Content-Security-Policy `connect-src` does not name the CertREV origin (e.l.f.'s
- * Hydrogen store is one) blocked that read, the read settled as a suppress, and the card the server had painted
+ * read to it. A storefront whose Content-Security-Policy `connect-src` does not name the CertREV origin (a Hydrogen
+ * store is one) blocked that read, the read settled as a suppress, and the card the server had painted
  * vanished. So the painted face now carries the envelope it was painted from, as one attribute on its wrapper:
  * `data-certrev-envelope` = `{ v: 1, baseUrl, externalId, design?, payload, signature?, renderDef }`. `payload` is the
  * signed envelope's payload as the Delivery API served it, less the fields the def hides (below); `renderDef` is the
