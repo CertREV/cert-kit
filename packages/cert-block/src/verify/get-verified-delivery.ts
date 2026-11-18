@@ -159,6 +159,13 @@ export interface GetVerifiedDeliveryOptions {
 	 * replica only; production brands never send it. Build it with `parseDesignPin`.
 	 */
 	readonly design?: DesignPin
+	/**
+	 * 2.1.2: a second attempt for a read that did not reach CertREV. With it, a read that fails without reaching CertREV
+	 * (a network error, a 5xx, a body that is not JSON) is tried once more at once, and a read that has not answered
+	 * after `retryAfterMs` gets a second request beside it (the first keeps running); the first definitive answer wins.
+	 * At most two requests. Absent: one request, as before 2.1.2.
+	 */
+	readonly retryAfterMs?: number
 }
 
 /**
@@ -358,6 +365,49 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	}
 }
 
+/**
+ * 2.1.2: `loadDelivery` with one retry (`retryAfterMs`): a second request when the first fails without reaching CertREV,
+ * or when it has not answered after `retryAfterMs`. Settles to the first answer that is not `unreachable`, else (both
+ * requests failed) to the last failure. Never throws.
+ */
+function loadDeliveryWithRetry(opts: GetVerifiedDeliveryOptions): Promise<CachedDelivery> {
+	const after = opts.retryAfterMs
+	if (after === undefined || !Number.isFinite(after) || after < 0) return loadDelivery(opts)
+	return new Promise<CachedDelivery>((resolve) => {
+		let settled = false
+		let started = 0
+		let running = 0
+		let hedge: ReturnType<typeof setTimeout> | undefined
+		const attempt = () => {
+			started += 1
+			running += 1
+			loadDelivery(opts).then((value) => {
+				running -= 1
+				if (settled) return
+				if (!isUnreachable(value)) {
+					settled = true
+					if (hedge !== undefined) clearTimeout(hedge)
+					resolve(value)
+					return
+				}
+				if (started < 2) {
+					if (hedge !== undefined) clearTimeout(hedge)
+					attempt()
+					return
+				}
+				if (running === 0) {
+					settled = true
+					resolve(value)
+				}
+			})
+		}
+		attempt()
+		hedge = setTimeout(() => {
+			if (!settled && started < 2) attempt()
+		}, after)
+	})
+}
+
 /** Apply the render-time policy to a cached read: lifecycle + subject at THIS render's clock. */
 export function settleDelivery(cached: CachedDelivery, context: RenderContext): VerifiedDelivery {
 	if (cached.kind === 'suppressed') {
@@ -390,7 +440,7 @@ export async function getVerifiedDelivery(opts: GetVerifiedDeliveryOptions): Pro
 	const cache = opts.cache ?? sharedDeliveryCache
 	const cached = await cache.getOrLoad(
 		deliveryCacheKey(opts),
-		() => loadDelivery(opts),
+		() => loadDeliveryWithRetry(opts),
 		(v) => v.kind === 'suppressed',
 		opts.ttlMs,
 		isUnreachable,
@@ -408,7 +458,7 @@ export function readVerifiedDelivery(opts: GetVerifiedDeliveryOptions): Verified
 	const cache = opts.cache ?? sharedDeliveryCache
 	const cached = cache.peekOrRefresh(
 		deliveryCacheKey(opts),
-		() => loadDelivery(opts),
+		() => loadDeliveryWithRetry(opts),
 		(v) => v.kind === 'suppressed',
 		opts.ttlMs,
 		isUnreachable,
@@ -452,6 +502,25 @@ export function deliveryLoading(
 	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
 ): boolean {
 	return (opts.cache ?? sharedDeliveryCache).loading(deliveryCacheKey(opts))
+}
+
+/**
+ * 2.1.2: the placement's last good answer, settled at `context.now`: the verified read the cache still holds (fresh,
+ * stale, or past its stale window inside the cache's `lastGoodMs`), or `undefined`. A definitive no replaces it in the
+ * cache, and a payload that has expired or been revoked in its own fields still settles to suppress. Starts no read.
+ */
+export function lastGoodDelivery(
+	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
+): VerifiedDelivery | undefined {
+	const cached = (opts.cache ?? sharedDeliveryCache).lastGood(deliveryCacheKey(opts))
+	return cached === undefined ? undefined : settleDelivery(cached, opts.context)
+}
+
+/** 2.1.2: whether the placement's refresh backoff runs (a read of it just failed to reach CertREV). */
+export function deliveryBackingOff(
+	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
+): boolean {
+	return (opts.cache ?? sharedDeliveryCache).backingOff(deliveryCacheKey(opts))
 }
 
 /** Drop the cached read for one placement (e.g. from a revocation webhook); with `design`, that pinned read. */
