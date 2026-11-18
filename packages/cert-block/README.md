@@ -385,7 +385,9 @@ A drop-in on 2.0.0 (same package, export, registration, inputs and CSP). What ch
   verify link that nobody signed); that face is gone. Every section below that still describes "the options face"
   describes 1.x to 2.0.0; 2.0.1 prints nothing there. The signed paths are unchanged.
 - **Stale window: 30 s fresh, 30 s stale** (2.0.0: 60 s and 300 s): with the Delivery API's own cache a revoked card is
-  gone within five to six minutes (ADR 0001 §7); past the window a read that cannot reach CertREV prints nothing.
+  gone within five to six minutes (ADR 0001 §7) whenever CertREV answers. **2.1.2:** past the window a server render
+  reads again and waits for the answer (up to 1,500 ms); when that read cannot reach CertREV in time the card that
+  painted before keeps painting (its last good card, for up to an hour), instead of nothing.
 - **A beacon to CertREV**: each fallback, and one health event on one page view in a hundred, as a `POST <delivery
   origin>/api/cert/v1/beacon` `text/plain` JSON body `{v:1, client:'cert-block', clientVersion, contract,
   platform:'builder', externalId, family, events:[{kind, reason, outcome}]}`. No cookies, no page address or text, no
@@ -573,6 +575,10 @@ browser hydrates from it:
   and is cached when it lands), never waits behind another request's read of the same placement, and a failure is
   remembered 60 s per placement and process, so a hanging CertREV costs a page at most one 300 ms wait per placement
   per minute. 2.0.1 already keeps a certificate 30 s, and 30 s more while it is refreshed (see the CHANGELOG).
+  **2.1.2:** a cold read waits up to 1,500 ms, with a second request at 700 ms (or at once after a fast failure), and
+  no failure is remembered: the next render reads again. A placement that painted keeps its last verified card while
+  a refresh is slow or fails (up to an hour; a definitive no takes it down at once), and starts no new read for 30 s
+  after a failed one. So a cache expiry never blanks a card that painted before.
 - **A reviewer photo the browser cannot load** (a CSP `img-src` without the photo's origin, a 404) is repainted as
   the person's initials, the same bytes the face paints for a hidden photo (below), with no request and no change to
   the record.
@@ -1030,7 +1036,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`2.1.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`2.1.2`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.
