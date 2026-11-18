@@ -27,11 +27,12 @@ import { type CertPayload, renderVerdict } from '../contract/kernel.js'
 import {
 	type DeliveredFace,
 	type DesignPin,
+	deliveryBackingOff,
 	deliveryLoading,
 	getVerifiedDelivery,
+	lastGoodDelivery,
 	parseDesignPin,
 	readVerifiedDelivery,
-	rememberDeliveryUnreachable,
 	unreachableDelivery,
 	type VerifiedDelivery,
 } from '../verify/get-verified-delivery.js'
@@ -175,6 +176,8 @@ export function acceptedDeliveryMarker(value: unknown): { readonly baseUrl: stri
  * way the retry finds the settled read in the cache through `readVerifiedDelivery`, so it never
  * suspends on a second promise.
  *
+ * 2.1.2: on a server, see `suspendOnServer` below (no failure is remembered; a last good card paints; a cold read
+ * waits up to 1,500 ms with one retry). What 2.0.2 did, for the record:
  * 2.0.2, on a server (`suspendOnServer`): the render waits at most the runtime's `serverWaitMs` (300 ms). Past it, the
  * placement's failure is remembered in the cache (so every render in the failure window answers at once, even where the
  * runtime abandons the read when the response ends), the render prints nothing (`delivery_unreachable`), and the read
@@ -202,29 +205,72 @@ function suspendOn(cache: object, key: string, start: () => Promise<VerifiedDeli
 	return suspendUntil(pending)
 }
 
+/**
+ * 2.1.2: what a settled wait answered, handed to the ONE render that re-runs after it (React re-renders a suspended card
+ * from the top; 2.0.2's remembered failure was what that re-render found, and 2.1.2 remembers no failure). Taken once,
+ * and gone after `SETTLED_HANDOFF_MS` whoever takes it: it is the answer of a read that just ended, never a cached miss.
+ */
+const settledReadsByCache = new WeakMap<
+	object,
+	Map<string, { readonly value: VerifiedDelivery; readonly until: number }>
+>()
+const SETTLED_HANDOFF_MS = 1_000
+
+function handOff(cache: object, key: string, value: VerifiedDelivery, now: number): void {
+	let settled = settledReadsByCache.get(cache)
+	if (!settled) {
+		settled = new Map()
+		settledReadsByCache.set(cache, settled)
+	}
+	settled.set(key, { value, until: now + SETTLED_HANDOFF_MS })
+}
+
+function takeHandOff(cache: object, key: string, now: number): VerifiedDelivery | undefined {
+	const settled = settledReadsByCache.get(cache)
+	const held = settled?.get(key)
+	if (!held) return undefined
+	settled?.delete(key)
+	return held.until > now ? held.value : undefined
+}
+
+/**
+ * The server's read, 2.1.2. Past the stale window (`readVerifiedDelivery` answered nothing):
+ *  - a placement with a last good card (`lastGoodDelivery`) paints it AT ONCE while another read of it runs or its
+ *    refresh backoff lasts; otherwise this render reads, waits up to `waitMs`, and paints the answer, or the last good
+ *    card if the read did not reach CertREV in time. A definitive no (revoked, not found) paints nothing.
+ *  - a placement with no card: a read already running that this render did not start is not waited on (`'skipped'`, as
+ *    2.0.2; under workerd a render must not wait on another request's I/O); else this render reads (with its retry) and
+ *    waits up to `waitMs`. Past it, nothing, and the read runs on. No failure is remembered: the next render reads again.
+ */
 function suspendOnServer(
 	key: string,
 	read: Parameters<typeof getVerifiedDelivery>[0],
 	waitMs: number | undefined,
+	now: () => number,
 ): VerifiedDelivery | 'skipped' {
+	const cache = read.cache ?? inflightReadsByCache
+	const last = lastGoodDelivery(read)
+	if (last && (deliveryLoading(read) || deliveryBackingOff(read))) return last
 	if (deliveryLoading(read)) return 'skipped'
-	return suspendOn(read.cache ?? inflightReadsByCache, key, () => {
+	return suspendOn(cache, key, () => {
+		const fallback = () => lastGoodDelivery(read) ?? unreachableDelivery()
 		const loaded = getVerifiedDelivery(read)
-		if (waitMs === undefined || !Number.isFinite(waitMs) || waitMs <= 0) return loaded
 		return new Promise<VerifiedDelivery>((resolve) => {
-			const timer = setTimeout(() => {
-				rememberDeliveryUnreachable(read)
-				resolve(unreachableDelivery())
-			}, waitMs)
+			let done = false
+			let timer: ReturnType<typeof setTimeout> | undefined
+			const settle = (value: VerifiedDelivery) => {
+				if (done) return
+				done = true
+				if (timer !== undefined) clearTimeout(timer)
+				handOff(cache, key, value, now())
+				resolve(value)
+			}
+			if (waitMs !== undefined && Number.isFinite(waitMs) && waitMs > 0) {
+				timer = setTimeout(() => settle(fallback()), waitMs)
+			}
 			loaded.then(
-				(settled) => {
-					clearTimeout(timer)
-					resolve(settled)
-				},
-				() => {
-					clearTimeout(timer)
-					resolve(unreachableDelivery())
-				},
+				(value) => settle(value.unreachable ? (lastGoodDelivery(read) ?? value) : value),
+				() => settle(fallback()),
 			)
 		})
 	})
@@ -876,15 +922,18 @@ function readAndPaint(
 		resolveKid: cardResolveKidFor(rt, props.baseUrl),
 		fetchImpl: rt.fetchImpl(),
 		timeoutMs: rt.timeoutMs,
+		// 2.1.2: a server read gets one retry. A browser read (`clientRead`) does not: a CSP block would only log twice.
+		...(inBrowser || rt.retryAfterMs === undefined ? {} : { retryAfterMs: rt.retryAfterMs }),
 	}
 	const key = design
 		? `${props.baseUrl}|${props.externalId}|design=${design.version}|${design.brand ?? ''}`
 		: `${props.baseUrl}|${props.externalId}`
 	const settled =
+		takeHandOff(rt.cache, key, rt.now()) ??
 		readVerifiedDelivery(read) ??
 		(inBrowser
 			? suspendOn(rt.cache, key, () => getVerifiedDelivery(read))
-			: suspendOnServer(key, read, rt.serverWaitMs))
+			: suspendOnServer(key, read, rt.serverWaitMs, rt.now))
 	if (settled === 'skipped') return <SkippedRead instance={instance} />
 	if (settled.verdict.decision !== 'render') {
 		return settleWithoutEnvelope(

@@ -195,7 +195,8 @@ describe('the design pin on the delivery card', () => {
 		delivery.respond(() => json({ error: 'unavailable' }, 503))
 		const unpinned = await renderToHtml(card(undefined))
 		expect(withoutSeed(pinned)).toBe(withoutSeed(unpinned))
-		expect(delivery.calls).toEqual([PINNED_URL, DELIVERY_URL])
+		// 2.1.2: each read that did not reach CertREV is tried once more.
+		expect(delivery.calls).toEqual([PINNED_URL, PINNED_URL, DELIVERY_URL, DELIVERY_URL])
 	})
 
 	describe('no pin: the unpinned card, byte for byte', () => {

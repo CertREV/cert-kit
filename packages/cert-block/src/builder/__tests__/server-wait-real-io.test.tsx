@@ -4,8 +4,11 @@
  * certrev.com https origin, so the runtime's fetch sends the same request to a local server instead; nothing else is
  * stubbed. The cache's clock stays at the fixtures' T0 so the signed envelope is valid; only the cache's TTLs read it.
  *
- * Bounds carry slack for a loaded CI host: a wait of the 300 ms deadline is checked within [280, 300 + SLACK_MS], and
- * "at once" as under ONCE_MS, which a single 300 ms wait would fail.
+ * Bounds carry slack for a loaded CI host: a wait of the deadline (2.1.2: 1,500 ms; 2.0.2: 300 ms) is checked within
+ * [deadline - 20, deadline + SLACK_MS], and "at once" as under ONCE_MS, which a single wait would fail.
+ *
+ * 2.1.2: and a CertREV that answers in about 550 ms (what staging took in the 2026-11-18 real-card proof, when 2.0.2's
+ * 300 ms wait printed no card) paints on the first render.
  */
 
 import { createServer, type Server } from 'node:http'
@@ -13,7 +16,7 @@ import type { AddressInfo } from 'node:net'
 import { performance } from 'node:perf_hooks'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CertReviewCard, type CertReviewCardProps } from '../cert-review-card.js'
-import { CARD_SERVER_WAIT_MS, setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
+import { CARD_DELIVERY_RETRY_MS, CARD_SERVER_WAIT_MS, setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
 import {
 	BASE,
 	builderSubject,
@@ -36,6 +39,8 @@ let server: Server
 let origin = ''
 /** Entry ids the server answers; every other path is accepted and never answered. */
 let answering = new Set<string>()
+/** 2.1.2: entry ids the server answers after a delay (ms). */
+let slow = new Map<string, number>()
 let requests = 0
 let restore: () => void
 let warn: ReturnType<typeof vi.spyOn>
@@ -62,9 +67,17 @@ beforeAll(async () => {
 	server = createServer((req, res) => {
 		requests += 1
 		const entry = decodeURIComponent((req.url ?? '').split('/').pop() ?? '')
+		const answer = () => {
+			res.writeHead(200, { 'content-type': 'application/json' })
+			res.end(JSON.stringify(deliveryBody(issuer.envelope({ subject: builderSubject(entry) }))))
+		}
+		const delay = slow.get(entry)
+		if (delay !== undefined) {
+			setTimeout(answer, delay)
+			return
+		}
 		if (!answering.has(entry)) return // accepted, never answered: CertREV hanging
-		res.writeHead(200, { 'content-type': 'application/json' })
-		res.end(JSON.stringify(deliveryBody(issuer.envelope({ subject: builderSubject(entry) }))))
+		answer()
 	})
 	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
 	origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
@@ -78,6 +91,7 @@ afterAll(async () => {
 beforeEach(() => {
 	warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 	answering = new Set()
+	slow = new Map()
 	requests = 0
 	const realFetch = globalThis.fetch
 	restore = setCardDeliveryRuntimeForTests({
@@ -95,7 +109,7 @@ afterEach(() => {
 })
 
 describe('SC2 over a real socket: CertREV accepts and never answers', () => {
-	it('the first render waits the 300 ms deadline once; later renders of the placement return at once with no request', async () => {
+	it('the first render waits the 1,500 ms deadline (with its one retry); later renders, while those reads run, return at once with no request', async () => {
 		const first = await timedRender('hang-a')
 		expect(chromeRoot(first.html)).toBeNull()
 		expect(first.ms).toBeGreaterThanOrEqual(CARD_SERVER_WAIT_MS - 20)
@@ -105,7 +119,8 @@ describe('SC2 over a real socket: CertREV accepts and never answers', () => {
 			expect(chromeRoot(later.html)).toBeNull()
 			expect(later.ms).toBeLessThan(ONCE_MS)
 		}
-		expect(requests).toBe(1)
+		// The first request, and its retry at 700 ms.
+		expect(requests).toBe(2)
 	})
 
 	it('20 renders that arrive while the first read hangs each return at once, and send no request', async () => {
@@ -121,7 +136,7 @@ describe('SC2 over a real socket: CertREV accepts and never answers', () => {
 			expect(ms).toBeLessThan(ONCE_MS)
 		}
 		expect((await first).ms).toBeLessThanOrEqual(CARD_SERVER_WAIT_MS + SLACK_MS)
-		expect(requests).toBe(1)
+		expect(requests).toBe(2)
 	})
 
 	it('a warm card never waits: CertREV starts hanging after the card is cached, and every render paints at once', async () => {
@@ -134,5 +149,22 @@ describe('SC2 over a real socket: CertREV accepts and never answers', () => {
 			expect(warm.ms).toBeLessThan(ONCE_MS)
 		}
 		expect(requests).toBe(1)
+	})
+
+	it('2.1.2: a CertREV that answers in 550 ms (staging, 2026-11-18) paints on the first render, with one request', async () => {
+		slow.set('slow-d', 550)
+		const first = await timedRender('slow-d')
+		expect(first.html).toContain(PAINTED)
+		expect(first.ms).toBeGreaterThanOrEqual(530)
+		expect(first.ms).toBeLessThan(CARD_DELIVERY_RETRY_MS)
+		expect(requests).toBe(1)
+	})
+
+	it('2.1.2: a CertREV whose first answer is slower than the retry point paints from whichever request answers first', async () => {
+		slow.set('slow-e', 1_000)
+		const first = await timedRender('slow-e')
+		expect(first.html).toContain(PAINTED)
+		expect(first.ms).toBeLessThan(CARD_SERVER_WAIT_MS)
+		expect(requests).toBe(2)
 	})
 })
