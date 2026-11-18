@@ -277,3 +277,83 @@ describe('2.0.2 plan advice A1: a replaced load never writes', () => {
 		expect(t.cache.peek('k')).toEqual({ ok: false, n: 2 })
 	})
 })
+
+describe('2.1.2: last good value (lastGoodMs), and no failure is ever cached', () => {
+	const failing = async (): Promise<Value> => ({ ok: false, n: 0, transient: true })
+	const opts = { staleMs: 500, lastGoodMs: 10_000, refreshBackoffMs: 2_000 }
+
+	it('a transient result with nothing to keep is returned to its callers and never cached: the next get loads again', async () => {
+		const t = setup(opts)
+		t.answer(failing)
+		expect(await t.get()).toEqual({ ok: false, n: 0, transient: true })
+		expect(t.cache.peek('k')).toBeUndefined()
+		expect(t.read()).toBeUndefined()
+		expect(t.cache.lastGood('k')).toBeUndefined()
+		t.answer(async () => ({ ok: true, n: 7 }))
+		expect(await t.get()).toEqual({ ok: true, n: 7 })
+		expect(t.calls()).toBe(2)
+	})
+
+	it('a positive entry past its stale window is kept as the last good value, not served, for lastGoodMs', async () => {
+		const t = setup(opts)
+		expect(await t.get()).toEqual({ ok: true, n: 1 })
+		t.advance(1_000 + 500)
+		expect(t.cache.peek('k')).toBeUndefined()
+		expect(t.read()).toBeUndefined()
+		expect(t.cache.lastGood('k')).toEqual({ ok: true, n: 1 })
+		t.advance(10_000 - 1)
+		expect(t.cache.lastGood('k')).toEqual({ ok: true, n: 1 })
+		t.advance(1)
+		expect(t.cache.lastGood('k')).toBeUndefined()
+	})
+
+	it('a load past the stale window that fails returns the last good value, which stays; one that succeeds replaces it', async () => {
+		const t = setup(opts)
+		await t.get()
+		t.advance(2_000)
+		t.answer(failing)
+		expect(await t.get()).toEqual({ ok: true, n: 1 })
+		expect(t.cache.lastGood('k')).toEqual({ ok: true, n: 1 })
+		t.answer(async () => ({ ok: true, n: 9 }))
+		expect(await t.get()).toEqual({ ok: true, n: 9 })
+		expect(t.cache.peek('k')).toEqual({ ok: true, n: 9 })
+	})
+
+	it('a definitive no replaces the last good value', async () => {
+		const t = setup(opts)
+		await t.get()
+		t.advance(2_000)
+		t.answer(async () => ({ ok: false, n: 4 }))
+		expect(await t.get()).toEqual({ ok: false, n: 4 })
+		expect(t.cache.lastGood('k')).toBeUndefined()
+	})
+
+	it('after a transient result, the refresh backoff holds background refreshes back, never a get', async () => {
+		const t = setup(opts)
+		await t.get()
+		t.advance(1_001)
+		t.answer(failing)
+		// The stale read starts one refresh, which fails: the backoff starts.
+		expect(t.read()).toEqual({ ok: true, n: 1 })
+		await settle()
+		expect(t.calls()).toBe(2)
+		expect(t.cache.backingOff('k')).toBe(true)
+		expect(t.read()).toEqual({ ok: true, n: 1 })
+		await settle()
+		expect(t.calls()).toBe(2)
+		// A get (a caller with nothing servable, or one that chose to wait) still loads.
+		t.advance(500)
+		expect(await t.get()).toEqual({ ok: true, n: 1 })
+		expect(t.calls()).toBe(3)
+		t.advance(2_000)
+		expect(t.cache.backingOff('k')).toBe(false)
+	})
+
+	it('without lastGoodMs nothing changes: a transient result is still cached as a negative entry (2.0.1)', async () => {
+		const t = setup({ refreshBackoffMs: 2_000 })
+		t.answer(failing)
+		await t.get()
+		expect(t.cache.peek('k')).toEqual({ ok: false, n: 0, transient: true })
+		expect(t.cache.backingOff('k')).toBe(false)
+	})
+})
