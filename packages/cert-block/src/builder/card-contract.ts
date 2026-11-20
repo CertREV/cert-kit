@@ -342,3 +342,24 @@ export function cardHtml(card: CardDocumentV1, names: readonly CardPartName[]): 
 	const dialogs = (card.dialogs.expert ?? '') + (card.dialogs.certificate ?? '')
 	return card.assets.head + parts + dialogs + cardGraphTag(card)
 }
+
+/**
+ * 2.1.3: ONE graph per placement per page. Two blocks of the same placement (a sidebar rail and a stacked copy) each
+ * hold the document's first part, so each printed the same graph: two identical `ld+json` scripts on the page. In the
+ * browser, every graph script of this placement after the first in document order is removed, so JavaScript-rendering
+ * crawlers read exactly one.
+ * Within ONE server render the second block of a placement prints nothing (2.0.2), so the server already prints the
+ * graph once; the duplicates come from blocks mounted separately (Builder's client-rendered preview, separate React
+ * roots). Returns how many scripts were removed.
+ */
+export function dedupeCardGraphs(root: ParentNode, externalId: string): number {
+	const scripts = Array.from(
+		root.querySelectorAll<HTMLScriptElement>('script[type="application/ld+json"][data-certrev-graph]'),
+	).filter((script) => script.getAttribute('data-certrev-external-id') === externalId)
+	let removed = 0
+	for (const script of scripts.slice(1)) {
+		script.remove()
+		removed++
+	}
+	return removed
+}

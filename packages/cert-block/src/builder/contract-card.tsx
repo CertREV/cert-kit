@@ -47,7 +47,13 @@
 
 import * as React from 'react'
 import { maybeSendBrowserHealth } from './card-beacon.js'
-import { type CardDocumentV1, type CardPartName, cardCarriesAssets, cardHtml } from './card-contract.js'
+import {
+	type CardDocumentV1,
+	type CardPartName,
+	cardCarriesAssets,
+	cardHtml,
+	dedupeCardGraphs,
+} from './card-contract.js'
 import { afterPageSettles, applyCardPlacement } from './card-placement.js'
 import { SEED_ATTRIBUTE } from './ssr-seed.js'
 
@@ -174,6 +180,8 @@ export function ContractCardFace(props: {
 	// before the browser paints.
 	useBrowserLayoutEffect(() => {
 		if (ref.current) attachCardRoots(ref.current, html)
+		// 2.1.3: one graph per placement on the page, whatever the blocks printed (after the roots, which may re-parse).
+		if (typeof document !== 'undefined') dedupeCardGraphs(document, card.subject.externalId)
 	})
 	useBrowserLayoutEffect(() => {
 		if (ref.current && carriesAssets) injectCardRuntime(card)
