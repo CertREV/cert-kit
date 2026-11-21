@@ -5,6 +5,25 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 3.0.1 · unreleased
+
+**A page CertREV never certified logs nothing in the browser console.** The visual output is unchanged, byte for byte:
+an uncertified page still paints no card, and a certified one paints exactly what 3.0.0 paints.
+
+- **Why.** A Builder card on an uncertified page (a publish-first draft waiting for its certification) reads the
+  Delivery API, which answers 404 for "never certified". The card reads that as "no credential" and paints nothing,
+  but the browser logs every 404 as a console error, on every view of every uncertified page.
+- **Now.** The Builder card's read asks for CertREV's "none" answer with its `Accept` header
+  (`application/json, application/vnd.certrev.none`; a CORS-safelisted value, so no preflight). A portal that knows it
+  answers a never-certified page with 204, which the browser does not log; the card reads it exactly as the 404 it
+  replaces (suppressed, `subject_mismatch`, no fallback report). A 200 `{ none: { code } }` with no artifact beside it
+  reads the same way. A portal that does not know the answer still sends 404.
+- **Opt-in, per read.** `GetVerifiedDeliveryOptions.none` (new, optional). A read that does not set it is unchanged: a 204
+  is still "CertREV not reached" (stale-if-error, a fallback report). `deliveryUrl` and `deliveryCacheKey` are unchanged,
+  so the URL, the cache key and the design-pin query are 3.0.0's.
+- **A drop-in on 3.0.0**: same registration, inputs, exports (two added: `NONE_ACCEPT`, `isNoneAnswer`) and
+  Content-Security-Policy sources.
+
 ## 3.0.0 · 2026-11-08
 
 **Claim strength is no longer a concept: the `preset` and `rung` of a render def, the `rung` of a face and the
