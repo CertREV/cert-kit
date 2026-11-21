@@ -521,8 +521,13 @@ browser hydrates from it:
     placement is the block's `mode`, else its def's `layout`, else the banner. A page never loses its card to an
     outage. A pinned card (below) paints it too, with a record naming its pin. A block whose options cannot
     paint (no reviewer) paints nothing, with `face: "none"`.
-  - **A definitive no** (revoked, expired, unverifiable, another entry's envelope, a 404 or 410): nothing, with
-    `face: "none"`, so a revocation is never painted over by the options face.
+  - **A definitive no** (revoked, expired, unverifiable, another entry's envelope, a 404 or 410, and from 3.1.0
+    CertREV's 204 none answer): nothing, with `face: "none"`, so a revocation is never painted over by the options face.
+- **The none answer (3.1.0).** The card's read sends `Accept: NONE_ACCEPT` (`GetVerifiedDeliveryOptions.none`). A
+  portal that knows it answers a page CertREV never certified with 204 and `X-CertREV-Delivery-None: not_certified`
+  (`NONE_HEADER`, `NONE_CODE`), which a browser does not log as an error, where a 404 is a console error on every view.
+  Any other 204 is "CertREV not reached" and is reported with its status. An asking read's cache key ends in `|none`:
+  pass the same `none` to `invalidateDelivery`, `peekVerifiedDelivery` and the other cache helpers.
 - **After hydration** the card re-runs the lifecycle and subject policy at the browser's clock: a cert
   whose `expiresAt` passed while the page was open comes down. The signature is not re-checked in the
   browser (whoever can write the page's HTML can already write any card), and a revocation shows on the

@@ -369,7 +369,9 @@ describe('the none answer (3.1.0)', () => {
 		['names an empty code', ''],
 	])('a 204 that %s is no none answer, even when asked for: CertREV not reached, as always', async (_l, code) => {
 		const t = setup(none204(code))
-		expect((await getVerifiedDelivery(withNone(t))).unreachable).toBe(true)
+		const got = await getVerifiedDelivery(withNone(t))
+		expect(got.unreachable).toBe(true)
+		expect(got.status).toBe(204)
 	})
 
 	it('a 200 body that only says none is no answer either: it is verified, and fails, as any unsigned body', async () => {
