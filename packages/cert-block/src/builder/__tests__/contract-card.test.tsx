@@ -346,7 +346,7 @@ describe('the two 1.2.0 fallbacks, now reported', () => {
 		])
 		// The kid is not baked, so the card asked the delivery origin for its published key set, once.
 		expect(delivery.calls).toEqual([
-			`${MARKER.baseUrl}/api/cert/v1/delivery/builder/${ENTRY_ID}`,
+			`${MARKER.baseUrl}/api/cert/v1/delivery/builder/${ENTRY_ID}?none=204`,
 			`${MARKER.baseUrl}/api/cert/v1/keys`,
 		])
 	})

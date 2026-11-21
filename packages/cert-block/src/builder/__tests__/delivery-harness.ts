@@ -17,7 +17,7 @@ import { makeMockPayload } from '../../contract/fixtures.js'
 export const ENTRY_ID = 'entry-fixture-1'
 export const BASE = 'https://staging.portal.certrev.com'
 export const MARKER = { v: 1, baseUrl: BASE } as const
-export const DELIVERY_URL = `${BASE}/api/cert/v1/delivery/builder/${ENTRY_ID}`
+export const DELIVERY_URL = `${BASE}/api/cert/v1/delivery/builder/${ENTRY_ID}?none=204`
 /** A fixed render clock, well inside the fixture's lifecycle. */
 export const T0 = Date.parse('2026-09-26T12:00:00.000Z')
 

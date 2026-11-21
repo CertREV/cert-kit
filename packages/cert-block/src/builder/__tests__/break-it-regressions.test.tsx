@@ -20,7 +20,7 @@ afterEach(() => restore())
 /** Render a page with one block per entry, each read from `bodyFor`; resolves to the HTML, or 'timeout'. */
 async function page(ids: readonly string[], bodyFor: (id: string) => unknown, ms = 20_000): Promise<string> {
 	const fetchImpl = (async (url: RequestInfo | URL) =>
-		json(bodyFor(String(url).split('/').pop() ?? ''))) as typeof fetch
+		json(bodyFor(new URL(String(url)).pathname.split('/').pop() ?? ''))) as typeof fetch
 	restore = setCardDeliveryRuntimeForTests({ resolveKid: issuer.resolveKid, fetchImpl: () => fetchImpl, now: () => T0 })
 	const blocks = ids.map((id) =>
 		createElement(CertReviewCard, {

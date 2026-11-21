@@ -194,9 +194,27 @@ const isUnreachable = (v: CachedDelivery): boolean => v.kind === 'suppressed' &&
 export function deliveryUrl(baseUrl: string, platform: string, externalId: string, design?: DesignPin): string {
 	const base = baseUrl.replace(/\/+$/, '')
 	const url = `${base}/api/cert/v1/delivery/${encodeURIComponent(platform)}/${encodeURIComponent(externalId)}`
-	if (!design) return url
-	const brand = design.brand === undefined ? '' : `&designBrand=${encodeURIComponent(design.brand)}`
-	return `${url}?design=${design.version}${brand}`
+	// 3.0.1: a Builder read asks for the "none" answer (`none=204`): a page CertREV never certified answers 204, which a
+	// browser logs nothing for, where a 404 is a console error on every uncertified page. A portal that does not know the
+	// parameter ignores it and answers 404, which reads exactly as before.
+	const params = platform === 'builder' ? [NONE_OPT_IN] : []
+	if (design) {
+		params.push(`design=${design.version}`)
+		if (design.brand !== undefined) params.push(`designBrand=${encodeURIComponent(design.brand)}`)
+	}
+	return params.length === 0 ? url : `${url}?${params.join('&')}`
+}
+
+/** 3.0.1: the query a Builder read sends to ask for the 204 "none" answer. */
+export const NONE_OPT_IN = 'none=204'
+
+/**
+ * 3.0.1: whether a 200 body is CertREV's typed "no certificate" answer (`{ none: { code } }`, no artifact beside it).
+ * It is read as the same definitive "no credential for this subject" a 404 is, without verifying anything: it claims
+ * nothing, so there is nothing to verify, and it never reports a fallback.
+ */
+export function isNoneAnswer(body: Record<string, unknown>): boolean {
+	return isRecord(body.none) && body.payload === undefined && body.kind === undefined
 }
 
 /** Cache key: the URL (origin and pin included) × the placement rendering it. No clock: the TTL bounds time. */
@@ -319,6 +337,8 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	// Nothing served for this placement: never certified, or withdrawn. A LIVE revocation is a 200
 	// tombstone, so a 4xx here genuinely means "no credential for this subject".
 	if (res.status === 404 || res.status === 410) return suppressed('subject_mismatch')
+	// 3.0.1: the opt-in "none" answer (`none=204`): never certified, the same definitive answer as a 404.
+	if (res.status === 204) return suppressed('subject_mismatch')
 	if (!res.ok) return unreachable(res.status)
 	let body: unknown
 	try {
@@ -327,6 +347,7 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 		return unreachable()
 	}
 	if (!isRecord(body)) return unreachable()
+	if (isNoneAnswer(body)) return suppressed('subject_mismatch')
 	let verdict: CertVerdict
 	try {
 		// `verifyArtifact`, so a tombstone verifies as itself and reports 'revoked'. The kernel reads

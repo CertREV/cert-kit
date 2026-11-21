@@ -49,7 +49,7 @@ beforeEach(() => {
 	const byUrl = (async (input: RequestInfo | URL) => {
 		calls.push(String(input))
 		return json(
-			deliveryBody(issuer.envelope(), String(input).includes('?design=') ? RAW_DEFS['face-reader'] : BRAND_B_LIKE_DEF),
+			deliveryBody(issuer.envelope(), String(input).includes('design=') ? RAW_DEFS['face-reader'] : BRAND_B_LIKE_DEF),
 		)
 	}) as typeof fetch
 	restore = setCardDeliveryRuntimeForTests({ resolveKid: issuer.resolveKid, fetchImpl: () => byUrl, now: () => T0 })
@@ -72,7 +72,7 @@ it('a pinned and an unpinned card suspend on two promises, and each paints its o
 	// One suspend per card, each on its own read: a card handed the other's promise would suspend a second time.
 	expect(used).toHaveLength(2)
 	expect(new Set(used).size).toBe(2)
-	expect([...calls].sort()).toEqual([DELIVERY_URL, `${DELIVERY_URL}?design=2&designBrand=staging-shopify-canary`])
+	expect([...calls].sort()).toEqual([DELIVERY_URL, `${DELIVERY_URL}&design=2&designBrand=staging-shopify-canary`])
 	const roots = html.split('<div data-certrev-cert-chrome').slice(1)
 	expect(roots).toHaveLength(2)
 	expect(withoutSeed(chromeRoot(html) ?? '')).toContain('data-certrev-def-version="2" data-certrev-face="reader"')
