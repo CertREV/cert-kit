@@ -26,6 +26,8 @@ import {
 	designPinFromUrl,
 	getVerifiedDelivery,
 	invalidateDelivery,
+	isNoneAnswer,
+	NONE_ACCEPT,
 	parseDeliveredFace,
 	parseDesignPin,
 	parseRenderDef,
@@ -344,6 +346,66 @@ describe('readVerifiedDelivery (1.2.0): the synchronous read a render makes', ()
 		t.advance(90_000)
 		t.delivery.respond(() => new Promise<Response>(() => {}))
 		expect(readVerifiedDelivery(t.opts())?.verdict).toEqual({ decision: 'suppress', reason: 'expired' })
+	})
+})
+
+describe('the none answer (3.0.1)', () => {
+	const withNone = (t: ReturnType<typeof setup>) => ({ ...t.opts(), none: true })
+	const noneBody = () => json({ none: { code: 'not_certified' } })
+
+	it.each([
+		['204', () => new Response(null, { status: 204 })],
+		['a typed none body', noneBody],
+	])('a read that asks reads %s as the definitive "never certified" a 404 is: suppressed, never unreachable', async (_l, answer) => {
+		const t = setup(answer)
+		expect(await getVerifiedDelivery(withNone(t))).toEqual({
+			verdict: { decision: 'suppress', reason: 'subject_mismatch' },
+			renderDef: null,
+		})
+	})
+
+	it('a read that does not ask is unchanged: a 204 is CertREV not reached, a none body fails verification', async () => {
+		const t = setup(() => new Response(null, { status: 204 }))
+		expect((await getVerifiedDelivery(t.opts())).unreachable).toBe(true)
+		const u = setup(noneBody)
+		const got = await getVerifiedDelivery(u.opts())
+		expect(got.verdict).toEqual({ decision: 'suppress', reason: 'unsupported_contract_version' })
+	})
+
+	it('asks with the Accept header and leaves the URL (and so the cache key) as it was', async () => {
+		const seen: { url: string; accept: string | null }[] = []
+		const t = setup()
+		const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			seen.push({ url: String(input), accept: new Headers(init?.headers).get('accept') })
+			return json(deliveryBody(t.issuer.envelope()))
+		}) as typeof fetch
+		await getVerifiedDelivery({ ...withNone(t), fetchImpl })
+		expect(seen).toEqual([{ url: DELIVERY_URL, accept: NONE_ACCEPT }])
+		const plain: string[] = []
+		const u = setup()
+		await getVerifiedDelivery({
+			...u.opts(),
+			fetchImpl: (async (_i: RequestInfo | URL, init?: RequestInit) => {
+				plain.push(String(new Headers(init?.headers).get('accept')))
+				return json(deliveryBody(u.issuer.envelope()))
+			}) as typeof fetch,
+		})
+		expect(plain).toEqual(['application/json'])
+	})
+
+	it.each([
+		['no code', { none: {} }],
+		['a code that is not a string', { none: { code: 1 } }],
+		['an artifact beside it', { none: { code: 'not_certified' }, payload: null }],
+		['a signature beside it', { none: { code: 'not_certified' }, signature: {} }],
+	])('a body with %s is no none answer', (_l, body) => {
+		expect(isNoneAnswer(body as Record<string, unknown>)).toBe(false)
+	})
+
+	it('an envelope that also carries none is verified and renders as the envelope it is', async () => {
+		const t = setup()
+		t.delivery.respond(() => json({ ...deliveryBody(t.issuer.envelope()), none: { code: 'not_certified' } }))
+		expect((await getVerifiedDelivery(withNone(t))).verdict.decision).toBe('render')
 	})
 })
 

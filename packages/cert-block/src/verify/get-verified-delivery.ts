@@ -159,6 +159,14 @@ export interface GetVerifiedDeliveryOptions {
 	 * replica only; production brands never send it. Build it with `parseDesignPin`.
 	 */
 	readonly design?: DesignPin
+	/**
+	 * 3.0.1: ask for CertREV's "none" answer (`Accept: application/json, application/vnd.certrev.none`). A portal that knows
+	 * it answers a page it never certified with 204 (no body), which a browser does not log, where the 404 is a console
+	 * error on every view of an uncertified page; this read takes the 204, or a 200 `{ none: { code } }`, as the same
+	 * definitive "no credential" a 404 is. A portal that does not know it answers 404, as before. The URL and the cache key
+	 * are unchanged. The Builder card sets it; a read that does not ask treats a 204 as it always has (CertREV not reached).
+	 */
+	readonly none?: boolean
 }
 
 /**
@@ -301,6 +309,20 @@ export function parseDeliveredFace(value: unknown): DeliveredFace | null {
 	return { html, css }
 }
 
+/** 3.0.1: the Accept a read sends to ask for the "none" answer (both types are CORS-safelisted values). */
+export const NONE_ACCEPT = 'application/json, application/vnd.certrev.none'
+
+/**
+ * 3.0.1: CertREV's typed "no certificate" body, exactly `{ none: { code: <string> } }` and nothing that could be an artifact
+ * beside it (`payload`, `signature`, `kind`). It claims nothing, so there is nothing to verify, and it reports no fallback.
+ */
+export function isNoneAnswer(body: Record<string, unknown>): boolean {
+	const none = body.none
+	if (none === null || typeof none !== 'object' || Array.isArray(none)) return false
+	if (typeof (none as Record<string, unknown>).code !== 'string') return false
+	return !('payload' in body) && !('signature' in body) && !('kind' in body)
+}
+
 /** Fetch, parse and cryptographically verify one Delivery response. Never throws. */
 async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDelivery> {
 	const fetchImpl = opts.fetchImpl ?? globalThis.fetch
@@ -309,7 +331,7 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 		res = await fetchWithDeadline(
 			fetchImpl,
 			deliveryUrl(opts.baseUrl, opts.platform, opts.externalId, opts.design),
-			{ headers: { accept: 'application/json' }, credentials: 'omit' },
+			{ headers: { accept: opts.none === true ? NONE_ACCEPT : 'application/json' }, credentials: 'omit' },
 			opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS,
 		)
 	} catch {
@@ -318,7 +340,10 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	}
 	// Nothing served for this placement: never certified, or withdrawn. A LIVE revocation is a 200
 	// tombstone, so a 4xx here genuinely means "no credential for this subject".
-	if (res.status === 404 || res.status === 410) return suppressed('subject_mismatch')
+	// 3.0.1: a read that asked for the none answer also takes a 204 as "never certified".
+	if (res.status === 404 || res.status === 410 || (opts.none === true && res.status === 204)) {
+		return suppressed('subject_mismatch')
+	}
 	if (!res.ok) return unreachable(res.status)
 	let body: unknown
 	try {
@@ -327,6 +352,7 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 		return unreachable()
 	}
 	if (!isRecord(body)) return unreachable()
+	if (opts.none === true && isNoneAnswer(body)) return suppressed('subject_mismatch')
 	let verdict: CertVerdict
 	try {
 		// `verifyArtifact`, so a tombstone verifies as itself and reports 'revoked'. The kernel reads
