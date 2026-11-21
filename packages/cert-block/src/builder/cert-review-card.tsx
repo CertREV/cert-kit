@@ -876,6 +876,8 @@ function readAndPaint(
 		resolveKid: cardResolveKidFor(rt, props.baseUrl),
 		fetchImpl: rt.fetchImpl(),
 		timeoutMs: rt.timeoutMs,
+		// 3.1.0: an uncertified page answers 204, not a console-logged 404, from a portal that knows the none answer.
+		none: true,
 	}
 	const key = design
 		? `${props.baseUrl}|${props.externalId}|design=${design.version}|${design.brand ?? ''}`
