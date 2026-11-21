@@ -176,7 +176,7 @@ describe('a client mount with no record on the page (an in-app navigation)', () 
 		const fixture = contractFixture(name)
 		const calls = browser(contractBody(issuer, fixture))
 		const container = await clientMount(block())
-		expect(calls).toEqual([`${MARKER.baseUrl}/api/cert/v1/delivery/builder/${ENTRY_ID}`])
+		expect(calls).toEqual([`${MARKER.baseUrl}/api/cert/v1/delivery/builder/${ENTRY_ID}?none=204`])
 		const names = cardPartsFor(fixture.card, undefined)
 		expect(hostRoots(container)).toEqual(expectedRoots(fixture.card, names))
 		expect(

@@ -275,7 +275,7 @@ describe('with the delivery marker: the envelope face', () => {
 		const other = 'entry-fixture-2'
 		delivery.respond(() => json(deliveryBody(issuer.envelope({ subject: builderSubject(other) }))))
 		const html = await renderToHtml(card({ builderContext: { content: { id: other } } }))
-		expect(delivery.calls).toEqual([`${BASE}/api/cert/v1/delivery/builder/${other}`])
+		expect(delivery.calls).toEqual([`${BASE}/api/cert/v1/delivery/builder/${other}?none=204`])
 		expect(chromeRoot(html)).not.toBeNull()
 		// And the original entry's cert, served (by a misrouting cache, say) for the copy, does not paint.
 		setCardDeliveryRuntimeForTests({ resolveKid: issuer.resolveKid, fetchImpl: () => delivery.fetch, now: () => clock })
@@ -530,7 +530,7 @@ describe('with the delivery marker: the envelope face', () => {
 				...fallbackRecord('delivery_unreachable'),
 				design: { version: 4, brand: 'staging-shopify-canary' },
 			})
-			expect(delivery.calls).toEqual([`${DELIVERY_URL}?design=4&designBrand=staging-shopify-canary`])
+			expect(delivery.calls).toEqual([`${DELIVERY_URL}&design=4&designBrand=staging-shopify-canary`])
 		})
 
 		it('2.0.2 (SC1): a server render waits 300 ms; the read itself may run 8 s; a failure is remembered 60 s; a certificate is fresh 30 s and served 30 s past that', () => {

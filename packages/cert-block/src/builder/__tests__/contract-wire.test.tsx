@@ -72,7 +72,7 @@ it('the portal’s own response: a contract-1 binding, and the block prints its 
 	const html = await renderToHtml(
 		<CertReviewCard delivery={MARKER} builderContext={{ content: { id: wire.externalId } }} />,
 	)
-	expect(calls).toEqual([`${MARKER.baseUrl}/api/cert/v1/delivery/builder/${wire.externalId}`])
+	expect(calls).toEqual([`${MARKER.baseUrl}/api/cert/v1/delivery/builder/${wire.externalId}?none=204`])
 	const names = cardPartsFor(served.card, undefined)
 	expect(names).toEqual(['top', 'bottom'])
 	const start = html.indexOf('>', html.indexOf('<div data-certrev-cert-chrome')) + 1
@@ -127,7 +127,7 @@ describe('the portal’s published key set, as its own code signs it', () => {
 			<CertReviewCard delivery={MARKER} builderContext={{ content: { id: wire.externalId } }} />,
 		)
 		expect(seen).toEqual([
-			`${MARKER.baseUrl}/api/cert/v1/delivery/builder/${wire.externalId}`,
+			`${MARKER.baseUrl}/api/cert/v1/delivery/builder/${wire.externalId}?none=204`,
 			`${MARKER.baseUrl}${KEY_SET_PATH}`,
 		])
 		const start = html.indexOf('>', html.indexOf('<div data-certrev-cert-chrome')) + 1

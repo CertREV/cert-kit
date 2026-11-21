@@ -73,7 +73,7 @@ const PARSED_ELF_LIKE_DEF = stripLegacyDefKeys(ELF_LIKE_DEF)
 describe('deliveryUrl / deliveryCacheKey', () => {
 	it('builds the Delivery route and encodes the id', () => {
 		expect(deliveryUrl(`${BASE}/`, 'builder', ENTRY_ID)).toBe(DELIVERY_URL)
-		expect(deliveryUrl(BASE, 'builder', 'a/b?c')).toBe(`${BASE}/api/cert/v1/delivery/builder/a%2Fb%3Fc`)
+		expect(deliveryUrl(BASE, 'builder', 'a/b?c')).toBe(`${BASE}/api/cert/v1/delivery/builder/a%2Fb%3Fc?none=204`)
 	})
 
 	it('keys by origin and by the rendering placement', () => {
@@ -194,6 +194,9 @@ describe('getVerifiedDelivery', () => {
 	it.each([
 		['404', 'subject_mismatch', false, () => json({}, 404), undefined],
 		['410', 'subject_mismatch', false, () => json({}, 410), undefined],
+		// 3.0.1: the opt-in "none" answer for a page CertREV never certified, read exactly as the 404 it replaces.
+		['204 (the none answer)', 'subject_mismatch', false, () => new Response(null, { status: 204 }), undefined],
+		['a typed none body', 'subject_mismatch', false, () => json({ none: { code: 'not_certified' } }), undefined],
 		['500', 'unsupported_contract_version', true, () => json({}, 500), 500],
 		['non-JSON', 'unsupported_contract_version', true, () => new Response('nope'), undefined],
 		['a JSON array', 'unsupported_contract_version', true, () => json([]), undefined],
@@ -347,6 +350,20 @@ describe('readVerifiedDelivery (1.2.0): the synchronous read a render makes', ()
 	})
 })
 
+describe('the none opt-in (3.0.1)', () => {
+	it('a Builder read asks for the 204 none answer; another platform is left alone', () => {
+		expect(deliveryUrl(BASE, 'builder', ENTRY_ID)).toBe(`${BASE}/api/cert/v1/delivery/builder/${ENTRY_ID}?none=204`)
+		expect(deliveryUrl(BASE, 'shopify', 'gid')).toBe(`${BASE}/api/cert/v1/delivery/shopify/gid`)
+	})
+
+	it('a none body beside an artifact is no none answer: the artifact is verified as always', async () => {
+		const t = setup()
+		const tombstone = await t.issuer.tombstone()
+		t.delivery.respond(() => json({ ...tombstone, none: { code: 'not_certified' } }))
+		expect((await getVerifiedDelivery(t.opts())).verdict).toEqual({ decision: 'suppress', reason: 'revoked' })
+	})
+})
+
 describe('the design pin (1.2.0-canary.5)', () => {
 	const ctx = { platform: 'builder', externalId: ENTRY_ID }
 	const placement = { baseUrl: BASE, platform: 'builder', externalId: ENTRY_ID, context: ctx }
@@ -354,13 +371,13 @@ describe('the design pin (1.2.0-canary.5)', () => {
 	it('deliveryUrl appends ?design and &designBrand; without a pin the URL is the 1.1.0 one', () => {
 		expect(deliveryUrl(BASE, 'builder', ENTRY_ID)).toBe(DELIVERY_URL)
 		expect(deliveryUrl(BASE, 'builder', ENTRY_ID, undefined)).toBe(DELIVERY_URL)
-		expect(deliveryUrl(`${BASE}/`, 'builder', ENTRY_ID, { version: 7 })).toBe(`${DELIVERY_URL}?design=7`)
+		expect(deliveryUrl(`${BASE}/`, 'builder', ENTRY_ID, { version: 7 })).toBe(`${DELIVERY_URL}&design=7`)
 		expect(deliveryUrl(BASE, 'builder', ENTRY_ID, { version: 7, brand: 'staging-shopify-canary' })).toBe(
-			`${DELIVERY_URL}?design=7&designBrand=staging-shopify-canary`,
+			`${DELIVERY_URL}&design=7&designBrand=staging-shopify-canary`,
 		)
 		// The brand is encoded, so a brand that is not a brand key cannot add a parameter of its own.
 		expect(deliveryUrl(BASE, 'builder', ENTRY_ID, { version: 7, brand: 'a&design=9 #' })).toBe(
-			`${DELIVERY_URL}?design=7&designBrand=a%26design%3D9%20%23`,
+			`${DELIVERY_URL}&design=7&designBrand=a%26design%3D9%20%23`,
 		)
 	})
 
@@ -369,7 +386,7 @@ describe('the design pin (1.2.0-canary.5)', () => {
 		expect(unpinned).toBe(`delivery:${DELIVERY_URL}|builder:${ENTRY_ID}`)
 		expect(deliveryCacheKey({ ...placement, design: undefined })).toBe(unpinned)
 		expect(deliveryCacheKey({ ...placement, design: { version: 7, brand: 'acme' } })).toBe(
-			`delivery:${DELIVERY_URL}?design=7&designBrand=acme|builder:${ENTRY_ID}`,
+			`delivery:${DELIVERY_URL}&design=7&designBrand=acme|builder:${ENTRY_ID}`,
 		)
 		const keys = [
 			unpinned,
@@ -384,7 +401,7 @@ describe('the design pin (1.2.0-canary.5)', () => {
 	it('getVerifiedDelivery fetches the pinned URL and caches it apart from the unpinned read', async () => {
 		const t = setup()
 		const design = { version: 2, brand: 'staging-shopify-canary' }
-		const pinnedUrl = `${DELIVERY_URL}?design=2&designBrand=staging-shopify-canary`
+		const pinnedUrl = `${DELIVERY_URL}&design=2&designBrand=staging-shopify-canary`
 		expect((await getVerifiedDelivery({ ...t.opts(), design })).verdict.decision).toBe('render')
 		expect(t.delivery.calls).toEqual([pinnedUrl])
 		expect(peekVerifiedDelivery({ ...t.opts(), design })?.verdict.decision).toBe('render')
@@ -406,7 +423,7 @@ describe('the design pin (1.2.0-canary.5)', () => {
 			renderDef: null,
 			...(label === '503' ? { unreachable: true, status: 503 } : {}),
 		})
-		expect(t.delivery.calls).toEqual([`${DELIVERY_URL}?design=3`])
+		expect(t.delivery.calls).toEqual([`${DELIVERY_URL}&design=3`])
 	})
 })
 

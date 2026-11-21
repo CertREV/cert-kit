@@ -39,7 +39,7 @@ import { OPTIONS_ONLY_SHAPES } from './options-only-shapes.js'
 /** The reader def the harness serves: `face: 'reader'` at v 2. */
 const READER_DEF = RAW_DEFS['face-reader'] as { v: number }
 const BRAND = 'staging-shopify-canary'
-const PINNED_URL = `${DELIVERY_URL}?design=2&designBrand=${BRAND}`
+const PINNED_URL = `${DELIVERY_URL}&design=2&designBrand=${BRAND}`
 
 describe('the design pin on the delivery card', () => {
 	let issuer: FixtureIssuer
@@ -98,7 +98,7 @@ describe('the design pin on the delivery card', () => {
 		expect(chromeRoot(await renderToHtml(card({ design: '2' })))).not.toBeNull()
 		serve(READER_DEF)
 		expect(chromeRoot(await renderToHtml(card({ design: 2 })))).not.toBeNull()
-		expect(delivery.calls).toEqual([`${DELIVERY_URL}?design=2`, `${DELIVERY_URL}?design=2`])
+		expect(delivery.calls).toEqual([`${DELIVERY_URL}&design=2`, `${DELIVERY_URL}&design=2`])
 	})
 
 	it('paints exactly what the unpinned card paints for the same reader def', async () => {
@@ -114,7 +114,7 @@ describe('the design pin on the delivery card', () => {
 	describe('fails closed: renders nothing', () => {
 		it('a def at another version', async () => {
 			await expectNothing(card({ design: '3', designBrand: BRAND }))
-			expect(delivery.calls).toEqual([`${DELIVERY_URL}?design=3&designBrand=${BRAND}`])
+			expect(delivery.calls).toEqual([`${DELIVERY_URL}&design=3&designBrand=${BRAND}`])
 		})
 
 		it('no def beside the envelope', async () => {
@@ -134,7 +134,7 @@ describe('the design pin on the delivery card', () => {
 		])('%s', async (_label, def, version) => {
 			serve(def)
 			await expectNothing(card({ design: version }))
-			expect(delivery.calls).toEqual([`${DELIVERY_URL}?design=${version}`])
+			expect(delivery.calls).toEqual([`${DELIVERY_URL}&design=${version}`])
 		})
 
 		it('404 no_design', async () => {
@@ -239,7 +239,7 @@ describe('the design pin on the delivery card', () => {
 		// The live design is the legacy def at v 4; the pinned design is the reader def at v 2.
 		const byUrl = (async (input: RequestInfo | URL) => {
 			delivery.calls.push(String(input))
-			return json(deliveryBody(issuer.envelope(), String(input).includes('?design=') ? READER_DEF : ELF_LIKE_DEF))
+			return json(deliveryBody(issuer.envelope(), String(input).includes('design=') ? READER_DEF : ELF_LIKE_DEF))
 		}) as typeof fetch
 		setCardDeliveryRuntimeForTests({ resolveKid: issuer.resolveKid, fetchImpl: () => byUrl, now: () => T0 })
 		const pinned = chromeRoot(await renderToHtml(card({ design: '2', designBrand: BRAND })))
@@ -259,6 +259,6 @@ describe('the design pin on the delivery card', () => {
 			</>,
 		)
 		expect(html.split('<div data-certrev-cert-chrome').length - 1).toBe(1)
-		expect([...delivery.calls].sort()).toEqual([DELIVERY_URL, `${DELIVERY_URL}?design=3`])
+		expect([...delivery.calls].sort()).toEqual([DELIVERY_URL, `${DELIVERY_URL}&design=3`])
 	})
 })

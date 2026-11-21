@@ -43,7 +43,7 @@ import { RAW_DEFS } from './legacy-face-cases.js'
 const READER_DEF = RAW_DEFS['face-reader'] as { v: number }
 const BRAND = 'staging-shopify-canary'
 const PIN = { version: READER_DEF.v, brand: BRAND }
-const PINNED_URL = `${DELIVERY_URL}?design=${READER_DEF.v}&designBrand=${BRAND}`
+const PINNED_URL = `${DELIVERY_URL}&design=${READER_DEF.v}&designBrand=${BRAND}`
 
 const seedNode = (design?: { version: number; brand?: string }) => {
 	const el = document.createElement('div')

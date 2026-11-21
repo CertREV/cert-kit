@@ -61,7 +61,7 @@ beforeAll(async () => {
 	issuer = makeIssuer()
 	server = createServer((req, res) => {
 		requests += 1
-		const entry = decodeURIComponent((req.url ?? '').split('/').pop() ?? '')
+		const entry = decodeURIComponent((req.url ?? '').split('?')[0].split('/').pop() ?? '')
 		if (!answering.has(entry)) return // accepted, never answered: CertREV hanging
 		res.writeHead(200, { 'content-type': 'application/json' })
 		res.end(JSON.stringify(deliveryBody(issuer.envelope({ subject: builderSubject(entry) }))))

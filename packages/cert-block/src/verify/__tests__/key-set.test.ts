@@ -183,7 +183,7 @@ describe('a key rotation needs no reinstall', () => {
 			cache: new TtlCache<CachedDelivery>(),
 		})
 		expect(read.verdict.decision).toBe('render')
-		expect(calls).toEqual([`${BASE}/api/cert/v1/delivery/builder/entry-fixture-1`, `${BASE}${KEY_SET_PATH}`])
+		expect(calls).toEqual([`${BASE}/api/cert/v1/delivery/builder/entry-fixture-1?none=204`, `${BASE}${KEY_SET_PATH}`])
 	})
 
 	it('the same envelope with no published set is unknown_key: suppressed, as 1.3.x suppresses an unknown kid', async () => {
