@@ -15,13 +15,14 @@ an uncertified page still paints no card, and a certified one paints exactly wha
   but the browser logs every 404 as a console error, on every view of every uncertified page.
 - **Now.** The Builder card's read asks for CertREV's "none" answer with its `Accept` header
   (`application/json, application/vnd.certrev.none`; a CORS-safelisted value, so no preflight). A portal that knows it
-  answers a never-certified page with 204, which the browser does not log; the card reads it exactly as the 404 it
+  answers a never-certified page with 204 naming its code in `X-CertREV-Delivery-None`, which the browser does not log
+  (a 204 without that header is not the none answer and stays "CertREV not reached"); the card reads it exactly as the 404 it
   replaces (suppressed, `subject_mismatch`, no fallback report). A 200 `{ none: { code } }` with no artifact beside it
   reads the same way. A portal that does not know the answer still sends 404.
 - **Opt-in, per read.** `GetVerifiedDeliveryOptions.none` (new, optional). A read that does not set it is unchanged: a 204
   is still "CertREV not reached" (stale-if-error, a fallback report). `deliveryUrl` and `deliveryCacheKey` are unchanged,
-  so the URL, the cache key and the design-pin query are 3.0.0's.
-- **A drop-in on 3.0.0**: same registration, inputs, exports (two added: `NONE_ACCEPT`, `isNoneAnswer`) and
+  so the URL and the design-pin query are 3.0.0's; a read that asks never shares a cache entry with one that does not.
+- **A drop-in on 3.0.0**: same registration, inputs, exports (three added: `NONE_ACCEPT`, `NONE_HEADER`, `isNoneAnswer`) and
   Content-Security-Policy sources.
 
 ## 3.0.0 · 2026-11-08

@@ -17,6 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderCertBlock } from '../../components/render-cert-block.js'
 import { CERT_STRINGS_VERSION } from '../../components/render-def.js'
+import { NONE_ACCEPT, NONE_HEADER } from '../../verify/get-verified-delivery.js'
 import { BUILDER_CERT_CHROME_KEYS } from '../cert-chrome-data.js'
 import {
 	acceptedDeliveryMarker,
@@ -247,6 +248,23 @@ describe('with the delivery marker: the envelope face', () => {
 		expect(root).toContain(`data-certrev-strings-version="${CERT_STRINGS_VERSION}"`)
 		expect(root).toContain('data-certrev-def-version="4"')
 		expect(html).toContain(expectedFace(BRAND_B_LIKE_DEF.hidden, '#000000'))
+	})
+
+	it("3.0.1: asks for the none answer, and on an uncertified page (CertREV's 204) prints nothing and reports nothing", async () => {
+		const accepts: (string | null)[] = []
+		setCardDeliveryRuntimeForTests({
+			resolveKid: issuer.resolveKid,
+			fetchImpl: () =>
+				(async (_input: RequestInfo | URL, init?: RequestInit) => {
+					accepts.push(new Headers(init?.headers).get('accept'))
+					return new Response(null, { status: 204, headers: { [NONE_HEADER]: 'not_certified' } })
+				}) as typeof fetch,
+			now: () => clock,
+		})
+		const html = await renderToHtml(card())
+		expect(accepts).toEqual([NONE_ACCEPT])
+		expect(chromeRoot(html)).toBeNull()
+		expect(reports(warn)).toEqual([])
 	})
 
 	it('applies the def: the hidden reviewer photo is gone, the black accent carries white ink', async () => {
