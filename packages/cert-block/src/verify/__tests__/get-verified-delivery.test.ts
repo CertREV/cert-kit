@@ -28,6 +28,7 @@ import {
 	invalidateDelivery,
 	isNoneAnswer,
 	NONE_ACCEPT,
+	NONE_HEADER,
 	parseDeliveredFace,
 	parseDesignPin,
 	parseRenderDef,
@@ -354,7 +355,10 @@ describe('the none answer (3.0.1)', () => {
 	const noneBody = () => json({ none: { code: 'not_certified' } })
 
 	it.each([
-		['204', () => new Response(null, { status: 204 })],
+		[
+			"CertREV's 204 (it names its code)",
+			() => new Response(null, { status: 204, headers: { [NONE_HEADER]: 'not_certified' } }),
+		],
 		['a typed none body', noneBody],
 	])('a read that asks reads %s as the definitive "never certified" a 404 is: suppressed, never unreachable', async (_l, answer) => {
 		const t = setup(answer)
@@ -364,8 +368,19 @@ describe('the none answer (3.0.1)', () => {
 		})
 	})
 
-	it('a read that does not ask is unchanged: a 204 is CertREV not reached, a none body fails verification', async () => {
+	it('a 204 that does not name its code is no none answer, even when asked for: CertREV not reached, as always', async () => {
 		const t = setup(() => new Response(null, { status: 204 }))
+		expect((await getVerifiedDelivery(withNone(t))).unreachable).toBe(true)
+	})
+
+	it('a read that asks and a plain read never share a cache entry', () => {
+		const t = setup()
+		expect(deliveryCacheKey(withNone(t))).not.toBe(deliveryCacheKey(t.opts()))
+		expect(deliveryCacheKey(t.opts())).toBe(`delivery:${DELIVERY_URL}|builder:${ENTRY_ID}`)
+	})
+
+	it('a read that does not ask is unchanged: a 204 is CertREV not reached, a none body fails verification', async () => {
+		const t = setup(() => new Response(null, { status: 204, headers: { [NONE_HEADER]: 'not_certified' } }))
 		expect((await getVerifiedDelivery(t.opts())).unreachable).toBe(true)
 		const u = setup(noneBody)
 		const got = await getVerifiedDelivery(u.opts())
@@ -395,6 +410,7 @@ describe('the none answer (3.0.1)', () => {
 
 	it.each([
 		['no code', { none: {} }],
+		['an empty code', { none: { code: '' } }],
 		['a code that is not a string', { none: { code: 1 } }],
 		['an artifact beside it', { none: { code: 'not_certified' }, payload: null }],
 		['a signature beside it', { none: { code: 'not_certified' }, signature: {} }],

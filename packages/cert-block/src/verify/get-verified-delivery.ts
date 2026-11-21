@@ -49,6 +49,10 @@
  * NOTHING HERE VOUCHES FOR IT: the signed `payload.content.faceDigest` binds it (`contract: 1`, `doc`), and the Builder
  * card prints it only after its shape check and digest check pass (`src/builder/card-contract.ts`). A read with no
  * card is the 1.3.1 object exactly. The read is made with `credentials: 'omit'`: it never sends a cookie.
+ *
+ * 3.0.1: a read may ask for CertREV's "none" answer (`none`, set by the Builder card): `Accept: NONE_ACCEPT`. Then CertREV's
+ * 204 for a page it never certified (it carries `NONE_HEADER`), or a 200 `{ none: { code } }` with no artifact, is the same
+ * definitive "no credential" a 404 is. A read that does not ask is exactly 3.0.0's, and the two never share a cache entry.
  */
 
 import { cardDocumentDigest } from '../builder/card-contract.js'
@@ -209,9 +213,11 @@ export function deliveryUrl(baseUrl: string, platform: string, externalId: strin
 
 /** Cache key: the URL (origin and pin included) × the placement rendering it. No clock: the TTL bounds time. */
 export function deliveryCacheKey(
-	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'design'>,
+	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'design' | 'none'>,
 ): string {
-	return `delivery:${deliveryUrl(opts.baseUrl, opts.platform, opts.externalId, opts.design)}|${encodeURIComponent(opts.context.platform)}:${encodeURIComponent(opts.context.externalId)}`
+	// 3.0.1: a read that asks for the none answer can settle what a plain read would not, so the two never share an entry.
+	const none = opts.none === true ? '|none' : ''
+	return `delivery:${deliveryUrl(opts.baseUrl, opts.platform, opts.externalId, opts.design)}|${encodeURIComponent(opts.context.platform)}:${encodeURIComponent(opts.context.externalId)}${none}`
 }
 
 const isString = (v: unknown): v is string => typeof v === 'string'
@@ -309,8 +315,14 @@ export function parseDeliveredFace(value: unknown): DeliveredFace | null {
 	return { html, css }
 }
 
-/** 3.0.1: the Accept a read sends to ask for the "none" answer (both types are CORS-safelisted values). */
+/** 3.0.1: the Accept a read sends to ask for the "none" answer (a CORS-safelisted value: no preflight). */
 export const NONE_ACCEPT = 'application/json, application/vnd.certrev.none'
+
+/**
+ * 3.0.1: the header CertREV's 204 none answer carries (its `DeliveryNotFoundCode`). A 204 without it is not the none answer
+ * (a proxy, a challenge page, a bug) and stays what any non-content answer always was: CertREV not reached.
+ */
+export const NONE_HEADER = 'x-certrev-delivery-none'
 
 /**
  * 3.0.1: CertREV's typed "no certificate" body, exactly `{ none: { code: <string> } }` and nothing that could be an artifact
@@ -318,20 +330,20 @@ export const NONE_ACCEPT = 'application/json, application/vnd.certrev.none'
  */
 export function isNoneAnswer(body: Record<string, unknown>): boolean {
 	const none = body.none
-	if (none === null || typeof none !== 'object' || Array.isArray(none)) return false
-	if (typeof (none as Record<string, unknown>).code !== 'string') return false
+	if (!isRecord(none) || typeof none.code !== 'string' || none.code === '') return false
 	return !('payload' in body) && !('signature' in body) && !('kind' in body)
 }
 
 /** Fetch, parse and cryptographically verify one Delivery response. Never throws. */
 async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDelivery> {
 	const fetchImpl = opts.fetchImpl ?? globalThis.fetch
+	const askNone = opts.none === true
 	let res: Response
 	try {
 		res = await fetchWithDeadline(
 			fetchImpl,
 			deliveryUrl(opts.baseUrl, opts.platform, opts.externalId, opts.design),
-			{ headers: { accept: opts.none === true ? NONE_ACCEPT : 'application/json' }, credentials: 'omit' },
+			{ headers: { accept: askNone ? NONE_ACCEPT : 'application/json' }, credentials: 'omit' },
 			opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS,
 		)
 	} catch {
@@ -340,8 +352,8 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	}
 	// Nothing served for this placement: never certified, or withdrawn. A LIVE revocation is a 200
 	// tombstone, so a 4xx here genuinely means "no credential for this subject".
-	// 3.0.1: a read that asked for the none answer also takes a 204 as "never certified".
-	if (res.status === 404 || res.status === 410 || (opts.none === true && res.status === 204)) {
+	// 3.0.1: a read that asked for the none answer also takes CertREV's 204 (it names its code) as "never certified".
+	if (res.status === 404 || res.status === 410 || (askNone && res.status === 204 && !!res.headers.get(NONE_HEADER))) {
 		return suppressed('subject_mismatch')
 	}
 	if (!res.ok) return unreachable(res.status)
@@ -352,7 +364,7 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 		return unreachable()
 	}
 	if (!isRecord(body)) return unreachable()
-	if (opts.none === true && isNoneAnswer(body)) return suppressed('subject_mismatch')
+	if (askNone && isNoneAnswer(body)) return suppressed('subject_mismatch')
 	let verdict: CertVerdict
 	try {
 		// `verifyArtifact`, so a tombstone verifies as itself and reports 'revoked'. The kernel reads
