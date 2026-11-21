@@ -50,9 +50,9 @@
  * card prints it only after its shape check and digest check pass (`src/builder/card-contract.ts`). A read with no
  * card is the 1.3.1 object exactly. The read is made with `credentials: 'omit'`: it never sends a cookie.
  *
- * 3.0.1: a read may ask for CertREV's "none" answer (`none`, set by the Builder card): `Accept: NONE_ACCEPT`. Then CertREV's
- * 204 for a page it never certified (it carries `NONE_HEADER`), or a 200 `{ none: { code } }` with no artifact, is the same
- * definitive "no credential" a 404 is. A read that does not ask is exactly 3.0.0's, and the two never share a cache entry.
+ * 3.1.0: a read may ask for CertREV's "none" answer (`none`, set by the Builder card): `Accept: NONE_ACCEPT`. Then CertREV's
+ * 204 for a page it never certified (`NONE_HEADER: not_certified`, exposed to the browser) is the same definitive "no
+ * credential" a 404 is. A read that does not ask is exactly 3.0.0's, and the two never share a cache entry.
  */
 
 import { cardDocumentDigest } from '../builder/card-contract.js'
@@ -164,11 +164,12 @@ export interface GetVerifiedDeliveryOptions {
 	 */
 	readonly design?: DesignPin
 	/**
-	 * 3.0.1: ask for CertREV's "none" answer (`Accept: application/json, application/vnd.certrev.none`). A portal that knows
-	 * it answers a page it never certified with 204 (no body), which a browser does not log, where the 404 is a console
-	 * error on every view of an uncertified page; this read takes the 204, or a 200 `{ none: { code } }`, as the same
-	 * definitive "no credential" a 404 is. A portal that does not know it answers 404, as before. The URL and the cache key
-	 * are unchanged. The Builder card sets it; a read that does not ask treats a 204 as it always has (CertREV not reached).
+	 * 3.1.0: ask for CertREV's "none" answer (`Accept: NONE_ACCEPT`). A portal that knows it answers a page it never certified
+	 * with 204 and `NONE_HEADER: not_certified` (no body), which a browser does not log, where the 404 is a console error on
+	 * every view of an uncertified page; this read takes that 204 as the same definitive "no credential" a 404 is. A portal
+	 * that does not know it answers 404, as before. The URL is unchanged; the cache key gains `|none`, so an asking read and a
+	 * plain one never share an entry (pass the same `none` to `invalidateDelivery` and the other cache helpers). The
+	 * Builder card sets it; a read that does not ask treats any 204 as it always has (CertREV not reached).
 	 */
 	readonly none?: boolean
 }
@@ -215,7 +216,7 @@ export function deliveryUrl(baseUrl: string, platform: string, externalId: strin
 export function deliveryCacheKey(
 	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'design' | 'none'>,
 ): string {
-	// 3.0.1: a read that asks for the none answer can settle what a plain read would not, so the two never share an entry.
+	// 3.1.0: a read that asks for the none answer can settle what a plain read would not, so the two never share an entry.
 	const none = opts.none === true ? '|none' : ''
 	return `delivery:${deliveryUrl(opts.baseUrl, opts.platform, opts.externalId, opts.design)}|${encodeURIComponent(opts.context.platform)}:${encodeURIComponent(opts.context.externalId)}${none}`
 }
@@ -315,24 +316,17 @@ export function parseDeliveredFace(value: unknown): DeliveredFace | null {
 	return { html, css }
 }
 
-/** 3.0.1: the Accept a read sends to ask for the "none" answer (a CORS-safelisted value: no preflight). */
+/** 3.1.0: the Accept a read sends to ask for the "none" answer (a CORS-safelisted value: no preflight). */
 export const NONE_ACCEPT = 'application/json, application/vnd.certrev.none'
 
 /**
- * 3.0.1: the header CertREV's 204 none answer carries (its `DeliveryNotFoundCode`). A 204 without it is not the none answer
+ * 3.1.0: the header CertREV's 204 none answer carries (its `DeliveryNotFoundCode`). A 204 without it is not the none answer
  * (a proxy, a challenge page, a bug) and stays what any non-content answer always was: CertREV not reached.
  */
 export const NONE_HEADER = 'x-certrev-delivery-none'
 
-/**
- * 3.0.1: CertREV's typed "no certificate" body, exactly `{ none: { code: <string> } }` and nothing that could be an artifact
- * beside it (`payload`, `signature`, `kind`). It claims nothing, so there is nothing to verify, and it reports no fallback.
- */
-export function isNoneAnswer(body: Record<string, unknown>): boolean {
-	const none = body.none
-	if (!isRecord(none) || typeof none.code !== 'string' || none.code === '') return false
-	return !('payload' in body) && !('signature' in body) && !('kind' in body)
-}
+/** 3.1.0: the one code a none answer settles: CertREV never certified the page. */
+export const NONE_CODE = 'not_certified'
 
 /** Fetch, parse and cryptographically verify one Delivery response. Never throws. */
 async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDelivery> {
@@ -352,8 +346,13 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 	}
 	// Nothing served for this placement: never certified, or withdrawn. A LIVE revocation is a 200
 	// tombstone, so a 4xx here genuinely means "no credential for this subject".
-	// 3.0.1: a read that asked for the none answer also takes CertREV's 204 (it names its code) as "never certified".
-	if (res.status === 404 || res.status === 410 || (askNone && res.status === 204 && !!res.headers.get(NONE_HEADER))) {
+	// 3.1.0: a read that asked for the none answer also takes CertREV's 204 for a page it never certified (the 204 names
+	// that code) as "never certified". Any other 204 is no answer about the credential: CertREV not reached, as always.
+	if (
+		res.status === 404 ||
+		res.status === 410 ||
+		(askNone && res.status === 204 && res.headers.get(NONE_HEADER) === NONE_CODE)
+	) {
 		return suppressed('subject_mismatch')
 	}
 	if (!res.ok) return unreachable(res.status)
@@ -364,7 +363,6 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 		return unreachable()
 	}
 	if (!isRecord(body)) return unreachable()
-	if (askNone && isNoneAnswer(body)) return suppressed('subject_mismatch')
 	let verdict: CertVerdict
 	try {
 		// `verifyArtifact`, so a tombstone verifies as itself and reports 'revoked'. The kernel reads
@@ -457,7 +455,10 @@ export function readVerifiedDelivery(opts: GetVerifiedDeliveryOptions): Verified
  * caller then awaits `getVerifiedDelivery`). Never fetches.
  */
 export function peekVerifiedDelivery(
-	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
+	opts: Pick<
+		GetVerifiedDeliveryOptions,
+		'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design' | 'none'
+	>,
 ): VerifiedDelivery | undefined {
 	const cached = (opts.cache ?? sharedDeliveryCache).peek(deliveryCacheKey(opts))
 	return cached === undefined ? undefined : settleDelivery(cached, opts.context)
@@ -478,21 +479,27 @@ export function unreachableDelivery(): VerifiedDelivery {
  * negative entry. Never touches a verified entry.
  */
 export function rememberDeliveryUnreachable(
-	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
+	opts: Pick<
+		GetVerifiedDeliveryOptions,
+		'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design' | 'none'
+	>,
 ): void {
 	;(opts.cache ?? sharedDeliveryCache).markFailed(deliveryCacheKey(opts), unreachable())
 }
 
 /** 2.0.2: whether a read of one placement is already running in `cache` (a render's, or a background refresh). */
 export function deliveryLoading(
-	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design'>,
+	opts: Pick<
+		GetVerifiedDeliveryOptions,
+		'baseUrl' | 'platform' | 'externalId' | 'context' | 'cache' | 'design' | 'none'
+	>,
 ): boolean {
 	return (opts.cache ?? sharedDeliveryCache).loading(deliveryCacheKey(opts))
 }
 
 /** Drop the cached read for one placement (e.g. from a revocation webhook); with `design`, that pinned read. */
 export function invalidateDelivery(
-	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'design'>,
+	opts: Pick<GetVerifiedDeliveryOptions, 'baseUrl' | 'platform' | 'externalId' | 'context' | 'design' | 'none'>,
 	cache: TtlCache<CachedDelivery> = sharedDeliveryCache,
 ): void {
 	cache.delete(deliveryCacheKey(opts))
