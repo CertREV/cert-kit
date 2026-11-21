@@ -356,6 +356,8 @@ async function loadDelivery(opts: GetVerifiedDeliveryOptions): Promise<CachedDel
 		return suppressed('subject_mismatch')
 	}
 	if (!res.ok) return unreachable(res.status)
+	// 3.1.0: any other 204 is no answer about the credential; its status rides the report so it is never read as a timeout.
+	if (res.status === 204) return unreachable(res.status)
 	let body: unknown
 	try {
 		body = await res.json()
