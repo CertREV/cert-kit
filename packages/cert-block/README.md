@@ -374,7 +374,7 @@ other kid makes one read of `https://portal.certrev.com/api/cert/v1/keys`, a key
 kid signs it (and it is not older than one already accepted, and still lists its signer). Otherwise the kid is unknown
 and the card renders nothing, as in 1.3.x.
 
-### 2.0.1: brand-b's one install
+### 2.0.1: one install for a headless storefront
 
 A drop-in on 2.0.0 (same package, export, registration, inputs and CSP). What changes on a page:
 
@@ -482,7 +482,7 @@ the `delivery` marker (an options-only block) never reads the envelope, so it st
   inside a closed `<details class="certrev-r-more">` whose toggle reads "Read the expert memo" ("About the
   expert" when there is a bio and no memo; no fold with neither). At 640px and under the stylesheet hides the
   pair and shows the fold; wider, the fold is hidden. The scope line, the compensation cue and both links stay
-  outside the fold. It is the same card as Shopify's and WordPress's (a product decision).
+  outside the fold. It is the same card as Shopify's and WordPress's.
 - **Avatars.** Every byline paints a round avatar: the person's photo when there is one to paint, else their
   initials, else the silhouette (a name with no initials). It is 42 px for the writer and the banner reviewer
   alike (1.3.0 and earlier: 36 px for the writer), 46 px for the memo and sidebar reviewer. The initials and the silhouette are an inline `<svg>`, not an

@@ -62,7 +62,7 @@ describe.each(Object.keys(parity.cases))('%s', (name) => {
 
 	it('the block prints the preview’s head byte for byte, and each host’s shadow tree byte for byte but the certificate id', async () => {
 		const fixture = {
-			...contractFixture('banner-brand-b-like'),
+			...contractFixture('banner-storefront'),
 			certId: c.builderCard.certId,
 			content: c.content as never,
 			lifecycle: c.lifecycle as never,

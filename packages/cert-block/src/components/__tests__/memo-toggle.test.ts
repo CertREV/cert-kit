@@ -26,7 +26,7 @@ const buttons = (host: ParentNode) => [...host.querySelectorAll<HTMLButtonElemen
 
 describe('toggleMemo', () => {
 	it('expands and collapses the memo box, mirroring the state on aria-expanded and the label', () => {
-		const host = mount('bannerLongBrandB')
+		const host = mount('bannerLongStorefront')
 		const [button] = buttons(host)
 		if (!button) throw new Error('no toggle')
 		const box = host.querySelector('[data-certrev-memo]')

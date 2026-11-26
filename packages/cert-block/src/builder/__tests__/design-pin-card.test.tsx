@@ -20,7 +20,6 @@ import {
 	chromeRoot,
 	DELIVERY_URL,
 	deliveryBody,
-	BRAND_B_LIKE_DEF,
 	ENTRY_ID,
 	type FixtureIssuer,
 	json,
@@ -28,6 +27,7 @@ import {
 	makeIssuer,
 	renderToHtml,
 	type ScriptedDelivery,
+	STOREFRONT_DEF,
 	scriptedDelivery,
 	seedOf,
 	T0,
@@ -128,7 +128,7 @@ describe('the design pin on the delivery card', () => {
 		})
 
 		it.each([
-			['a legacy def at the pinned version', BRAND_B_LIKE_DEF, '4'],
+			['a legacy def at the pinned version', STOREFRONT_DEF, '4'],
 			['an unknown face', RAW_DEFS['face-unknown'], '2'],
 			['a capitalised reader face', RAW_DEFS['face-capitalised'], '4'],
 		])('%s', async (_label, def, version) => {
@@ -239,7 +239,7 @@ describe('the design pin on the delivery card', () => {
 		// The live design is the legacy def at v 4; the pinned design is the reader def at v 2.
 		const byUrl = (async (input: RequestInfo | URL) => {
 			delivery.calls.push(String(input))
-			return json(deliveryBody(issuer.envelope(), String(input).includes('?design=') ? READER_DEF : BRAND_B_LIKE_DEF))
+			return json(deliveryBody(issuer.envelope(), String(input).includes('?design=') ? READER_DEF : STOREFRONT_DEF))
 		}) as typeof fetch
 		setCardDeliveryRuntimeForTests({ resolveKid: issuer.resolveKid, fetchImpl: () => byUrl, now: () => T0 })
 		const pinned = chromeRoot(await renderToHtml(card({ design: '2', designBrand: BRAND })))

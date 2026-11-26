@@ -44,16 +44,16 @@ const page = () => (
 
 /** A banner document with no memo part, re-digested. */
 function memoLessBanner(): ContractFixture {
-	const fixture = contractFixture('banner-brand-b-like')
+	const fixture = contractFixture('banner-storefront')
 	const card = { ...fixture.card, parts: { top: fixture.card.parts.top } }
 	return { ...fixture, card, doc: sha256Hex(canonicalizeJson(card)) }
 }
 
 it.each<[string, () => ContractFixture]>([
-	['sidebar', () => contractFixture('sidebar-brand-b-like' as ContractCase)],
-	['floating', () => contractFixture('floating-brand-b-like' as ContractCase)],
+	['sidebar', () => contractFixture('sidebar-storefront' as ContractCase)],
+	['floating', () => contractFixture('floating-storefront' as ContractCase)],
 	['memo-less banner', memoLessBanner],
-	['banner (both blocks print)', () => contractFixture('banner-brand-b-like')],
+	['banner (both blocks print)', () => contractFixture('banner-storefront')],
 ])('B2: %s: the split pair hydrates with the server card intact, no mismatch, no read', async (_label, make) => {
 	const fixture = make()
 	const server = scriptedDelivery(() => json(contractBody(issuer, fixture)))

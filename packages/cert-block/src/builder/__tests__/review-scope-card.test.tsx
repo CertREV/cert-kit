@@ -17,12 +17,12 @@ import { setCardDeliveryRuntimeForTests } from '../delivery-runtime.js'
 import {
 	builderPayload,
 	deliveryBody,
-	BRAND_B_LIKE_DEF,
 	ENTRY_ID,
 	json,
 	MARKER,
 	makeIssuer,
 	renderToHtml,
+	STOREFRONT_DEF,
 	scriptedDelivery,
 	T0,
 } from './delivery-harness.js'
@@ -73,8 +73,8 @@ function runtime(answer: () => Response) {
 }
 
 const DEFS = [
-	['the legacy face', { ...BRAND_B_LIKE_DEF, hidden: [] }],
-	['the reader face', { ...BRAND_B_LIKE_DEF, hidden: [], face: 'reader', layout: 'sidebar' }],
+	['the legacy face', { ...STOREFRONT_DEF, hidden: [] }],
+	['the reader face', { ...STOREFRONT_DEF, hidden: [], face: 'reader', layout: 'sidebar' }],
 ] as const
 
 const CASES = [

@@ -94,7 +94,7 @@ it('R1-2: a delayed sibling is skipped on the server, hydrates as its marker, an
 	// The skipped sibling is not a failure: nothing reported.
 	expect(warn).not.toHaveBeenCalled()
 
-	// The browser: every read refused (as brand-b's CSP refuses it), counted.
+	// The browser: every read refused (as a strict storefront CSP refuses it), counted.
 	const calls: string[] = []
 	restore = setCardDeliveryRuntimeForTests({
 		resolveKid: issuer.resolveKid,

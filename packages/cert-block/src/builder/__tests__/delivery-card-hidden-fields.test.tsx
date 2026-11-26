@@ -24,12 +24,12 @@ import { SEED_ATTRIBUTE } from '../ssr-seed.js'
 import {
 	builderPayload,
 	deliveryBody,
-	BRAND_B_LIKE_DEF,
 	ENTRY_ID,
 	json,
 	MARKER,
 	makeIssuer,
 	renderToHtml,
+	STOREFRONT_DEF,
 	scriptedDelivery,
 	seedOf,
 	T0,
@@ -42,8 +42,8 @@ const AUTHOR_PHOTO = 'https://cdn.certrev.com/authors/sam-writer.jpg'
 const MEMO = 'Zebrafish memo sentence: the retinol concentrations and sun-protection advice are accurate.'
 
 /** The legacy face's def and the reader face's: the same hidden set, the same payload. */
-const LEGACY_DEF = BRAND_B_LIKE_DEF
-const READER_DEF = { ...BRAND_B_LIKE_DEF, face: 'reader', layout: 'banner' }
+const LEGACY_DEF = STOREFRONT_DEF
+const READER_DEF = { ...STOREFRONT_DEF, face: 'reader', layout: 'banner' }
 const FACES = [
 	['the legacy face', LEGACY_DEF],
 	['the reader face', READER_DEF],

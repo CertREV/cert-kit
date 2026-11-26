@@ -27,7 +27,7 @@ import { contractBody, contractFixture, expectedCardHtml } from './contract-v1-s
 import { ENTRY_ID, json, MARKER, makeIssuer, renderToHtml, T0 } from './delivery-harness.js'
 
 const issuer = makeIssuer()
-const fixture = contractFixture('banner-brand-b-like')
+const fixture = contractFixture('banner-storefront')
 let restore: () => void = () => {}
 afterEach(() => restore())
 beforeEach(() => {
