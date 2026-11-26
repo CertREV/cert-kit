@@ -4,6 +4,12 @@ The signed-envelope contract. Semver contract: **the canonical byte contract (RF
 the payload) and the fail-closed `VerdictKernel` semantics never change in a patch or minor**;
 payload extensions are additive (old edges suppress unknown shapes: fail-closed by design).
 
+## 0.6.1 · 2026-11-26
+
+- **Republished for the npm page; no code change.** The source, the build output and the byte contract are 0.6.0's.
+  The tarball is checked before publish for customer names, internal ids and secret-shaped text, and this release
+  restores the README on the package's npm page.
+
 ## 0.6.0 · 2026-10-18
 
 - **An optional signed `content.faceDigest`.** `{ v: 1, defVersion, html, css }`: the lowercase hex
