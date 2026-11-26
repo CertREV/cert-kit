@@ -5,6 +5,13 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 2.1.3 · 2026-11-26
+
+**Publication hygiene only: no change to anything a card prints or does.** A drop-in on 2.1.2: same package, same
+registration and inputs, same exports, types and Content-Security-Policy sources. Comments, docs and test fixtures no
+longer name customers, people or internal tracking ids, and the published tarball is checked for them before every
+publish. The one shipped-byte change is comment text inside the inlined reader stylesheet (CSS comments do not render).
+
 ## 2.1.2 · 2026-11-18
 
 **A card that painted never goes blank because CertREV answered slowly, and a cold page waits long enough for a real
