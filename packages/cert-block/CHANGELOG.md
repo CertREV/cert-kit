@@ -5,6 +5,25 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 3.1.0 · unreleased
+
+**A page CertREV never certified logs nothing in the browser console.** The visual output is unchanged, byte for byte:
+an uncertified page still paints no card, and a certified one paints exactly what 3.0.0 paints. A minor release: one new
+read option and three new exports.
+
+- **Why.** A Builder card on an uncertified page (a publish-first draft waiting for its certification) reads the
+  Delivery API, which answers 404 for "never certified". The card reads that as "no credential" and paints nothing,
+  but the browser logs every 404 as a console error, on every view of every uncertified page.
+- **Now.** The Builder card's read asks for CertREV's "none" answer with its `Accept` header (`NONE_ACCEPT`:
+  `application/json, application/vnd.certrev.none`, a CORS-safelisted value, so no preflight). A portal that knows it
+  answers a never-certified page with 204 and `X-CertREV-Delivery-None: not_certified` (exposed to the browser), which
+  the browser does not log; the card reads it exactly as the 404 it replaces (suppressed, `subject_mismatch`, no
+  fallback report). Any other 204 stays "CertREV not reached". A portal that does not know the answer still sends 404.
+- **Opt-in, per read.** `GetVerifiedDeliveryOptions.none` (new, optional). A read that does not set it is unchanged. The
+  URL and the design-pin query are 3.0.0's; `deliveryCacheKey` adds `|none` for an asking read, so the two never share
+  an entry (pass the same `none` to `invalidateDelivery`, `peekVerifiedDelivery` and the other cache helpers).
+- **New exports**: `NONE_ACCEPT`, `NONE_HEADER`, `NONE_CODE`. Same registration, inputs and Content-Security-Policy sources.
+
 ## 3.0.0 · 2026-11-08
 
 **Claim strength is no longer a concept: the `preset` and `rung` of a render def, the `rung` of a face and the
