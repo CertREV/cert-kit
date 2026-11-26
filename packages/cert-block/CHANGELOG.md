@@ -5,6 +5,22 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 2.1.3 · 2026-11-20
+
+**One CertREV graph per placement on the page.** A drop-in on 2.1.2: same package, same `certRevCertComponent` and
+registration (`CertREV Cert`, the same 22 inputs), no new prop, no new peer dependency, the same `exports` map, the
+same Content-Security-Policy sources. Every byte a card prints is 2.1.2's.
+
+- **Why.** A page that carries the same placement in two blocks (brand-b's Builder pages: a sidebar rail and a stacked
+  copy for small screens) printed the page's CertREV `ld+json` graph once per block when the blocks mounted
+  separately (Builder's client-rendered preview, separate React roots): two identical graphs. Search engines merge
+  identical nodes, but a validator reports the page as carrying the graph twice.
+- **What changed.** After every commit of a card block, `dedupeCardGraphs` keeps the first graph of the placement in
+  document order and removes the rest. A single block, other placements' graphs and the page's own `ld+json` are
+  untouched. In one server render the second block of a placement already printed nothing (2.0.2), so server HTML is
+  unchanged.
+- **Integrators.** Nothing to do beyond the bump.
+
 ## 2.1.2 · 2026-11-18
 
 **A card that painted never goes blank because CertREV answered slowly, and a cold page waits long enough for a real
