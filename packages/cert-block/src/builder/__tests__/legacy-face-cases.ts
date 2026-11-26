@@ -56,7 +56,13 @@ const HOSTILE = {
 
 export const CONTENTS: Readonly<Record<string, CertContent>> = { full: FULL, sparse: SPARSE, hostile: HOSTILE }
 
-const STOREFRONT = { v: 4, preset: 'memo', rung: 'standard', tokens: { accentColor: '#000000' }, hidden: ['reviewerPhoto'] }
+const STOREFRONT = {
+	v: 4,
+	preset: 'memo',
+	rung: 'standard',
+	tokens: { accentColor: '#000000' },
+	hidden: ['reviewerPhoto'],
+}
 const BRANDED = {
 	v: 2,
 	preset: 'default',
