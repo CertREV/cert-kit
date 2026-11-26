@@ -53,7 +53,7 @@ const order = (column: Element) =>
 		.map((el) => (el.getAttribute('data-certrev-placed') ? `placed:${el.getAttribute('data-certrev-placed')}` : el.id))
 
 describe('applyCardPlacement: each part to its hinted anchor among the top-level blocks', () => {
-	it('header after the byline, memo at the end (Owen: the reviewer up top, the memo at the end)', () => {
+	it('header after the byline, memo at the end (the reviewer up top, the memo at the end)', () => {
 		const { column, wrapper } = page({ byline: '<p class="byline">By Ann Writer</p>', cardAt: 2 })
 		applyCardPlacement(wrapper, card({ top: { anchor: 'after-byline' }, bottom: { anchor: 'content-end' } }), [
 			'top',

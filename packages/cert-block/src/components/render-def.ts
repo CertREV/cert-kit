@@ -143,8 +143,8 @@ export const CERT_SCOPE_LINE =
 
 /**
  * 2.1.0: the scope line for an article whose review covered its TEXT only (no references or sources section). Byte-verbatim
- * copy of the portal's `FTC_DISCLOSURE_LINE_TEXT_ONLY` (`src/lib/embed/ftc-disclosure.ts`; Owen, Console decision
- * af5b0db5, 2026-10-30: the review line says what the expert actually reviewed). Same curly apostrophe, same contract
+ * copy of the portal's `FTC_DISCLOSURE_LINE_TEXT_ONLY` (`src/lib/embed/ftc-disclosure.ts`; the owner's decision:
+ * the review line says what the expert actually reviewed). Same curly apostrophe, same contract
  * status as `CERT_SCOPE_LINE`: never re-word here.
  */
 export const CERT_SCOPE_LINE_TEXT_ONLY =

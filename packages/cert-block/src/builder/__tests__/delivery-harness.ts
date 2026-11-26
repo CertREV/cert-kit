@@ -21,8 +21,8 @@ export const DELIVERY_URL = `${BASE}/api/cert/v1/delivery/builder/${ENTRY_ID}`
 /** A fixed render clock, well inside the fixture's lifecycle. */
 export const T0 = Date.parse('2026-09-26T12:00:00.000Z')
 
-/** An e.l.f.-shaped def: the memo preset, a black accent, the reviewer photo hidden. */
-export const ELF_LIKE_DEF = {
+/** A storefront def: the memo preset, a black accent, the reviewer photo hidden. */
+export const STOREFRONT_DEF = {
 	v: 4,
 	preset: 'memo',
 	rung: 'standard',
@@ -121,7 +121,7 @@ export function json(body: unknown, status = 200): Response {
 }
 
 /** The Builder Delivery body: the artifact with the def sibling spliced beside it. */
-export function deliveryBody(artifact: object, renderDef: unknown = ELF_LIKE_DEF): Record<string, unknown> {
+export function deliveryBody(artifact: object, renderDef: unknown = STOREFRONT_DEF): Record<string, unknown> {
 	return { ...artifact, renderDef }
 }
 

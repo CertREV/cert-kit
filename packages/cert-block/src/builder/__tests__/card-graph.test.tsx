@@ -51,7 +51,7 @@ const withGraph = (card: CardDocumentV1, graph: unknown = GRAPH) =>
 	}) as unknown as CardDocumentV1
 
 describe('cardGraphTag: the server’s graph, verbatim and inert', () => {
-	const banner = contractFixture('banner-elf-like').card
+	const banner = contractFixture('banner-storefront').card
 
 	it('one ld+json script naming the placement; every < escaped, so no value closes it; the same JSON back', () => {
 		const tag = cardGraphTag(withGraph(banner))
@@ -109,7 +109,7 @@ describe('a contract-1 placement whose document carries the graph', () => {
 	})
 
 	it('server-renders the card and the graph once, parseable; a split pair prints it once', async () => {
-		const fixture = contractFixture('banner-elf-like')
+		const fixture = contractFixture('banner-storefront')
 		const card = withGraph(fixture.card)
 		const doc = sha256Hex(canonicalizeJson(card))
 		delivery.respond(() =>
