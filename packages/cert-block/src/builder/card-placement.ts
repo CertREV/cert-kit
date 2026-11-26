@@ -1,6 +1,6 @@
 /**
  * 2.0.1: the card document's placement hints (`card.placement`, ADR 0001 §2), applied by the block in the browser, so
- * CertREV can move a banner's card and memo on a Builder page with no new install (Owen: the reviewer up top, the memo
+ * CertREV can move a banner's card and memo on a Builder page with no new install (the reviewer up top, the memo
  * at the end).
  *
  * A Builder page renders an entry as `[builder-content-id] > .builder-blocks > .builder-block`, one top-level block per

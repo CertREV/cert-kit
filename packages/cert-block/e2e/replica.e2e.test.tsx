@@ -35,48 +35,53 @@ const OUT = process.env.CERT_BLOCK_E2E_OUT ?? join(process.cwd(), 'e2e/.out')
 mkdirSync(OUT, { recursive: true })
 
 const PLACEMENTS: Placement[] = [
-	{ entryId: 'replica-banner', fixture: 'banner-elf-like' },
-	{ entryId: 'replica-sidebar', fixture: 'sidebar-elf-like' },
-	{ entryId: 'replica-floating', fixture: 'floating-elf-like' },
+	{ entryId: 'replica-banner', fixture: 'banner-storefront' },
+	{ entryId: 'replica-sidebar', fixture: 'sidebar-storefront' },
+	{ entryId: 'replica-floating', fixture: 'floating-storefront' },
 	{ entryId: 'replica-toned', fixture: 'sidebar-saved-3-toned' },
-	{ entryId: 'replica-split', fixture: 'banner-elf-like' },
-	{ entryId: 'replica-next', fixture: 'sidebar-elf-like', rotated: true },
-	{ entryId: 'replica-revoked', fixture: 'sidebar-elf-like' },
-	// 2.0.1: CertREV not reached, and the placement hints (Owen: the reviewer after the byline, the memo at the end).
-	{ entryId: 'replica-unreachable', fixture: 'banner-elf-like', unreachable: true },
+	{ entryId: 'replica-split', fixture: 'banner-storefront' },
+	{ entryId: 'replica-next', fixture: 'sidebar-storefront', rotated: true },
+	{ entryId: 'replica-revoked', fixture: 'sidebar-storefront' },
+	// 2.0.1: CertREV not reached, and the placement hints (the reviewer after the byline, the memo at the end).
+	{ entryId: 'replica-unreachable', fixture: 'banner-storefront', unreachable: true },
 	{
 		entryId: 'replica-placed',
-		fixture: 'banner-elf-like',
+		fixture: 'banner-storefront',
 		placement: { top: { anchor: 'after-byline' }, bottom: { anchor: 'content-end' } },
 	},
-	{ entryId: 'replica-hinted', fixture: 'banner-elf-like' },
+	{ entryId: 'replica-hinted', fixture: 'banner-storefront' },
 	...Object.values(previewParity().cases).map((c) => ({
 		entryId: c.externalId,
-		fixture: 'banner-elf-like' as const,
+		fixture: 'banner-storefront' as const,
 		painted: { card: c.builderCard, content: c.content, lifecycle: c.lifecycle, renderDef: c.renderDef },
 	})),
 ]
 
 const ARTICLES: ReplicaArticle[] = [
-	{ path: '/blogs/the-elf-word/banner', title: 'Retinol, banner card', entryId: 'replica-banner' },
-	{ path: '/blogs/the-elf-word/sidebar', title: 'Retinol, sidebar card', entryId: 'replica-sidebar' },
-	{ path: '/blogs/the-elf-word/floating', title: 'Retinol, floating card', entryId: 'replica-floating' },
-	{ path: '/blogs/the-elf-word/toned', title: 'Retinol, toned sidebar', entryId: 'replica-toned' },
+	{ path: '/blogs/the-storefront-journal/banner', title: 'Retinol, banner card', entryId: 'replica-banner' },
+	{ path: '/blogs/the-storefront-journal/sidebar', title: 'Retinol, sidebar card', entryId: 'replica-sidebar' },
+	{ path: '/blogs/the-storefront-journal/floating', title: 'Retinol, floating card', entryId: 'replica-floating' },
+	{ path: '/blogs/the-storefront-journal/toned', title: 'Retinol, toned sidebar', entryId: 'replica-toned' },
 	{
-		path: '/blogs/the-elf-word/split',
+		path: '/blogs/the-storefront-journal/split',
 		title: 'Retinol, split banner',
 		entryId: 'replica-split',
 		part: 'header',
 		memoBlock: true,
-		// 2.0.1: as mission e60680df22f2's e.l.f. export lays it out (the byline is in the template, above the body).
+		// 2.0.1: as a headless storefront's Builder export lays it out (the byline is in the template, above the body).
 		references: true,
 	},
-	{ path: '/blogs/the-elf-word/next', title: 'Next article', entryId: 'replica-next' },
-	{ path: '/blogs/the-elf-word/revoked', title: 'Retinol, revoked', entryId: 'replica-revoked' },
-	{ path: '/blogs/the-elf-word/no-marker', title: 'Retinol, no marker', entryId: 'replica-nomarker', noMarker: true },
-	{ path: '/blogs/the-elf-word/unreachable', title: 'Retinol, CertREV down', entryId: 'replica-unreachable' },
+	{ path: '/blogs/the-storefront-journal/next', title: 'Next article', entryId: 'replica-next' },
+	{ path: '/blogs/the-storefront-journal/revoked', title: 'Retinol, revoked', entryId: 'replica-revoked' },
 	{
-		path: '/blogs/the-elf-word/placed',
+		path: '/blogs/the-storefront-journal/no-marker',
+		title: 'Retinol, no marker',
+		entryId: 'replica-nomarker',
+		noMarker: true,
+	},
+	{ path: '/blogs/the-storefront-journal/unreachable', title: 'Retinol, CertREV down', entryId: 'replica-unreachable' },
+	{
+		path: '/blogs/the-storefront-journal/placed',
 		title: 'Retinol, placed by the hints',
 		entryId: 'replica-placed',
 		hero: true,
@@ -84,7 +89,7 @@ const ARTICLES: ReplicaArticle[] = [
 		cardAt: 2,
 	},
 	{
-		path: '/blogs/the-elf-word/hinted',
+		path: '/blogs/the-storefront-journal/hinted',
 		title: 'Retinol, default hints',
 		entryId: 'replica-hinted',
 		hero: true,
@@ -92,7 +97,7 @@ const ARTICLES: ReplicaArticle[] = [
 		cardAt: 2,
 	},
 	...Object.entries(previewParity().cases).map(([name, c]) => ({
-		path: `/blogs/the-elf-word/preview-${name}`,
+		path: `/blogs/the-storefront-journal/preview-${name}`,
 		title: `Retinol, the preview's ${name}`,
 		entryId: c.externalId,
 	})),
@@ -579,7 +584,7 @@ describe('an in-app navigation (no server render for the next article)', () => {
 				await w.page.goto(`${server.origin}${article('replica-banner').path}`)
 				await settle(w.page)
 				expect(w.requests.filter((r) => r.includes('/api/cert/v1/delivery/'))).toEqual([])
-				await w.page.locator('[data-replica-nav="/blogs/the-elf-word/next"]').click()
+				await w.page.locator('[data-replica-nav="/blogs/the-storefront-journal/next"]').click()
 				await w.page.waitForSelector('[data-replica-entry="replica-next"] [data-certrev-face="card"] > certrev-card', {
 					state: 'attached',
 				})
@@ -716,7 +721,7 @@ describe('SC2: the parts equal the Appearance preview’s own, for the same desi
 			const c = previewParity().cases[name]
 			const w = await open(viewport)
 			try {
-				await w.page.goto(`${server.origin}/blogs/the-elf-word/preview-${name}`)
+				await w.page.goto(`${server.origin}/blogs/the-storefront-journal/preview-${name}`)
 				await settle(w.page)
 				const printed = await hosts(w.page)
 				expect(printed.map((h) => h.part).sort()).toEqual(Object.keys(c.previewHosts).sort())
@@ -788,9 +793,9 @@ describe('a revoked placement (S2’s runtime revalidates against the card route
 				timeout: 10_000,
 			})
 			const afterLoad = await w.page.evaluate(() => document.querySelectorAll('certrev-card').length)
-			await w.page.locator('[data-replica-nav="/blogs/the-elf-word/banner"]').click()
+			await w.page.locator('[data-replica-nav="/blogs/the-storefront-journal/banner"]').click()
 			await w.page.waitForSelector('[data-replica-entry="replica-banner"] certrev-card', { state: 'attached' })
-			await w.page.locator('[data-replica-nav="/blogs/the-elf-word/revoked"]').click()
+			await w.page.locator('[data-replica-nav="/blogs/the-storefront-journal/revoked"]').click()
 			await settle(w.page)
 			const afterReturn = await w.page.evaluate(
 				() => document.querySelectorAll('[data-replica-entry="replica-revoked"] certrev-card').length,
@@ -822,7 +827,7 @@ describe('CSP: exactly the four CertREV sources', () => {
 				await w.page.goto(`${server.origin}${article('replica-banner').path}`)
 				await settle(w.page)
 				if (scenario === 'client-nav') {
-					await w.page.locator('[data-replica-nav="/blogs/the-elf-word/next"]').click()
+					await w.page.locator('[data-replica-nav="/blogs/the-storefront-journal/next"]').click()
 					await settle(w.page)
 				}
 				evidence[`csp-without-${directive}`] = { violations: w.violations }
@@ -836,7 +841,7 @@ describe('CSP: exactly the four CertREV sources', () => {
 	)
 })
 
-describe("2.1.1: script-src 'nonce-…' 'strict-dynamic' (e.l.f.'s policy): no violation, the runtime injected once, dialogs work", () => {
+describe("2.1.1: script-src 'nonce-…' 'strict-dynamic' (a headless storefront's policy): no violation, the runtime injected once, dialogs work", () => {
 	it.each([
 		['banner', 'replica-banner', '[data-certrev-part="bottom"]'],
 		['sidebar', 'replica-sidebar', '[data-certrev-part="rail"]'],

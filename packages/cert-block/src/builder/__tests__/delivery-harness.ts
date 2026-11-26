@@ -22,11 +22,11 @@ export const DELIVERY_URL = `${BASE}/api/cert/v1/delivery/builder/${ENTRY_ID}`
 export const T0 = Date.parse('2026-09-26T12:00:00.000Z')
 
 /**
- * An e.l.f.-shaped def: a black accent, the reviewer photo hidden. `preset` and `rung` are the two frozen constants the
+ * A storefront def: a black accent, the reviewer photo hidden. `preset` and `rung` are the two frozen constants the
  * portal still sends for renderers already in the field: this release reads neither, but the card's seed echoes the
  * served def verbatim and the 1.2.1 goldens pin that echo, so the wire shape stays as it is delivered.
  */
-export const ELF_LIKE_DEF = {
+export const STOREFRONT_DEF = {
 	v: 4,
 	preset: 'memo',
 	rung: 'standard',
@@ -125,7 +125,7 @@ export function json(body: unknown, status = 200): Response {
 }
 
 /** The Builder Delivery body: the artifact with the def sibling spliced beside it. */
-export function deliveryBody(artifact: object, renderDef: unknown = ELF_LIKE_DEF): Record<string, unknown> {
+export function deliveryBody(artifact: object, renderDef: unknown = STOREFRONT_DEF): Record<string, unknown> {
 	return { ...artifact, renderDef }
 }
 

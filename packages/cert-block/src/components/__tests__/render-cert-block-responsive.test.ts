@@ -124,7 +124,7 @@ describe('responsive: the rules', () => {
 
 describe('responsive: the collapsible memo', () => {
 	it('banner: the memo column is the box, the paragraph is clamped, a native toggle follows it', () => {
-		const html = phone('bannerLongElf')
+		const html = phone('bannerLongStorefront')
 		const [toggle] = toggles(html)
 		const id = /aria-controls="(certrev-memo-[0-9a-z]+)"/.exec(toggle ?? '')?.[1]
 		expect(id).toBeDefined()
@@ -149,7 +149,7 @@ describe('responsive: the collapsible memo', () => {
 	})
 
 	it('sidebar and custom: the quote is wrapped in the box with its toggle', () => {
-		for (const name of ['sidebarLong', 'sidebarLongElf', 'customLong']) {
+		for (const name of ['sidebarLong', 'sidebarLongStorefront', 'customLong']) {
 			const html = phone(name)
 			const [toggle] = toggles(html)
 			expect(toggle).toBeDefined()

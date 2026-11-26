@@ -2,7 +2,7 @@
 /**
  * Server-render the delivery card, then hydrate it in a browser (1.2.0). The browser paints from the envelope seed the
  * server HTML carries and makes NO read of its own, which is what keeps the card on a storefront whose CSP
- * `connect-src` does not name CertREV (e.l.f.'s live policy): every browser fetch here is a network error, as a CSP
+ * `connect-src` does not name CertREV (a live headless storefront's policy): every browser fetch here is a network error, as a CSP
  * refusal is, and is counted. The server HTML must hydrate with no mismatch and no client-side re-render; a card the
  * server did not paint stays unpainted; a seed that expired by the browser's clock comes down after hydration; a card
  * whose server HTML streams in after another card hydrated still finds its seed; a card mounted on the client reuses
@@ -30,12 +30,12 @@ import {
 	builderPayload,
 	builderSubject,
 	deliveryBody,
-	ELF_LIKE_DEF,
 	ENTRY_ID,
 	json,
 	MARKER,
 	makeIssuer,
 	renderToHtml,
+	STOREFRONT_DEF,
 	scriptedDelivery,
 	seedOf,
 	T0,
@@ -91,8 +91,8 @@ const fallbackRecord = (reason?: 'delivery_unreachable') => ({
 	...(reason ? { reason } : {}),
 })
 
-/** e.l.f.'s def on the 1.2.0 reader face. */
-const READER_DEF = { ...ELF_LIKE_DEF, face: 'reader', layout: 'banner' }
+/** The storefront def on the 1.2.0 reader face. */
+const READER_DEF = { ...STOREFRONT_DEF, face: 'reader', layout: 'banner' }
 
 /** The reader face with every photo shown (the fixture's reviewer has one; its writer has none). */
 const READER_DEF_WITH_PHOTOS = { ...READER_DEF, hidden: [] }
@@ -135,7 +135,7 @@ async function serverHtml(
 	}
 }
 
-/** The browser: a fresh page (no seeds known yet, a cold cache) whose every read is refused, as e.l.f.'s CSP refuses it. */
+/** The browser: a fresh page (no seeds known yet, a cold cache) whose every read is refused, as a strict storefront CSP refuses it. */
 function refusingBrowser(now = T0) {
 	const calls: string[] = []
 	restore = setCardDeliveryRuntimeForTests({
@@ -173,7 +173,7 @@ async function hydrate(container: HTMLElement, element: ReactElement = card()) {
 }
 
 it.each([
-	['the legacy face', ELF_LIKE_DEF],
+	['the legacy face', STOREFRONT_DEF],
 	['the reader face', READER_DEF],
 ])('%s hydrates from the server seed with no browser read and no mismatch', async (_name, def) => {
 	const html = await serverHtml(() => json(deliveryBody(issuer.envelope(), def)))
@@ -198,7 +198,7 @@ it.each([
 it('a seed that stripped nothing is the envelope as served: its payload and signature verify against the issuer, and it names the placement and def', async () => {
 	const envelope = issuer.envelope()
 	// A def that hides nothing: the payload is the served one, so the signature rides along and still verifies.
-	const def = { ...ELF_LIKE_DEF, hidden: [] }
+	const def = { ...STOREFRONT_DEF, hidden: [] }
 	const html = await serverHtml(() => json(deliveryBody(envelope, def)))
 	const container = mountServerHtml(html)
 	const raw = container.querySelector(`[${SEED_ATTRIBUTE}]`)?.getAttribute(SEED_ATTRIBUTE)
@@ -208,7 +208,7 @@ it('a seed that stripped nothing is the envelope as served: its payload and sign
 	expect(seed?.externalId).toBe(ENTRY_ID)
 	expect(seed?.payload).toEqual(envelope.payload)
 	expect(seed?.signature).toEqual(envelope.signature)
-	expect(seed?.renderDef).toMatchObject({ v: ELF_LIKE_DEF.v, hidden: [] })
+	expect(seed?.renderDef).toMatchObject({ v: STOREFRONT_DEF.v, hidden: [] })
 	const verdict = await verifyArtifact(
 		{ payload: seed?.payload, signature: seed?.signature } as never,
 		issuer.resolveKid,

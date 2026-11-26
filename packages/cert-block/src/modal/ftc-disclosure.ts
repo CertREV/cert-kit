@@ -18,7 +18,7 @@ export const FTC_DISCLOSURE_LINE =
 
 /**
  * 2.1.0: the line for an article whose review covered its TEXT only (no references or sources section): a byte-faithful
- * copy of the portal's `FTC_DISCLOSURE_LINE_TEXT_ONLY` (Owen, Console decision af5b0db5). Same contract status and curly
+ * copy of the portal's `FTC_DISCLOSURE_LINE_TEXT_ONLY`. Same contract status and curly
  * apostrophe as `FTC_DISCLOSURE_LINE`.
  */
 export const FTC_DISCLOSURE_LINE_TEXT_ONLY =

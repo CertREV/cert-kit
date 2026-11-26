@@ -137,7 +137,7 @@ describe('projectCertJsonLd', () => {
 		// started with `https://certrev.com/`, which was a property of the FIXTURE (its verifyUrl
 		// and profileUrl both happen to live there), not of the projector.
 		const payload = withContent({
-			verifyUrl: 'https://verify-staging.certrev.dev/verify/cert_fixture_001',
+			verifyUrl: 'https://verify-staging.example.test/verify/cert_fixture_001',
 			expert: { ...makeMockPayload().content.expert, profileUrl: 'https://med.example.edu/faculty/jane-doe' },
 		})
 		const g = projectCertJsonLd(payload, { pageUrl: 'https://brand.example.com/blogs/skincare/retinol-guide' })
@@ -272,7 +272,7 @@ describe('projectCertJsonLd — WebPage + credential recognition', () => {
 describe('projectCertJsonLd — the CertREV organization is ONE node', () => {
 	it('Organization @id + url are identical across payloads with different verify origins', () => {
 		const a = projectCertJsonLd(withContent({ verifyUrl: 'https://certrev.com/verify/cert_a' }))
-		const b = projectCertJsonLd(withContent({ verifyUrl: 'https://verify.certrev.dev/v/cert_b' }))
+		const b = projectCertJsonLd(withContent({ verifyUrl: 'https://verify.example.test/v/cert_b' }))
 		expect(nodeOfType(b, 'Organization')['@id']).toBe(nodeOfType(a, 'Organization')['@id'])
 		expect(nodeOfType(b, 'Organization').url).toBe(nodeOfType(a, 'Organization').url)
 		expect(nodeOfType(a, 'Organization')['@id']).toBe(CERTREV_ORGANIZATION_ID)
