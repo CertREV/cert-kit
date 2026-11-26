@@ -31,7 +31,7 @@ import {
 import { sha256Hex } from './delivered-face-shapes.js'
 import { ENTRY_ID } from './delivery-harness.js'
 
-const banner = contractFixture('banner-elf-like')
+const banner = contractFixture('banner-storefront')
 const contentWith = (faceDigest: unknown) => ({ ...banner.content, faceDigest }) as never
 
 describe('acceptedCardBinding: the signed binding decides the path', () => {
@@ -180,8 +180,8 @@ describe('cardBinds: the document is the one the verified envelope signs, for th
 })
 
 describe('cardPartsFor: the saved design decides the layout; `part` splits a banner only', () => {
-	const sidebar = contractFixture('sidebar-elf-like').card
-	const floating = contractFixture('floating-elf-like').card
+	const sidebar = contractFixture('sidebar-storefront').card
+	const floating = contractFixture('floating-storefront').card
 
 	it.each([
 		[undefined, ['top', 'bottom']],
@@ -248,8 +248,8 @@ describe('cardHtml: exactly the document’s bytes; the head and both dialogs on
 
 	it('the first part is top, else rail, else pill (bottom only when the document has none of them)', () => {
 		expect(cardFirstPart(banner.card)).toBe('top')
-		expect(cardFirstPart(contractFixture('sidebar-elf-like').card)).toBe('rail')
-		expect(cardFirstPart(contractFixture('floating-elf-like').card)).toBe('pill')
+		expect(cardFirstPart(contractFixture('sidebar-storefront').card)).toBe('rail')
+		expect(cardFirstPart(contractFixture('floating-storefront').card)).toBe('pill')
 		const memoOnly = { ...banner.card, parts: { bottom: banner.card.parts.bottom } }
 		expect(cardFirstPart(memoOnly)).toBe('bottom')
 		expect(cardHtml(memoOnly, ['bottom'])).toBe(

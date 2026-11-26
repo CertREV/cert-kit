@@ -1,0 +1,58 @@
+name: CI
+
+# This repository had no CI: every PR reported its checks from a local run in its body. Two gates
+# run on every pull request and on main:
+#   test             build, typecheck, unit tests, biome, and the hygiene check's own tests.
+#   public-hygiene   scripts/public-hygiene.mjs over the git tree AND over the npm pack tarball of
+#                    each package (dist included): no customer names, personal emails, internal
+#                    hosts or ids, or secret-shaped text in anything public. The same check runs
+#                    as each package's prepublishOnly, so a publish from a laptop hits it too.
+#
+# The customer list is not in this repo: it is generated privately from production brand records
+# and arrives as the PUBLIC_HYGIENE_DENYLIST secret (salted hashes; it names nobody). Without the
+# secret the check exits 2 and this job fails: a check that cannot see customer names must not
+# pass. Pull requests from forks get no secrets, so they fail here until a maintainer re-runs the
+# check from a branch in this repository.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+      - run: pnpm check
+      - name: Public hygiene check's own tests
+        run: pnpm test:hygiene
+
+  public-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # The tarballs ship dist/, so build first; the check packs exactly what npm would publish.
+      - run: pnpm -r build
+      - name: Nothing private in the tree or in what ships to npm
+        env:
+          PUBLIC_HYGIENE_DENYLIST: ${{ secrets.PUBLIC_HYGIENE_DENYLIST }}
+        run: pnpm check:public

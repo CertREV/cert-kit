@@ -1,5 +1,5 @@
 {
-	"note": "Written by scripts/refresh-reader.mjs; reader-sources.test.ts re-hashes every file named here.",
+	"note": "Written by scripts/refresh-reader.mjs; reader-sources.test.ts re-hashes every file named here. The committed copies differ from the portal's bytes only where scrubbed for publication (internal ids in comments, the masked fixture brand's name); scripts/public-hygiene.mjs fails a refresh that brings either back.",
 	"portal": {
 		"head": "d62ae100b3fd0db41c07ef0043294e804ca072e8",
 		"cssAndGoldensCommitted": true
@@ -7,8 +7,8 @@
 	"css": {
 		"source": "shopify/extensions/certrev-schema/assets/certrev-cert.css (the lines from /* CERTREV-READER-GEN:BEGIN */ through /* CERTREV-READER-GEN:END */, markers included)",
 		"file": "src/reader/reader.css",
-		"bytes": 42901,
-		"sha256": "80e8b3716c4e36ea588d1ae788ba0d1357997841ef74df102ca15f1b8c2aa2fa"
+		"bytes": 42861,
+		"sha256": "46ac1579001eec251416a1af716c97873f18195c38dcd1250d127749ec587f09"
 	},
 	"logos": {
 		"note": "The demo's own logo files (the theme extension's copies, equal to the site snapshot's), whose bytes src/reader/logo-assets.generated.ts carries as base64 data URIs.",
@@ -31,48 +31,48 @@
 		"dir": "src/reader/__tests__/fixtures/golden",
 		"files": {
 			"banner.burgundy-mono-pill-nophoto.html": {
-				"bytes": 49866,
-				"sha256": "ccaffca2f7464f51a86968fba558c7a31e8b86e917fcb3189bb2c7b468a7c595"
+				"bytes": 49896,
+				"sha256": "a31050d1094b043208e0735f3a09eba670e6f18b9ea5c6c9234b52f4aeadfeb4"
 			},
 			"banner.gold-serif-sharp-full.html": {
-				"bytes": 49685,
-				"sha256": "26d0f34515c36927ac427643684d05743f5014b0a227999287f52b3f64b5f5eb"
+				"bytes": 49715,
+				"sha256": "a7d5c444316ce3d5a4f5e3cf181240760e97171ac3044b87ac1b9775d0e00d6d"
 			},
 			"banner.navy-full.html": {
-				"bytes": 49693,
-				"sha256": "f722161346825da8a53e011787ce46c95296addef1dbbc77128a79f6a2895131"
+				"bytes": 49723,
+				"sha256": "dd5d397b7d4f1f5fc1e2cf3a4cdf65fb83e0a2f800e559efcc05d466c654135d"
 			},
 			"banner.navy-sparse.html": {
-				"bytes": 35634,
-				"sha256": "eb2fc0fa8b5af96c9df03fff219eb0ba153fe779fe92d37357b82e7e8b4ed520"
+				"bytes": 35676,
+				"sha256": "1640c361ff958a7e9964dfea2e1fa72e33ea09e7c43d6f857969c0d193bc23a3"
 			},
 			"floating.burgundy-mono-pill.html": {
-				"bytes": 22379,
-				"sha256": "dd1efb3d6c0a03ff7c32bddf0e07e56b87efccf15fe0a98458efa29dd19ddd6a"
+				"bytes": 22409,
+				"sha256": "bfeb6d1925dd63e19434d208d277abbd2e85061f7443efaf92351d1e9c8006d5"
 			},
 			"floating.gold-serif-sharp.html": {
-				"bytes": 22381,
-				"sha256": "2420f88b4b9959454970541e309afac957daf2e34c456392d3a9c02085a7bea5"
+				"bytes": 22411,
+				"sha256": "c1d110fdc05567dde37709b06f3a9923c51b091063e563eeb5d504020468d19d"
 			},
 			"floating.navy.html": {
-				"bytes": 22385,
-				"sha256": "25b6bc84362bd4767916cd1ac67d18d0be9013e327928b1ea9a48c29740fdef3"
+				"bytes": 22415,
+				"sha256": "9453c69b165020280c19067462612bf1c3bed6034021023f4c6e4710c188de42"
 			},
 			"sidebar.burgundy-mono-pill-nophoto.html": {
-				"bytes": 35910,
-				"sha256": "7073cffe4ee4557f260da87ca40e1496b60b0360baf7786fd84c34f1cdaa7a44"
+				"bytes": 35940,
+				"sha256": "d9fc128f993e977bc15dd372a6fdf700c6e643a3ff4f65485f3423206bc24407"
 			},
 			"sidebar.gold-serif-sharp-full.html": {
-				"bytes": 35851,
-				"sha256": "bf59ee6334b9a1f74118ac75fd1b2dfdb2e999826f3cef1dac747a51bedb7091"
+				"bytes": 35881,
+				"sha256": "d6a2f50a6818d6b84d45453654a726f1231ace796b746e9f80b06882c7da1164"
 			},
 			"sidebar.navy-full.html": {
-				"bytes": 35855,
-				"sha256": "df28666e45f8de7a932e9f0e54110ddd1f2c1fc81fb234bd398d1fdb649c758a"
+				"bytes": 35885,
+				"sha256": "1fe2c6a65cf0a0f84c377d1caefbd10332da40a9a5e0bf9a1877305fd4db11ff"
 			},
 			"sidebar.navy-sparse.html": {
-				"bytes": 34974,
-				"sha256": "1e7d57332dcfb5284d7c9fb0a1d02a987cf0d7c337dd131bc0f777eca56ccdb4"
+				"bytes": 35016,
+				"sha256": "b762837118de1145dce53541ab8bc73dc6e2c699ca3417bb369b89b753ec62ae"
 			}
 		}
 	},
@@ -81,12 +81,12 @@
 		"dir": "src/reader/__tests__/fixtures",
 		"files": {
 			"golden-cells.json": {
-				"bytes": 16213,
-				"sha256": "146efd62bde30ad57d5fe2965efd8283213becff7a2bab75f4ea0030604dea94"
+				"bytes": 16279,
+				"sha256": "47f9b846ca88fcffe770ed553398add015861164ec6d4f949fa7cbc2163c9e8d"
 			},
 			"oracle-extra.json": {
-				"bytes": 5014176,
-				"sha256": "852d7a1a6af9cdf3e31493a50035ccebc28e2e5b0902cffe5697c78dcd3b5e1d"
+				"bytes": 5016993,
+				"sha256": "097eb396dee4d495f62c7c968540d0111510a7b8072d5c638160acf409dcb92c"
 			}
 		}
 	}

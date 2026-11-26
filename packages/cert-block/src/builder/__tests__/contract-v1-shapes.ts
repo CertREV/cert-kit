@@ -2,8 +2,8 @@
  * Contract-1 test shapes (2.0.0): the portal's own card documents, and Builder deliveries that serve them.
  *
  * The documents in `__fixtures__/contract-v1/` were painted by CertREV's server core, not by this package: portal
- * branch `v1-core` (`buildCardDocument`, lead mission certrev-0a99cc1c5bef; the commit is in each file's `source`),
- * from a masked fixture certificate (no customer data) and five designs: an e.l.f.-like def (black accent, reviewer
+ * branch `v1-core` (`buildCardDocument`, the commit is in each file's `source`),
+ * from a masked fixture certificate (no customer data) and five designs: a storefront def (black accent, reviewer
  * photo hidden) on each layout, a toned def saved in production, and no saved def. `doc` is the portal's own digest of
  * each document (`cardDocumentDigest`, Node's `createHash` over cert-contract's RFC 8785 bytes); this package
  * recomputes it with WebCrypto and must agree. `scripts/card-fixtures.portal.ts` regenerates them.
@@ -16,9 +16,9 @@ import type { CardDocumentV1 } from '../card-contract.js'
 import { builderPayload, builderSubject, ENTRY_ID, type FixtureIssuer } from './delivery-harness.js'
 
 export const CONTRACT_CASES = [
-	'banner-elf-like',
-	'sidebar-elf-like',
-	'floating-elf-like',
+	'banner-storefront',
+	'sidebar-storefront',
+	'floating-storefront',
 	'sidebar-saved-3-toned',
 	'banner-no-def',
 ] as const

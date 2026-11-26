@@ -14,9 +14,9 @@ import {
 	layoutFor,
 	themeFromDef,
 } from '../envelope-face.js'
-import { builderPayload, ELF_LIKE_DEF } from './delivery-harness.js'
+import { builderPayload, STOREFRONT_DEF } from './delivery-harness.js'
 
-const def = { ...ELF_LIKE_DEF }
+const def = { ...STOREFRONT_DEF }
 
 describe('layoutFor', () => {
 	it('an editor mode wins, then the def layout, then banner', () => {

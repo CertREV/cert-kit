@@ -2,15 +2,14 @@
  * Generates cert-block 2.0's contract-1 card-document fixtures from the lead's server core (portal branch v1-core),
  * so cert-kit's tests run on the server's real bytes rather than a hand-built stand-in.
  *
- * It imports the PORTAL's modules (`@/lib/...`), so it runs inside a CertREV/portal checkout that has the card document
- * (lead mission certrev-0a99cc1c5bef, branch v1-core), never here: copy it to the portal's `scripts/` and run
+ * It imports the PORTAL's modules (`@/lib/...`), so it runs inside a checkout of CertREV's private server repo that has the card document
+ * (branch v1-core), never here: copy it to the portal's `scripts/` and run
  *   SKIP_ENV_VALIDATION=1 npx tsx scripts/card-fixtures.portal.ts <out-dir>
  * then copy `<out-dir>/*.json` to `src/builder/__tests__/__fixtures__/contract-v1/`.
  * Writes one JSON per case: { source, case, certId, subject, content, lifecycle, renderDef, card, doc }.
  * `content` is the facts the card was painted from (no faceDigest); the cert-kit test signs a payload with this content
  * plus the Builder binding `{ v: 1, defVersion, html, css, contract: 1, doc }` under a fixture key.
  */
-import { execSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { buildPayload } from '@certrev/cert-contract/signer'
@@ -28,9 +27,12 @@ mkdirSync(out, { recursive: true })
 
 const ENTRY_ID = 'entry-fixture-1'
 const NOW = new Date('2026-06-22T00:00:00.000Z')
-const source = execSync('git rev-parse HEAD').toString().trim()
 
-const s = maskedSource(maskedBrand('yise'))
+// The masked fixture brand is the caller's choice, never a customer key hard-coded here (the public hygiene check
+// rejects one, in this file and in the fixtures it writes).
+const maskedKey = process.env.CARD_FIXTURES_MASKED_BRAND
+if (!maskedKey) throw new Error('set CARD_FIXTURES_MASKED_BRAND to the masked fixture brand to paint from')
+const s = maskedSource(maskedBrand(maskedKey))
 const payload = buildPayload({
 	certId: s.certId,
 	subject: { ...s.subject, platform: 'builder', externalId: ENTRY_ID },
@@ -57,15 +59,15 @@ function savedDef(label: string, v: number) {
 
 const cases: { name: string; renderDef: ReturnType<typeof readerDef> | null }[] = [
 	{
-		name: 'banner-elf-like',
+		name: 'banner-storefront',
 		renderDef: { ...readerDef({ accentColor: '#000000' }, ['reviewerPhoto'], 'banner'), v: 7 },
 	},
 	{
-		name: 'sidebar-elf-like',
+		name: 'sidebar-storefront',
 		renderDef: { ...readerDef({ accentColor: '#000000' }, ['reviewerPhoto'], 'sidebar'), v: 7 },
 	},
 	{
-		name: 'floating-elf-like',
+		name: 'floating-storefront',
 		renderDef: { ...readerDef({ accentColor: '#000000' }, ['reviewerPhoto'], 'floating'), v: 7 },
 	},
 	{ name: 'sidebar-saved-3-toned', renderDef: savedDef('saved-3', 3) },
@@ -83,7 +85,7 @@ for (const c of cases) {
 	})
 	if (!card) throw new Error(`case ${c.name}: the face paints nothing`)
 	const body = {
-		source: `CertREV/portal ${source} (lead mission certrev-0a99cc1c5bef, branch native/certrev-0a99cc1c5bef; schema-frozen-v1 shape), buildCardDocument`,
+		source: 'CertREV server core (schema-frozen-v1 shape), buildCardDocument',
 		case: c.name,
 		now: NOW.toISOString(),
 		certId: payload.certId,

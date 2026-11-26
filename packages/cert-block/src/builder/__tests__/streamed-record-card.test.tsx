@@ -30,12 +30,12 @@ import {
 	BASE,
 	builderPayload,
 	deliveryBody,
-	ELF_LIKE_DEF,
 	ENTRY_ID,
 	json,
 	MARKER,
 	makeIssuer,
 	renderToHtml,
+	STOREFRONT_DEF,
 	scriptedDelivery,
 	T0,
 } from './delivery-harness.js'
@@ -44,8 +44,8 @@ import { OPTIONS_ONLY_SHAPES } from './options-only-shapes.js'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-/** e.l.f.'s def on the 1.2.0 reader face. */
-const READER_DEF = { ...ELF_LIKE_DEF, face: 'reader', layout: 'banner' }
+/** The storefront def on the 1.2.0 reader face. */
+const READER_DEF = { ...STOREFRONT_DEF, face: 'reader', layout: 'banner' }
 /** The canary replica's pinned design. */
 const PINNED_DEF = RAW_DEFS['face-reader'] as { v: number }
 const PIN = { version: PINNED_DEF.v, brand: 'staging-shopify-canary' }
@@ -123,7 +123,7 @@ async function serverHtml(answer: () => Response | Promise<Response>, element: R
 
 const envelopeAnswer = (def: unknown) => () => json(deliveryBody(issuer.envelope(), def))
 
-/** The browser: a fresh page whose every read is refused (e.l.f.'s CSP), at `now`. */
+/** The browser: a fresh page whose every read is refused (a strict storefront CSP), at `now`. */
 function refusingBrowser(now = T0) {
 	const calls: string[] = []
 	restore = setCardDeliveryRuntimeForTests({
@@ -184,7 +184,7 @@ describe('a card the client renders while the page is still loading (1.2.1)', ()
 		const painted = chrome(container)
 		expect(served).not.toBeNull()
 		expect(painted?.getAttribute(SEED_ATTRIBUTE)).toBe(served?.getAttribute(SEED_ATTRIBUTE))
-		expect(painted?.getAttribute('data-certrev-def-version')).toBe(String(ELF_LIKE_DEF.v))
+		expect(painted?.getAttribute('data-certrev-def-version')).toBe(String(STOREFRONT_DEF.v))
 		expect(painted?.textContent).toBe(served?.textContent)
 
 		// $RC finds no boundary to fill (React deleted it) and removes the part: the card keeps what it painted.
@@ -345,7 +345,7 @@ describe('a card the client renders while the page is still loading (1.2.1)', ()
 		expect(container.innerHTML).toBe('')
 		expect(browser.calls).toHaveLength(0)
 		await pageLoaded()
-		expect(chrome(container)?.getAttribute('data-certrev-def-version')).toBe(String(ELF_LIKE_DEF.v))
+		expect(chrome(container)?.getAttribute('data-certrev-def-version')).toBe(String(STOREFRONT_DEF.v))
 		expect(browser.calls).toHaveLength(1)
 	})
 })

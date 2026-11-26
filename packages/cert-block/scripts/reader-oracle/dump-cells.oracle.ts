@@ -17,7 +17,10 @@ const BURG = { accentColor: '#7A1F2B', barInk: '#7A1F2B', fontSlot: 'mono', corn
 
 it('dumps the golden cell inputs and the Liquid output', async () => {
 	fs.mkdirSync(OUT, { recursive: true })
-	const yise = maskedBrand('yise')
+	// The masked fixture brand is the caller's choice, never a customer key hard-coded here.
+	const maskedKey = process.env.READER_ORACLE_MASKED_BRAND
+	if (!maskedKey) throw new Error('set READER_ORACLE_MASKED_BRAND to the masked fixture brand to paint from')
+	const brand = maskedBrand(maskedKey)
 	const cells = [
 		{ id: 'banner.navy-full', variant: 'full', def: readerDef({ accentColor: '#0A1B3F' }) },
 		{ id: 'banner.navy-sparse', variant: 'sparse', def: readerDef() },
@@ -31,7 +34,7 @@ it('dumps the golden cell inputs and the Liquid output', async () => {
 		{ id: 'floating.gold-serif-sharp', variant: 'full', def: readerDef(GOLD, [], 'floating') },
 		{ id: 'floating.burgundy-mono-pill', variant: 'full', def: readerDef(BURG, [], 'floating') },
 	] as const
-	const out = cells.map((c) => ({ id: c.id, variant: c.variant, def: c.def, content: contentFor(yise, c.variant) }))
+	const out = cells.map((c) => ({ id: c.id, variant: c.variant, def: c.def, content: contentFor(brand, c.variant) }))
 	// The golden cells' inputs. The expected bytes are the portal's committed goldens, copied by the refresh script.
 	const certId = /data-certrev-cert-id="([^"]*)"/.exec(await paint(out[0].content, out[0].def as never))?.[1] ?? ''
 	fs.writeFileSync(path.join(OUT, 'golden-cells.json'), JSON.stringify({ certId, cells: out }))
