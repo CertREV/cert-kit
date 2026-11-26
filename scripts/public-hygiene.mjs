@@ -100,7 +100,7 @@ export const RULES = [
 				if (/^\d/.test(domain)) continue
 				if (domain.toLowerCase() === 'certrev.com' && ROLE_MAILBOXES.has(local.toLowerCase())) continue
 				// A no-reply address (a bot, or a service's commit identity) is nobody's mailbox.
-				if (/^no-?reply$/i.test(local)) continue
+				if (/^no-?reply$/i.test(local) || /(?:^|\.)noreply\.github\.com$/i.test(domain)) continue
 				out.push(text)
 			}
 			return out

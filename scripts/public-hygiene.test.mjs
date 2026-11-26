@@ -106,6 +106,7 @@ describe('personal-email', () => {
 			"['credentials', 'https://user:pw@portal.certrev.com/x.js']",
 			'"@certrev/cert-block@3.0.0"',
 			'Co-Authored-By: Bot <noreply§@example-vendor.com>',
+			'Author: Someone <12345+someone§@users.noreply.github.com>',
 		]) {
 			assert.deepEqual(hits('personal-email', line), [], line)
 		}
