@@ -1,5 +1,5 @@
 /**
- * 2.0.1: forward compatibility, so the one install brand-b makes keeps working while CertREV's server moves on.
+ * 2.0.1: forward compatibility, so the one install a headless storefront customer makes keeps working while CertREV's server moves on.
  *
  * The lead's rule (relay 86172b679cee, ADR 0001 §4): documents stay `contract: 1`; a minor change is additive keys
  * under contract 1 (a new part, a new field, a new key in a known object, a new key in the signed binding), which
@@ -84,7 +84,7 @@ async function serve(body: unknown): Promise<string> {
 }
 
 describe('additive changes under contract 1 print the card exactly as before', () => {
-	const fixture = contractFixture('banner-brand-b-like')
+	const fixture = contractFixture('banner-storefront')
 
 	it.each<[string, (card: Record<string, unknown>) => Record<string, unknown>]>([
 		[
@@ -136,7 +136,7 @@ describe('additive changes under contract 1 print the card exactly as before', (
 })
 
 describe('a newer major prints nothing, reports it and beacons it; the page renders', () => {
-	const fixture = contractFixture('sidebar-brand-b-like')
+	const fixture = contractFixture('sidebar-storefront')
 
 	it.each([
 		2,

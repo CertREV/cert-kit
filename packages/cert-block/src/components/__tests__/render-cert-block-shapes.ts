@@ -46,27 +46,27 @@ const allFields = [
 	'compensationCue',
 ]
 
-/** The brand-b-shaped def as the envelope face maps it: black accent, no reviewer photo. */
-const brand-bFace = { rung: 'standard', placedFields: allFields.filter((f) => f !== 'reviewerPhoto') }
-const brand-bTheme = { accentColor: '#000000', accentFg: '#ffffff' }
+/** The storefront def as the envelope face maps it: black accent, no reviewer photo. */
+const storefrontFace = { rung: 'standard', placedFields: allFields.filter((f) => f !== 'reviewerPhoto') }
+const storefrontTheme = { accentColor: '#000000', accentFg: '#ffffff' }
 
 export const RENDER_SHAPES: Readonly<Record<string, Record<string, unknown>>> = {
 	bannerLong: { mode: 'banner', facts },
-	bannerLongBrandB: { mode: 'banner', theme: brand-bTheme, face: brand-bFace, facts },
-	bannerHeaderPart: { mode: 'banner', part: 'header', face: brand-bFace, facts },
-	bannerMemoPart: { mode: 'banner', part: 'memo', face: brand-bFace, facts },
-	bannerBroken: { mode: 'banner', face: brand-bFace, facts: { ...facts, memo: BROKEN_MEMO } },
-	bannerShort: { mode: 'banner', face: brand-bFace, facts: { ...facts, memo: SHORT_MEMO } },
+	bannerLongStorefront: { mode: 'banner', theme: storefrontTheme, face: storefrontFace, facts },
+	bannerHeaderPart: { mode: 'banner', part: 'header', face: storefrontFace, facts },
+	bannerMemoPart: { mode: 'banner', part: 'memo', face: storefrontFace, facts },
+	bannerBroken: { mode: 'banner', face: storefrontFace, facts: { ...facts, memo: BROKEN_MEMO } },
+	bannerShort: { mode: 'banner', face: storefrontFace, facts: { ...facts, memo: SHORT_MEMO } },
 	bannerNoAuthor: {
 		mode: 'banner',
-		face: { ...brand-bFace, placedFields: brand-bFace.placedFields.filter((f) => f !== 'authorName') },
+		face: { ...storefrontFace, placedFields: storefrontFace.placedFields.filter((f) => f !== 'authorName') },
 		facts,
 	},
-	bannerEmptyMemo: { mode: 'banner', face: brand-bFace, facts: { ...facts, memo: '' } },
+	bannerEmptyMemo: { mode: 'banner', face: storefrontFace, facts: { ...facts, memo: '' } },
 	sidebarLong: { mode: 'sidebar', facts },
-	sidebarLongBrandB: { mode: 'sidebar', theme: brand-bTheme, face: brand-bFace, facts },
-	sidebarShort: { mode: 'sidebar', face: brand-bFace, facts: { ...facts, memo: SHORT_MEMO } },
-	floating: { mode: 'floating', face: brand-bFace, facts },
+	sidebarLongStorefront: { mode: 'sidebar', theme: storefrontTheme, face: storefrontFace, facts },
+	sidebarShort: { mode: 'sidebar', face: storefrontFace, facts: { ...facts, memo: SHORT_MEMO } },
+	floating: { mode: 'floating', face: storefrontFace, facts },
 	customLong: { mode: 'custom', face: { rung: 'standard', placedFields: ['label', 'memo', 'certificateLink'] }, facts },
 	escapedMemo: { mode: 'banner', facts: { ...facts, memo: `${LONG_MEMO} <script>alert(1)</script> & "quoted"` } },
 }

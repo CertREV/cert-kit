@@ -27,12 +27,12 @@ import {
 	chromeRoot,
 	DELIVERY_URL,
 	deliveryBody,
-	BRAND_B_LIKE_DEF,
 	ENTRY_ID,
 	json,
 	MARKER,
 	makeIssuer,
 	renderToHtml,
+	STOREFRONT_DEF,
 	T0,
 	withoutSeed,
 } from './delivery-harness.js'
@@ -49,7 +49,7 @@ beforeEach(() => {
 	const byUrl = (async (input: RequestInfo | URL) => {
 		calls.push(String(input))
 		return json(
-			deliveryBody(issuer.envelope(), String(input).includes('?design=') ? RAW_DEFS['face-reader'] : BRAND_B_LIKE_DEF),
+			deliveryBody(issuer.envelope(), String(input).includes('?design=') ? RAW_DEFS['face-reader'] : STOREFRONT_DEF),
 		)
 	}) as typeof fetch
 	restore = setCardDeliveryRuntimeForTests({ resolveKid: issuer.resolveKid, fetchImpl: () => byUrl, now: () => T0 })

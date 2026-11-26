@@ -540,7 +540,7 @@
 	padding-top: 9px;
 }
 /* The certified date and the compensation cue sit on one row under both columns, on a shared baseline, left-justified
-   like the rest of the card (on a live client's pictures: "where it says certified is weirdly center aligned
+   like the rest of the card (from a live card's screenshots: "where it says certified is weirdly center aligned
    instead of left justified"; the 2026-10-12 balanced card had centred it). */
 .certrev-reader .certrev-r-card .certrev-r-foot {
 	justify-content: flex-start;
@@ -636,7 +636,7 @@
 .certrev-reader .certrev-r-side-links.single a:first-child {
 	border-right: 0;
 }
-/* Collapsible on phones (a product decision): wider than 640px the card's own bio and memo, at 640px and under the
+/* Collapsible on phones: wider than 640px the card's own bio and memo, at 640px and under the
    same pair in a closed details. */
 .certrev-reader .certrev-r-more {
 	display: none !important;

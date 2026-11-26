@@ -144,7 +144,7 @@ function readFacts(input: ReaderFaceInput): Facts {
 	const minimal = rung === 'minimal'
 	const showPhoto = disp.showExpertPhoto !== false && !contains(rd.hidden, 'reviewerPhoto') && rung === 'memo'
 
-	// an internal ticket: each credential's cardLabel over its bare abbreviation, joined with ', ' (labels are not trimmed).
+	// Each credential's cardLabel over its bare abbreviation, joined with ', ' (labels are not trimmed).
 	const labels: string[] = []
 	if (Array.isArray(expert.credentials)) {
 		for (const credential of expert.credentials) {
@@ -296,7 +296,7 @@ function bannerCard(f: Facts): string {
 		foot = `<div class="certrev-r-foot">${when}${cue}</div>`
 	}
 
-	// an internal ticket: the memo card carries the scope line when there is a memo; with none this card is the sole claim face.
+	// The memo card carries the scope line when there is a memo; with none this card is the sole claim face.
 	const scope = scopeOn ? `<div class="certrev-r-scope" data-ftc-disclosure data-ftc-line>${f.scope}</div>` : ''
 
 	return (
@@ -352,7 +352,7 @@ function sidebar(f: Facts): string {
 	const bio = f.disp.showBio !== false && !isBlank(f.expert.bio) && f.rung === 'memo' ? asText(f.expert.bio) : ''
 	const avatar = readerFace({ photo: f.expert.photoUrl, show: f.showPhoto, name: f.ename, size: 'lg', width: 112 })
 	// The bio and the memo are printed twice: as the card's own pair, and again inside a closed <details> the stylesheet
-	// shows instead on a phone (640px and under; a product decision, plugin 1.8.3). The disclosure and both links
+	// shows instead on a phone (640px and under; plugin 1.8.3). The disclosure and both links
 	// stay outside the fold. With no memo the toggle says "About the expert"; with neither bio nor memo there is no fold.
 	const fold =
 		`${bio !== '' ? `<p>${esc(bio)}</p>` : ''}` +

@@ -58,7 +58,7 @@ export interface CspOptions {
 	/** The brand's own policy allows `data:` images (the card's logos are `data:image/svg+xml` today). */
 	readonly dataImages: boolean
 	/**
-	 * 2.1.1: `script-src` is only the per-response nonce and `'strict-dynamic'` (brand-b's policy, 2026-11-02): no `'self'`,
+	 * 2.1.1: `script-src` is only the per-response nonce and `'strict-dynamic'` (a headless storefront customer's policy): no `'self'`,
 	 * no host source (`'strict-dynamic'` ignores both), so only the nonced bundle and the scripts it inserts run.
 	 */
 	readonly strictDynamic?: boolean
@@ -181,7 +181,7 @@ export function certrevSide(placements: readonly Placement[]): CertrevSide {
 				assets: { ...p.painted.card.assets, runtime: { src: runtime.src, integrity: runtime.integrity } },
 			} as CardDocumentV1
 			fixture = {
-				...contractFixture('banner-brand-b-like'),
+				...contractFixture('banner-storefront'),
 				certId: card.certId,
 				content: p.painted.content as never,
 				lifecycle: p.painted.lifecycle as never,
