@@ -1026,7 +1026,7 @@ published at `@certrev/cert-block/fixtures`).
 
 ## Version
 
-`3.0.0`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
+`3.0.1`: see [CHANGELOG.md](./CHANGELOG.md) for the release history and the semver contract
 (patch/minor never change the rendered cert output or break a compiling integration). Publishes
 **publicly** to npm as `@certrev/cert-block` (`publishConfig.access: public`) via GitHub Actions
 trusted publishing (OIDC); the internal `@certrev` GitHub-Packages channel mirrors it.
