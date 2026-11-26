@@ -6,7 +6,9 @@
 		"build": "pnpm -r build",
 		"typecheck": "pnpm -r typecheck",
 		"test": "pnpm -r test",
-		"check": "biome check ."
+		"check": "biome check .",
+		"check:public": "node scripts/public-hygiene.mjs tree && node scripts/public-hygiene.mjs pack packages/cert-contract packages/cert-block",
+		"test:hygiene": "node --test scripts/public-hygiene.test.mjs"
 	},
 	"packageManager": "pnpm@10.0.0",
 	"license": "MIT",

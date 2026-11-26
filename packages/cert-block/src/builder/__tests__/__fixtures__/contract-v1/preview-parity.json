@@ -1,5 +1,5 @@
 {
-	"source": "a CertREV private repository: renderReaderPreview(brand, draft, {now, content: sample}) for a brand holding cert_card_contract_v1, standInArticle({surface: v1, card}) (the GET /:brandKey/appearance/stand-in page), and buildCardDocument for a Builder placement with the same content, lifecycle and projected def",
+	"source": "CertREV server core: renderReaderPreview(brand, draft, {now, content: sample}) for a brand holding cert_card_contract_v1, standInArticle({surface: v1, card}) (the GET /:brandKey/appearance/stand-in page), and buildCardDocument for a Builder placement with the same content, lifecycle and projected def",
 	"now": "2026-10-21T12:00:00.000Z",
 	"cases": {
 		"sidebar": {

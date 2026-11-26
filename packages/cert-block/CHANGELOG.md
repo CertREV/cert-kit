@@ -5,6 +5,13 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 2.1.3 · 2026-11-26
+
+**Publication hygiene only: no change to anything a card prints or does.** A drop-in on 2.1.2: same package, same
+registration and inputs, same exports, types and Content-Security-Policy sources. Comments, docs and test fixtures no
+longer name customers, people or internal tracking ids, and the published tarball is checked for them before every
+publish. The one shipped-byte change is comment text inside the inlined reader stylesheet (CSS comments do not render).
+
 ## 2.1.2 · 2026-11-18
 
 **A card that painted never goes blank because CertREV answered slowly, and a cold page waits long enough for a real
@@ -73,7 +80,7 @@ Content-Security-Policy sources.
 **The card says what the expert actually reviewed.** When CertREV signs `content.expert.reviewScope: 'text'` (the
 article has no references or sources section, so the review covered its text only), every face prints the text-only
 scope line, the portal's `FTC_DISCLOSURE_LINE_TEXT_ONLY` byte for byte: "Independent editorial review of this
-article’s text. Not a product endorsement, nor medical advice." (the owner, a product decision, 2026-10-30.)
+article’s text. Not a product endorsement, nor medical advice."
 
 - **Absent, or `'text_and_sources'`, prints exactly what 2.0.2 prints**, byte for byte: every envelope signed before the
   field existed, and every article with sources. Any other value (a hostile type, a scope this version does not know)
@@ -136,7 +143,7 @@ connections and never answered held a brand's HTML up to 8 s, again every 5 s.
 
 ## 2.0.1 · 2026-10-25
 
-**brand-b's one install.** A drop-in on 2.0.0: same package, same `certRevCertComponent` and registration (`CertREV
+**One install for a headless storefront.** A drop-in on 2.0.0: same package, same `certRevCertComponent` and registration (`CertREV
 Cert`, the same 22 inputs), no new prop, no new peer dependency, and the same four Content-Security-Policy sources (the
 beacon below goes to the delivery origin `connect-src` already allows). Everything that can change later comes from
 CertREV's server.

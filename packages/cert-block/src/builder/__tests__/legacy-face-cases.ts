@@ -56,7 +56,13 @@ const HOSTILE = {
 
 export const CONTENTS: Readonly<Record<string, CertContent>> = { full: FULL, sparse: SPARSE, hostile: HOSTILE }
 
-const BRAND_B = { v: 4, preset: 'memo', rung: 'standard', tokens: { accentColor: '#000000' }, hidden: ['reviewerPhoto'] }
+const STOREFRONT = {
+	v: 4,
+	preset: 'memo',
+	rung: 'standard',
+	tokens: { accentColor: '#000000' },
+	hidden: ['reviewerPhoto'],
+}
 const BRANDED = {
 	v: 2,
 	preset: 'default',
@@ -76,30 +82,30 @@ const BRANDED = {
 /** Raw defs as served. `null` is "no def sibling". */
 export const RAW_DEFS: Readonly<Record<string, unknown>> = {
 	none: null,
-	brand-b: BRAND_B,
+	storefront: STOREFRONT,
 	branded: BRANDED,
-	'hidden-many': { ...BRAND_B, hidden: ['reviewerPhoto', 'bio', 'authorTitle', 'scopeLine', 'certificateLink'] },
-	'layout-sidebar': { ...BRAND_B, layout: 'sidebar' },
+	'hidden-many': { ...STOREFRONT, hidden: ['reviewerPhoto', 'bio', 'authorTitle', 'scopeLine', 'certificateLink'] },
+	'layout-sidebar': { ...STOREFRONT, layout: 'sidebar' },
 	'layout-floating': { ...BRANDED, layout: 'floating' },
 	'layout-custom': {
-		...BRAND_B,
+		...STOREFRONT,
 		layout: 'custom',
 		customFace: { placedFields: ['label', 'authorName', 'memo', 'certificateLink', 'scopeLine'] },
 	},
-	'tokens-light-accent': { ...BRAND_B, tokens: { accentColor: '#ffe600', fontSlot: 'grotesk' } },
+	'tokens-light-accent': { ...STOREFRONT, tokens: { accentColor: '#ffe600', fontSlot: 'grotesk' } },
 	// The 1.2.0 keys. 1.1.1 does not read any of them: all of these paint the legacy face.
 	'face-reader': { ...BRANDED, face: 'reader', accentFg: '#141414' },
 	'face-reader-sidebar': { ...BRANDED, face: 'reader', accentFg: '#141414', layout: 'sidebar' },
-	'face-legacy': { ...BRAND_B, face: 'legacy' },
+	'face-legacy': { ...STOREFRONT, face: 'legacy' },
 	'face-unknown': { ...BRANDED, face: 'minimal-v9', accentFg: '#ffffff' },
-	'face-capitalised': { ...BRAND_B, face: 'Reader' },
-	'face-padded': { ...BRAND_B, face: 'reader ' },
-	'face-empty': { ...BRAND_B, face: '' },
-	'face-number': { ...BRAND_B, face: 7 },
-	'face-null': { ...BRAND_B, face: null },
+	'face-capitalised': { ...STOREFRONT, face: 'Reader' },
+	'face-padded': { ...STOREFRONT, face: 'reader ' },
+	'face-empty': { ...STOREFRONT, face: '' },
+	'face-number': { ...STOREFRONT, face: 7 },
+	'face-null': { ...STOREFRONT, face: null },
 	'accentfg-only': { ...BRANDED, accentFg: '#ffffff' },
 	'accentfg-malformed': { ...BRANDED, accentFg: 'white' },
-	'unknown-key': { ...BRAND_B, extra: 'ignored' },
+	'unknown-key': { ...STOREFRONT, extra: 'ignored' },
 }
 
 /** The card options a case is rendered with. */
@@ -121,7 +127,7 @@ export interface LegacyCase {
 /** Every content x def x option triple, except that the two thin contents ride a smaller set of defs and options. */
 export const LEGACY_CASES: readonly LegacyCase[] = (() => {
 	const out: LegacyCase[] = []
-	const thinDefs = ['none', 'brand-b', 'branded', 'face-reader', 'face-unknown', 'layout-custom']
+	const thinDefs = ['none', 'storefront', 'branded', 'face-reader', 'face-unknown', 'layout-custom']
 	const thinOptions = ['default', 'sidebar', 'banner-memo']
 	for (const content of Object.keys(CONTENTS)) {
 		for (const def of Object.keys(RAW_DEFS)) {

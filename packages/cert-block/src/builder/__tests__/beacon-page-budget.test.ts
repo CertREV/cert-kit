@@ -13,7 +13,7 @@ let sent: string[]
 let restore: () => void
 
 beforeEach(() => {
-	history.replaceState(null, '', '/blogs/the-brand-b-word/first')
+	history.replaceState(null, '', '/blogs/the-storefront-journal/first')
 	sent = []
 	restore = setCardBeaconForTests({ transport: (_url, body) => sent.push(JSON.parse(body).externalId) })
 	forgetCardReportsForTests()
@@ -27,7 +27,7 @@ it('at most three beacons on one page; an in-app navigation starts a new budget'
 	for (const id of ['a', 'b', 'c', 'd', 'e']) fail(id)
 	expect(sent).toEqual(['a', 'b', 'c'])
 	expect(sent).toHaveLength(BEACON_MAX_PER_PAGE)
-	history.pushState(null, '', '/blogs/the-brand-b-word/second')
+	history.pushState(null, '', '/blogs/the-storefront-journal/second')
 	for (const id of ['f', 'g', 'h', 'i']) fail(id)
 	expect(sent).toEqual(['a', 'b', 'c', 'f', 'g', 'h'])
 })
@@ -36,7 +36,7 @@ it('the same placement and reason reports once per page, and again after a navig
 	fail('a')
 	fail('a')
 	expect(sent).toEqual(['a'])
-	history.pushState(null, '', '/blogs/the-brand-b-word/second')
+	history.pushState(null, '', '/blogs/the-storefront-journal/second')
 	fail('a')
 	expect(sent).toEqual(['a', 'a'])
 })

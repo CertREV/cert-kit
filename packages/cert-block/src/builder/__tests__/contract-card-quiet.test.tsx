@@ -23,7 +23,7 @@ import { ENTRY_ID, json, MARKER, makeIssuer, renderToHtml, scriptedDelivery, T0 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const issuer = makeIssuer()
-const CASES: ContractCase[] = ['banner-brand-b-like', 'sidebar-brand-b-like', 'floating-brand-b-like']
+const CASES: ContractCase[] = ['banner-storefront', 'sidebar-storefront', 'floating-storefront']
 let restore: () => void = () => {}
 
 afterEach(() => {
@@ -183,7 +183,7 @@ describe('a card React writes itself (an in-app navigation)', () => {
 	})
 
 	it('with setHTMLUnsafe, the wrapper is still re-parsed from exactly the card’s bytes', async () => {
-		const fixture = contractFixture('sidebar-brand-b-like')
+		const fixture = contractFixture('sidebar-storefront')
 		const proto = HTMLElement.prototype as HTMLElement & { setHTMLUnsafe?: (html: string) => void }
 		const seen: string[] = []
 		proto.setHTMLUnsafe = function (this: HTMLElement, html: string) {

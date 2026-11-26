@@ -2,7 +2,7 @@
  * The reader face as the portal's ONE FACE paints it (cert-block 1.3.1): what the Shopify snippets and the WordPress
  * plugin have painted since plugin 1.8.3, spelled out here so a reader of the port sees the rule and not only the cells.
  *
- *  - THE SIDEBAR'S PHONE FOLD (a product decision). The card's bio and memo are printed twice: as the card's own
+ *  - THE SIDEBAR'S PHONE FOLD. The card's bio and memo are printed twice: as the card's own
  *    pair, and again inside a closed `<details class="certrev-r-more">` whose toggle reads "Read the expert memo" (or
  *    "About the expert" when there is a bio and no memo; no fold at all with neither). The stylesheet shows one or
  *    the other: wider than 640px the pair, at 640px and under the fold. The scope line, the cue and both links never fold.
