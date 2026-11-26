@@ -4,9 +4,9 @@
  * stylesheet's `@font-face` rules (DM Sans, Playfair Display, Plus Jakarta Sans and JetBrains Mono, at
  * `font-stretch: 101%`, from `https://assets.certrev.com/fonts/`), inlined in the card's own markup.
  *
- * 1.2.0 REVERSES that on purpose. A storefront whose CSP `font-src` does not name assets.certrev.com (e.l.f.'s live
+ * 1.2.0 REVERSES that on purpose. A storefront whose CSP `font-src` does not name assets.certrev.com (a live headless storefront's
  * policy does not) refuses every one of those loads and logs a violation, and the text falls back anyway. The brief
- * for 1.2.0 is "no new CSP for e.l.f.: font-src is not needed", so the card now inlines `CARD_READER_CSS`: the reader
+ * for 1.2.0 is "no new CSP for the storefront: font-src is not needed", so the card now inlines `CARD_READER_CSS`: the reader
  * stylesheet minus its 40 remote `@font-face` rules, keeping the 4 `local()` fallback faces (Arial or Times New Roman
  * under each family's metric overrides), which any CSP allows. The portal and the Shopify reader keep the full sheet.
  * These tests pin the reversal: the card's document holds NO remote `@font-face` and keeps the `local()` fallbacks.
@@ -120,7 +120,7 @@ describe('the reader card brings its fonts when it mounts', () => {
 	})
 
 	// canary.2's B1 asserted the opposite ("has the DM Sans @font-face at font-stretch 101% in the document"). It is
-	// inverted on purpose in 1.2.0: no new CSP for e.l.f., font-src is not needed, so the card brings no remote face.
+	// inverted on purpose in 1.2.0: no new CSP for the storefront, font-src is not needed, so the card brings no remote face.
 	it('a card mounted in the browser, no modal opened, has NO remote @font-face in the document and keeps the local() fallbacks', async () => {
 		await mount(RAW_DEFS['face-reader'])
 		expect(container?.querySelector('.certrev-reader')).not.toBeNull()

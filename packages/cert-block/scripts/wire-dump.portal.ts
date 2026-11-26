@@ -6,8 +6,8 @@
  * in for KMS), the same delivery signed by the set's rotated test key, and the real `TRUSTED_KMS_KEYS` set, unsigned, so
  * cert-kit checks its baked root against it.
  *
- * It imports the PORTAL's modules (`@/...`) and its integration database, so it runs inside a CertREV/portal checkout
- * that has the core (lead mission certrev-0a99cc1c5bef), never here: copy it to
+ * It imports the PORTAL's modules (`@/...`) and its integration database, so it runs inside a checkout of CertREV's private server repo
+ * that has the core, never here: copy it to
  * `src/server/routes/public/__tests__/<name>.integration.test.ts` and run
  *   S1_WIRE_OUT=<file> npx vitest run --project integration <that file>
  * then split `<file>` into the two fixtures (`delivery` into wire-builder-delivery.json, the rest into wire-keyset.json).
@@ -88,14 +88,14 @@ it('S1 wire dump at 66ff75e4e1: a real placer-minted Builder 200 and the signed 
 			fieldVisibility: { hidden: ['reviewerPhoto'] },
 			custom_layout: null,
 		} as never,
-		{ source: 'admin', actorEmail: 'owen@certrev.com' },
+		{ source: 'admin', actorEmail: 'fixtures@example.com' },
 	)
 	expect((def as { violations?: unknown }).violations ?? []).toEqual([])
 	await setBrandEntitlement({
 		brandId: brand.id,
 		feature: Feature.CERT_CARD_CONTRACT_V1,
 		granted: true,
-		actor: 'owen@certrev.com',
+		actor: 'fixtures@example.com',
 		reason: 'S1 wire dump (scratch)',
 	} as never)
 	const externalId = `entry${crypto.randomUUID().replaceAll('-', '')}`
@@ -145,7 +145,7 @@ it('S1 wire dump at 66ff75e4e1: a real placer-minted Builder 200 and the signed 
 		`${JSON.stringify(
 			{
 				source:
-					'CertREV/portal 66ff75e4e118628cf25c58ba2f3fb8d2c70cef08 (lead mission certrev-0a99cc1c5bef): placeBuilderCertEnvelope with cert_card_contract_v1 granted, GET /api/cert/v1/delivery/builder/<entry>; signCertKeySet(buildCertKeySet(test keys)) under the root kid; buildCertKeySet() over TRUSTED_KMS_KEYS',
+					'CertREV server core: placeBuilderCertEnvelope with cert_card_contract_v1 granted, GET /api/cert/v1/delivery/builder/<entry>; signCertKeySet(buildCertKeySet(test keys)) under the root kid; buildCertKeySet() over TRUSTED_KMS_KEYS',
 				delivery: {
 					externalId,
 					kid: CERT_ENVELOPE_KID,

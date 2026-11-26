@@ -66,7 +66,7 @@ it('a binding with no contract key: the 1.3.x face painted from the signed envel
 })
 
 it('a contract-1 binding: CertREV’s card, from the marker alone', async () => {
-	delivery.respond(() => json(contractBody(issuer, contractFixture('banner-elf-like'))))
+	delivery.respond(() => json(contractBody(issuer, contractFixture('banner-storefront'))))
 	const html = await renderToHtml(markerOnly({ part: 'header' }))
 	expect(html).toContain('<certrev-card data-certrev-part="top"')
 	expect(reasons).toEqual([])

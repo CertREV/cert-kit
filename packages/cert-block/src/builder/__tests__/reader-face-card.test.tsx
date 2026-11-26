@@ -124,9 +124,9 @@ describe('the reader face on the delivery card', () => {
 		expect(html.match(/<style data-certrev-reader-css>/g)).toHaveLength(1)
 		expect(html.match(/<style data-certrev-builder-flow="">/g)).toHaveLength(1)
 		expect(html).toContain(`<style data-certrev-reader-css>${CARD_READER_CSS}</style>`)
-		// The portal's own sheet (the Shopify reader and the portal inline all of it; 1.3.1 = portal b49a6b933b, the same hash
-		// `fixtures/SOURCES.json` pins and `reader-sources.test.ts` re-checks) ...
-		expect(sha256(READER_CSS)).toBe('80e8b3716c4e36ea588d1ae788ba0d1357997841ef74df102ca15f1b8c2aa2fa')
+		// The portal's own sheet (the Shopify reader and the portal inline all of it), as committed here with its comments
+		// scrubbed for publication: the same hash `fixtures/SOURCES.json` pins and `reader-sources.test.ts` re-checks ...
+		expect(sha256(READER_CSS)).toBe('46ac1579001eec251416a1af716c97873f18195c38dcd1250d127749ec587f09')
 		// ... and the card's is that sheet with 40 remote `@font-face` rules cut out (44 faces -> the 4 local() fallbacks).
 		expect(READER_CSS.match(/@font-face/g)).toHaveLength(44)
 		expect(CARD_READER_CSS.match(/@font-face/g)).toHaveLength(4)
@@ -349,7 +349,7 @@ describe('every other def paints the 1.1.1 wrapper around the 1.1.1 bytes, with 
 	})
 
 	it.each([
-		['elf', 4],
+		['storefront', 4],
 		['branded', 2],
 		['face-legacy', 4],
 		['face-unknown', 2],

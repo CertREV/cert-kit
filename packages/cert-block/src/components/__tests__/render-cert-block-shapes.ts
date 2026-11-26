@@ -46,27 +46,27 @@ const allFields = [
 	'compensationCue',
 ]
 
-/** The e.l.f.-shaped def as the envelope face maps it: black accent, no reviewer photo. */
-const elfFace = { placedFields: allFields.filter((f) => f !== 'reviewerPhoto') }
-const elfTheme = { accentColor: '#000000', accentFg: '#ffffff' }
+/** The storefront def as the envelope face maps it: black accent, no reviewer photo. */
+const storefrontFace = { placedFields: allFields.filter((f) => f !== 'reviewerPhoto') }
+const storefrontTheme = { accentColor: '#000000', accentFg: '#ffffff' }
 
 export const RENDER_SHAPES: Readonly<Record<string, Record<string, unknown>>> = {
 	bannerLong: { mode: 'banner', facts },
-	bannerLongElf: { mode: 'banner', theme: elfTheme, face: elfFace, facts },
-	bannerHeaderPart: { mode: 'banner', part: 'header', face: elfFace, facts },
-	bannerMemoPart: { mode: 'banner', part: 'memo', face: elfFace, facts },
-	bannerBroken: { mode: 'banner', face: elfFace, facts: { ...facts, memo: BROKEN_MEMO } },
-	bannerShort: { mode: 'banner', face: elfFace, facts: { ...facts, memo: SHORT_MEMO } },
+	bannerLongStorefront: { mode: 'banner', theme: storefrontTheme, face: storefrontFace, facts },
+	bannerHeaderPart: { mode: 'banner', part: 'header', face: storefrontFace, facts },
+	bannerMemoPart: { mode: 'banner', part: 'memo', face: storefrontFace, facts },
+	bannerBroken: { mode: 'banner', face: storefrontFace, facts: { ...facts, memo: BROKEN_MEMO } },
+	bannerShort: { mode: 'banner', face: storefrontFace, facts: { ...facts, memo: SHORT_MEMO } },
 	bannerNoAuthor: {
 		mode: 'banner',
-		face: { ...elfFace, placedFields: elfFace.placedFields.filter((f) => f !== 'authorName') },
+		face: { ...storefrontFace, placedFields: storefrontFace.placedFields.filter((f) => f !== 'authorName') },
 		facts,
 	},
-	bannerEmptyMemo: { mode: 'banner', face: elfFace, facts: { ...facts, memo: '' } },
+	bannerEmptyMemo: { mode: 'banner', face: storefrontFace, facts: { ...facts, memo: '' } },
 	sidebarLong: { mode: 'sidebar', facts },
-	sidebarLongElf: { mode: 'sidebar', theme: elfTheme, face: elfFace, facts },
-	sidebarShort: { mode: 'sidebar', face: elfFace, facts: { ...facts, memo: SHORT_MEMO } },
-	floating: { mode: 'floating', face: elfFace, facts },
+	sidebarLongStorefront: { mode: 'sidebar', theme: storefrontTheme, face: storefrontFace, facts },
+	sidebarShort: { mode: 'sidebar', face: storefrontFace, facts: { ...facts, memo: SHORT_MEMO } },
+	floating: { mode: 'floating', face: storefrontFace, facts },
 	customLong: { mode: 'custom', face: { placedFields: ['label', 'memo', 'certificateLink'] }, facts },
 	escapedMemo: { mode: 'banner', facts: { ...facts, memo: `${LONG_MEMO} <script>alert(1)</script> & "quoted"` } },
 }
