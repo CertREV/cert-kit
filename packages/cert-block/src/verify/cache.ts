@@ -24,6 +24,14 @@
  *      entry is served without starting a refresh. A definitive answer clears it. So an ongoing outage costs a caller at
  *      most one load per key per failure window. `markFailed` lets a caller that stopped waiting (a render deadline)
  *      remember one before the load itself settles. Without `failureTtlMs` the cache behaves exactly as 2.0.1's.
+ *   6. (2.1.2, opt-in through `lastGoodMs`) LAST GOOD, AND NO FAILURE IS EVER A MISS: a positive entry past its stale window
+ *      is kept as the key's last good value for `lastGoodMs` more. It is not served by `peek`/`peekOrRefresh` (the caller
+ *      asks for it, `lastGood`), and a definitive answer replaces it as any write does. A transient result is never cached
+ *      in this mode, neither as an entry nor as a remembered failure: the load returns the last good value (or the
+ *      transient result when there is none) to its own callers, and the next caller loads again. It only starts the
+ *      key's REFRESH BACKOFF (`refreshBackoffMs`): while it lasts, `peekOrRefresh` serves a stale entry without starting
+ *      a refresh, and `backingOff` says so, so a caller holding a good value does not hammer an origin that just failed.
+ *      A caller with nothing to serve is never held back by it.
  *
  * It is deliberately tiny + dependency-free (a Map + timestamps) so it runs in any server
  * runtime (Node, edge, workerd). For multi-instance deployments this is per-instance L1 and
@@ -55,6 +63,13 @@ export interface TtlCacheOptions {
 	 * result is cached as a negative entry as before). See the module header, point 5.
 	 */
 	readonly failureTtlMs?: number
+	/**
+	 * 2.1.2: how long past its stale window a POSITIVE entry is kept as the key's last good value (`lastGood`), default 0
+	 * (never). Non-zero also means a transient result is never cached (see the module header, point 6).
+	 */
+	readonly lastGoodMs?: number
+	/** 2.1.2, with `lastGoodMs`: how long after a transient result no background refresh starts for the key (default 0). */
+	readonly refreshBackoffMs?: number
 	/** Injectable clock for deterministic tests. */
 	readonly now?: () => number
 }
@@ -75,12 +90,15 @@ export class TtlCache<V> {
 	private readonly store = new Map<string, Entry<V>>()
 	private readonly inflight = new Map<string, Inflight<V>>()
 	private readonly failures = new Map<string, { readonly value: V; readonly until: number }>()
+	private readonly backoffs = new Map<string, number>()
 	private readonly ttlMs: number
 	private readonly negativeTtlMs: number
 	private readonly maxEntries: number
 	private readonly staleMs: number
 	private readonly inflightMaxMs: number
 	private readonly failureTtlMs: number
+	private readonly lastGoodMs: number
+	private readonly refreshBackoffMs: number
 	private readonly now: () => number
 
 	constructor(opts: TtlCacheOptions = {}) {
@@ -90,6 +108,11 @@ export class TtlCache<V> {
 		this.staleMs = opts.staleMs !== undefined && opts.staleMs > 0 ? opts.staleMs : 0
 		this.inflightMaxMs = opts.inflightMaxMs ?? Number.POSITIVE_INFINITY
 		this.failureTtlMs = opts.failureTtlMs !== undefined && opts.failureTtlMs > 0 ? opts.failureTtlMs : 0
+		this.lastGoodMs = opts.lastGoodMs !== undefined && opts.lastGoodMs > 0 ? opts.lastGoodMs : 0
+		this.refreshBackoffMs =
+			this.lastGoodMs > 0 && opts.refreshBackoffMs !== undefined && opts.refreshBackoffMs > 0
+				? opts.refreshBackoffMs
+				: 0
 		this.now = opts.now ?? Date.now
 	}
 
@@ -100,8 +123,44 @@ export class TtlCache<V> {
 		const now = this.now()
 		if (e.expiresAt > now) return e
 		if (!e.negative && now < e.expiresAt + this.staleMs) return e
+		// 2.1.2: past its stale window a positive entry is kept (not served) as the key's last good value.
+		if (!e.negative && now < e.expiresAt + this.staleMs + this.lastGoodMs) return undefined
 		this.store.delete(key)
 		return undefined
+	}
+
+	/**
+	 * 2.1.2: the key's last good value: a positive entry, fresh, stale, or past its stale window by at most `lastGoodMs`.
+	 * Never a negative entry (a definitive answer replaced it) and never a failure. Starts no load.
+	 */
+	lastGood(key: string): V | undefined {
+		const e = this.store.get(key)
+		if (!e || e.negative) return undefined
+		if (this.now() < e.expiresAt + this.staleMs + this.lastGoodMs) return e.value
+		this.store.delete(key)
+		return undefined
+	}
+
+	/** 2.1.2: whether the key's refresh backoff (`refreshBackoffMs`, after a transient result) is running. */
+	backingOff(key: string): boolean {
+		const until = this.backoffs.get(key)
+		if (until === undefined) return false
+		if (until > this.now()) return true
+		this.backoffs.delete(key)
+		return false
+	}
+
+	private startBackoff(key: string): void {
+		if (this.refreshBackoffMs <= 0) return
+		if (this.backoffs.size >= this.maxEntries && !this.backoffs.has(key)) {
+			const now = this.now()
+			for (const [k, until] of this.backoffs) if (until <= now) this.backoffs.delete(k)
+			if (this.backoffs.size >= this.maxEntries) {
+				const oldest = this.backoffs.keys().next().value
+				if (oldest !== undefined) this.backoffs.delete(oldest)
+			}
+		}
+		this.backoffs.set(key, this.now() + this.refreshBackoffMs)
 	}
 
 	/** 2.0.2: the remembered failure while it lasts (only with `failureTtlMs`); prunes it past that. */
@@ -136,8 +195,8 @@ export class TtlCache<V> {
 		const e = this.servable(key)
 		const failed = this.failure(key)
 		if (!e) return failed?.value
-		// 2.0.2: no refresh while a failure is remembered; the stale value is still served.
-		if (e.expiresAt <= this.now() && !failed) {
+		// 2.0.2: no refresh while a failure is remembered; the stale value is still served. 2.1.2: nor in the refresh backoff.
+		if (e.expiresAt <= this.now() && !failed && !this.backingOff(key)) {
 			this.load(key, loader, isNegative, positiveTtlMs, isTransient).catch(() => undefined)
 		}
 		return e.value
@@ -191,6 +250,14 @@ export class TtlCache<V> {
 			// 2.0.2: a load that was replaced (abandoned past `inflightMaxMs`) never writes: its answer may be older than
 			// the replacement's, and a late verified read must never overwrite a newer revocation.
 			if (this.inflight.get(key)?.token !== token) return value
+			// 2.1.2: a transient result is never cached; its callers get the last good value when there is one.
+			if (this.lastGoodMs > 0) {
+				if (isTransient?.(value)) {
+					this.startBackoff(key)
+					return this.lastGood(key) ?? value
+				}
+				this.backoffs.delete(key)
+			}
 			if (this.failureTtlMs > 0) {
 				if (isTransient?.(value)) {
 					this.markFailed(key, value)
@@ -260,6 +327,7 @@ export class TtlCache<V> {
 	delete(key: string): void {
 		this.store.delete(key)
 		this.failures.delete(key)
+		this.backoffs.delete(key)
 	}
 
 	/**
@@ -276,12 +344,16 @@ export class TtlCache<V> {
 		for (const key of this.failures.keys()) {
 			if (key.startsWith(prefix)) this.failures.delete(key)
 		}
+		for (const key of this.backoffs.keys()) {
+			if (key.startsWith(prefix)) this.backoffs.delete(key)
+		}
 	}
 
 	clear(): void {
 		this.store.clear()
 		this.inflight.clear()
 		this.failures.clear()
+		this.backoffs.clear()
 	}
 
 	get size(): number {

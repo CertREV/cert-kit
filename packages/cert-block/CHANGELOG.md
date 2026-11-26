@@ -5,6 +5,13 @@ change the rendered cert output and never break a compiling integration** (regis
 exports, types). Anything that would alter what a visitor sees, or require integration changes,
 is announced loudly here first.
 
+## 3.0.1 · 2026-11-18
+
+**2.1.2's fix on 3.x: a card that painted never goes blank because CertREV answered slowly, and a cold page waits long
+enough for a real Delivery API.** A drop-in on 3.0.0; every byte a card prints is 3.0.0's. The change, its cause and
+its numbers are 2.1.2's, below, word for word: no failure is remembered as a miss, the last good card paints while a
+refresh is slow or fails (up to an hour), and a cold server read waits up to 1,500 ms with one retry at 700 ms.
+
 ## 3.0.0 · 2026-11-08
 
 **Claim strength is no longer a concept: the `preset` and `rung` of a render def, the `rung` of a face and the
@@ -26,6 +33,45 @@ The disclosure and FTC wording is unchanged, byte for byte.
   ` data-certrev-rung="..."`.
 - **Migration.** Delete `preset` and `rung` from any `CertChromeRenderDef` or `CertBlockFace` literal you build; read
   nothing from them. `@certrev/cert-contract` is `^0.7.0` (a documentation-only change there).
+## 2.1.2 · 2026-11-18
+
+**A card that painted never goes blank because CertREV answered slowly, and a cold page waits long enough for a real
+Delivery API.** A drop-in on 2.1.1: same package, same `certRevCertComponent` and registration (`CertREV Cert`, the
+same 22 inputs), no new prop, no new peer dependency, the same `exports` map, the same four Content-Security-Policy
+sources. Every byte a card prints is 2.1.1's; only when a server render reads CertREV, and how long it waits, change.
+
+- **Why.** CertREV's real-card proof (2026-11-18, a Hydrogen storefront on 2.1.1 against the staging Delivery API) saw
+  the card alternate about a minute on and a minute off. The Delivery API answered in about 550 ms, and 2.0.2's
+  server render waits only 300 ms on a read with no card cached: it printed nothing, and the failure was remembered
+  60 s, during which no read started and every render printed nothing. Once a read landed, the card was cached 30 s
+  and served 30 s stale; under a runtime that cancels a request's reads when its response ends (workerd, so Oxygen),
+  the background refresh never landed, the card expired, and the cycle began again. Measured from one client on
+  2026-11-18: a Delivery CDN hit is p50 229 ms, p95 294 ms end to end; a CDN miss (a function run) p50 415 ms, p95
+  548 ms; a cold staging function up to 6 s. 300 ms held neither a miss nor a far-away storefront's round trip.
+- **No failure is remembered as a miss** (2.0.2: 60 s). A timeout, a network error, a 5xx, a body that is not JSON is
+  never cached: the next render reads again. A definitive no (revoked, expired, unverifiable, a 404 or 410) is
+  cached as before.
+- **The last good card paints while a refresh is slow or fails.** A verified card is fresh 30 s and served stale
+  30 s more with one background refresh (2.0.1, unchanged). Past that, a server render reads and waits for the
+  answer (up to the cold wait below), so a revocation lands as in 2.0.1 whenever CertREV answers; if the read does not
+  reach CertREV in time, the render paints the placement's last verified card instead of nothing, for up to an hour
+  (`CARD_DELIVERY_LAST_GOOD_MS`). While another read of the placement runs, or for 30 s after one failed
+  (`CARD_DELIVERY_REFRESH_BACKOFF_MS`), a render with a card paints it at once and starts no read. A payload's own
+  expiry and revocation fields are still judged at every render, and the browser runtime's revalidation still takes
+  a revoked card down on any page view with JavaScript.
+- **A cold read waits up to 1,500 ms, with one retry** (`CARD_SERVER_WAIT_MS`, was 300 ms). A request with no answer
+  after 700 ms (`CARD_DELIVERY_RETRY_MS`, above a CDN miss's p95) gets a second request beside it, and a request that
+  fails at once (a refused connection, a 5xx) is retried at once; the first definitive answer wins. Past 1,500 ms the
+  render prints nothing (`delivery_unreachable`), as before, and the read runs on and is cached when it lands. So a
+  page prints no card only when this process has never had one for the placement and CertREV gave no answer in time.
+- **Concurrent renders still never wait behind another request's read** (2.0.2): one with no card prints the skipped
+  marker, one with a card paints it.
+- **What an outage costs now.** A placement with a card: nothing visible; at most one wait of up to 1,500 ms per
+  placement per process every 40 s or so (the backoff plus the read's own deadline). A placement with no card: one
+  wait of up to 1,500 ms per placement per process while no read of it is running (2.0.2: one 300 ms wait a minute).
+- `TtlCache` (exported) gains optional `lastGoodMs` and `refreshBackoffMs`, and the methods `lastGood(key)` and
+  `backingOff(key)`; `getVerifiedDelivery` gains an optional `retryAfterMs`. Without them each behaves as in 2.1.1.
+  Browser reads (`clientRead`) are unchanged: no retry, 2.0.1's cache.
 
 ## 2.1.1 · 2026-11-02
 
