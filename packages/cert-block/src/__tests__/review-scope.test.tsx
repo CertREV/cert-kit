@@ -1,6 +1,6 @@
 /**
  * 2.1.0: the review scope (`content.expert.reviewScope`, signed by the portal) picks which LOCKED scope line every face
- * prints (the owner, a product decision: the review line says what the expert actually reviewed).
+ * prints (the review line says what the expert actually reviewed).
  *
  * The three cases, on every render path this package prints the line on (`renderCertBlock` on each face, the Builder
  * envelope face, the reader face, both dialogs of the modal, `<CertBadge>`, the web component's HTML):

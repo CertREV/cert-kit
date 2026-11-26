@@ -17,7 +17,7 @@
 import { createHash, createPrivateKey, createPublicKey } from 'node:crypto'
 import type { CertPayload, ResolvePublicKeyByKid } from '@certrev/cert-contract'
 import { localEd25519Signer, signPayloadEd25519, signTombstone } from '@certrev/cert-contract/signer'
-import { builderPayload, builderSubject, BRAND_B_LIKE_DEF, type FixtureIssuer } from './delivery-harness.js'
+import { builderPayload, builderSubject, type FixtureIssuer, STOREFRONT_DEF } from './delivery-harness.js'
 import { RAW_DEFS } from './legacy-face-cases.js'
 
 /** An Ed25519 issuer whose key is derived from a constant: deterministic signatures, so deterministic seeds. */
@@ -76,9 +76,9 @@ export function withFaceDigest(digest: unknown, overrides: Partial<CertPayload> 
  * signature), the legacy face hiding nothing (its seed keeps the signature), and the reader face.
  */
 export const DEFS = {
-	legacy: BRAND_B_LIKE_DEF,
-	legacyAll: { ...BRAND_B_LIKE_DEF, hidden: [] as string[] },
-	reader: { ...BRAND_B_LIKE_DEF, face: 'reader', layout: 'banner' },
+	legacy: STOREFRONT_DEF,
+	legacyAll: { ...STOREFRONT_DEF, hidden: [] as string[] },
+	reader: { ...STOREFRONT_DEF, face: 'reader', layout: 'banner' },
 } as const
 export type DefName = keyof typeof DEFS
 

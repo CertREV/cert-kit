@@ -25,12 +25,12 @@ import {
 	BASE,
 	builderPayload,
 	deliveryBody,
-	BRAND_B_LIKE_DEF,
 	ENTRY_ID,
 	json,
 	MARKER,
 	makeIssuer,
 	renderToHtml,
+	STOREFRONT_DEF,
 	scriptedDelivery,
 	T0,
 } from './delivery-harness.js'
@@ -209,7 +209,7 @@ describe('withoutHiddenContent / seedFor: hidden is absent from the seed', () =>
 				...overrides,
 			},
 		}) as typeof payload
-	const def = (hidden: string[]) => ({ ...BRAND_B_LIKE_DEF, hidden }) as never
+	const def = (hidden: string[]) => ({ ...STOREFRONT_DEF, hidden }) as never
 
 	it('reviewerPhoto removes the expert and the author photo, and nothing else', () => {
 		const src = withPhotoAndMemo()
@@ -384,7 +384,7 @@ describe('the card reader CSS', () => {
 	it('is what the reader face on the card inlines', async () => {
 		const issuer = makeIssuer()
 		const delivery = scriptedDelivery(() =>
-			json(deliveryBody(issuer.envelope(), { ...BRAND_B_LIKE_DEF, face: 'reader', layout: 'banner' })),
+			json(deliveryBody(issuer.envelope(), { ...STOREFRONT_DEF, face: 'reader', layout: 'banner' })),
 		)
 		const restore = setCardDeliveryRuntimeForTests({
 			resolveKid: issuer.resolveKid,

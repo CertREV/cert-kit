@@ -117,7 +117,7 @@ function expectNothing(html: string, reason: string | undefined) {
 			reason,
 			platform: 'builder',
 			externalId: ENTRY_ID,
-			certId: contractFixture('banner-brand-b-like').certId,
+			certId: contractFixture('banner-storefront').certId,
 		})
 	}
 }
@@ -151,7 +151,7 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 	})
 
 	it('a split banner: the header block prints the head, the card and both dialogs; the memo block the memo only', async () => {
-		const fixture = contractFixture('banner-brand-b-like')
+		const fixture = contractFixture('banner-storefront')
 		const header = cardWrapper(await serve(contractBody(issuer, fixture), block({ part: 'header' })))
 		const memo = cardWrapper(await serve(contractBody(issuer, fixture), block({ part: 'memo' })))
 		expect(header?.inner).toBe(expectedCardHtml(fixture.card, ['top']))
@@ -159,7 +159,7 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 	})
 
 	it('a two-block page (header under the hero, memo before the references) prints one head and one dialog set, and no runtime tag (the lead’s ruling, relay 074dbd2c8ef3; 2.1.1)', async () => {
-		const fixture = contractFixture('banner-brand-b-like')
+		const fixture = contractFixture('banner-storefront')
 		const runtime = {
 			src: 'https://portal.certrev.com/api/cert/v1/runtime/card-runtime.0123456789abcdef.js',
 			integrity: 'sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC',
@@ -207,13 +207,13 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 	})
 
 	it('the block’s mode is not read: the saved design’s layout prints', async () => {
-		const fixture = contractFixture('sidebar-brand-b-like')
+		const fixture = contractFixture('sidebar-storefront')
 		const html = await serve(contractBody(issuer, fixture), block({ mode: 'banner' }))
 		expect(cardWrapper(html)?.inner).toBe(expectedCardHtml(fixture.card, ['rail']))
 	})
 
 	it('a memo block on a sidebar design prints nothing, by design: no card twice, no record, no fallback reported', async () => {
-		const fixture = contractFixture('sidebar-brand-b-like')
+		const fixture = contractFixture('sidebar-storefront')
 		// No record either: one here would share the placement with the header block's seed and, read last on hydration,
 		// take that block's card down (break-it B2, `break-it-regressions-client.test.tsx`).
 		expect(await serve(contractBody(issuer, fixture), block({ part: 'memo' }))).toBe('<!--$--><!--/$-->')
@@ -221,7 +221,7 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 	})
 
 	it('2.1.1: the runtime the portal serves is not in the block’s HTML (no parser-inserted <script src>, which a nonce + strict-dynamic policy blocks)', async () => {
-		const fixture = contractFixture('floating-brand-b-like')
+		const fixture = contractFixture('floating-storefront')
 		const runtime = {
 			src: 'https://portal.certrev.com/api/cert/v1/runtime/card-runtime.0123456789abcdef.js',
 			integrity: 'sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC',
@@ -236,7 +236,7 @@ describe('a contract-1 placement prints the server’s document, byte for byte',
 })
 
 describe('anything else on a contract-1 placement prints nothing and reports why (never a 1.3.1 face)', () => {
-	const fixture = contractFixture('banner-brand-b-like')
+	const fixture = contractFixture('banner-storefront')
 	const resigned = (card: unknown) => sha256Hex(canonicalizeJson(card))
 
 	it('no card in the response: card_missing', async () => {
@@ -339,7 +339,7 @@ describe('the two 1.2.0 fallbacks, now reported', () => {
 
 	it('an envelope signed by a kid neither baked nor published: nothing (unchanged) and one unknown_key line', async () => {
 		const other = makeIssuer('rotated-kid-2')
-		const html = await serve(contractBody(other, contractFixture('banner-brand-b-like')))
+		const html = await serve(contractBody(other, contractFixture('banner-storefront')))
 		expect(html).not.toContain('<certrev-card')
 		expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([
 			`[certrev] card_fallback ${JSON.stringify({ reason: 'unknown_key', platform: 'builder', externalId: ENTRY_ID })}`,

@@ -44,6 +44,7 @@
 		"github-packages"
 	],
 	"scripts": {
+		"prepublishOnly": "node ../../scripts/public-hygiene.mjs tree ../.. && node ../../scripts/public-hygiene.mjs pack .",
 		"build": "tsc",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run"

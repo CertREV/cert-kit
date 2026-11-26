@@ -11,10 +11,10 @@ import {
 	builderSubject,
 	DELIVERY_URL,
 	deliveryBody,
-	BRAND_B_LIKE_DEF,
 	ENTRY_ID,
 	json,
 	makeIssuer,
+	STOREFRONT_DEF,
 	scriptedDelivery,
 	T0,
 } from '../../builder/__tests__/delivery-harness.js'
@@ -67,8 +67,8 @@ function setup(first?: () => Response | Promise<Response>, staleMs?: number) {
 	}
 }
 
-/** What the verified read returns for `BRAND_B_LIKE_DEF`: the frozen `preset` / `rung` keys it carries are not kept. */
-const PARSED_BRAND_B_LIKE_DEF = stripLegacyDefKeys(BRAND_B_LIKE_DEF)
+/** What the verified read returns for `STOREFRONT_DEF`: the frozen `preset` / `rung` keys it carries are not kept. */
+const PARSED_STOREFRONT_DEF = stripLegacyDefKeys(STOREFRONT_DEF)
 
 describe('deliveryUrl / deliveryCacheKey', () => {
 	it('builds the Delivery route and encodes the id', () => {
@@ -99,7 +99,7 @@ describe('parseRenderDef', () => {
 	it('keeps the metafield shape, and only the six known string tokens', () => {
 		expect(
 			parseRenderDef({
-				...BRAND_B_LIKE_DEF,
+				...STOREFRONT_DEF,
 				tokens: { accentColor: '#000000', surface: '#fff', bogus: 'x', inkColor: 7 },
 				barInkFg: '#ffffff',
 				layout: 'custom',
@@ -117,7 +117,7 @@ describe('parseRenderDef', () => {
 	})
 
 	it('ignores the legacy preset and rung keys the portal still sends: a def with them parses to the same object', () => {
-		const plain = parseRenderDef(BRAND_B_LIKE_DEF)
+		const plain = parseRenderDef(STOREFRONT_DEF)
 		expect(plain).not.toBeNull()
 		for (const legacy of [
 			{ preset: 'memo', rung: 'memo' },
@@ -125,7 +125,7 @@ describe('parseRenderDef', () => {
 			{ preset: 7, rung: null },
 			{ preset: undefined, rung: undefined },
 		]) {
-			const parsed = parseRenderDef({ ...BRAND_B_LIKE_DEF, ...legacy })
+			const parsed = parseRenderDef({ ...STOREFRONT_DEF, ...legacy })
 			expect(parsed).toEqual(plain)
 			expect(parsed).not.toHaveProperty('preset')
 			expect(parsed).not.toHaveProperty('rung')
@@ -133,19 +133,19 @@ describe('parseRenderDef', () => {
 	})
 
 	it('drops a barInkFg that is not one of the two inks', () => {
-		expect(parseRenderDef({ ...BRAND_B_LIKE_DEF, barInkFg: 'red' })).not.toHaveProperty('barInkFg')
+		expect(parseRenderDef({ ...STOREFRONT_DEF, barInkFg: 'red' })).not.toHaveProperty('barInkFg')
 	})
 
 	it.each([
 		['null', null],
-		['an array', [BRAND_B_LIKE_DEF]],
-		['a string v', { ...BRAND_B_LIKE_DEF, v: '4' }],
-		['a non-finite v', { ...BRAND_B_LIKE_DEF, v: Number.NaN }],
-		['tokens not an object', { ...BRAND_B_LIKE_DEF, tokens: '#000' }],
-		['hidden a string', { ...BRAND_B_LIKE_DEF, hidden: 'reviewerPhoto' }],
-		['hidden with a non-string', { ...BRAND_B_LIKE_DEF, hidden: ['reviewerPhoto', 1] }],
-		['a non-string layout', { ...BRAND_B_LIKE_DEF, layout: 3 }],
-		['a malformed customFace', { ...BRAND_B_LIKE_DEF, customFace: { placedFields: 'memo' } }],
+		['an array', [STOREFRONT_DEF]],
+		['a string v', { ...STOREFRONT_DEF, v: '4' }],
+		['a non-finite v', { ...STOREFRONT_DEF, v: Number.NaN }],
+		['tokens not an object', { ...STOREFRONT_DEF, tokens: '#000' }],
+		['hidden a string', { ...STOREFRONT_DEF, hidden: 'reviewerPhoto' }],
+		['hidden with a non-string', { ...STOREFRONT_DEF, hidden: ['reviewerPhoto', 1] }],
+		['a non-string layout', { ...STOREFRONT_DEF, layout: 3 }],
+		['a malformed customFace', { ...STOREFRONT_DEF, customFace: { placedFields: 'memo' } }],
 	])('is null for %s', (_label, value) => {
 		expect(parseRenderDef(value)).toBeNull()
 	})
@@ -156,7 +156,7 @@ describe('getVerifiedDelivery', () => {
 		const t = setup()
 		const got = await getVerifiedDelivery(t.opts())
 		expect(got.verdict.decision).toBe('render')
-		expect(got.renderDef).toEqual(PARSED_BRAND_B_LIKE_DEF)
+		expect(got.renderDef).toEqual(PARSED_STOREFRONT_DEF)
 		expect(t.delivery.calls).toEqual([DELIVERY_URL])
 	})
 
@@ -265,9 +265,9 @@ describe('getVerifiedDelivery', () => {
 	it('settleDelivery nulls the def whenever the verdict is not render', () => {
 		const issuer = makeIssuer()
 		const payload = issuer.envelope().payload
-		const cached: CachedDelivery = { kind: 'verified', payload, renderDef: parseRenderDef(BRAND_B_LIKE_DEF) }
+		const cached: CachedDelivery = { kind: 'verified', payload, renderDef: parseRenderDef(STOREFRONT_DEF) }
 		const ctx = { platform: 'builder', externalId: ENTRY_ID }
-		expect(settleDelivery(cached, { ...ctx, now: new Date(T0) }).renderDef).toEqual(PARSED_BRAND_B_LIKE_DEF)
+		expect(settleDelivery(cached, { ...ctx, now: new Date(T0) }).renderDef).toEqual(PARSED_STOREFRONT_DEF)
 		expect(settleDelivery(cached, { ...ctx, externalId: 'other', now: new Date(T0) })).toEqual({
 			verdict: { decision: 'suppress', reason: 'subject_mismatch' },
 			renderDef: null,
@@ -546,7 +546,7 @@ describe('getVerifiedDelivery: the face sibling (1.3.0)', () => {
 		t.delivery.respond(() => json(matchingBody(t.issuer)))
 		const first = await getVerifiedDelivery(t.opts())
 		expect(first.verdict.decision).toBe('render')
-		expect(first.renderDef).toEqual(PARSED_BRAND_B_LIKE_DEF)
+		expect(first.renderDef).toEqual(PARSED_STOREFRONT_DEF)
 		expect(first.face).toEqual(DELIVERED_FACE)
 		expect(t.cache.peek(deliveryCacheKey(t.opts()))).toMatchObject({ kind: 'verified', face: DELIVERED_FACE })
 		t.advance(30_000)

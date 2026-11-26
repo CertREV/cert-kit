@@ -135,7 +135,7 @@ function expectedRoots(card: CardDocumentV1, names: readonly string[]): string[]
 const hostRoots = (root: ParentNode) =>
 	Array.from(root.querySelectorAll('certrev-card')).map((host) => (host as HTMLElement).shadowRoot?.innerHTML ?? null)
 
-const CASES: ContractCase[] = ['banner-brand-b-like', 'sidebar-brand-b-like', 'floating-brand-b-like']
+const CASES: ContractCase[] = ['banner-storefront', 'sidebar-storefront', 'floating-storefront']
 
 describe('hydration of the server’s card', () => {
 	it.each(
@@ -159,7 +159,7 @@ describe('hydration of the server’s card', () => {
 	})
 
 	it('a seed card that expired by the browser’s clock comes down after hydration', async () => {
-		const fixture = contractFixture('banner-brand-b-like')
+		const fixture = contractFixture('banner-storefront')
 		const expiresAt = '2026-09-27T00:00:00.000Z'
 		const html = await serverHtml(
 			contractBody(issuer, fixture, { payload: { lifecycle: { ...fixture.lifecycle, expiresAt } } }),
@@ -185,7 +185,7 @@ describe('a client mount with no record on the page (an in-app navigation)', () 
 	})
 
 	it('where the browser has setHTMLUnsafe, the wrapper is re-parsed from exactly the card’s bytes', async () => {
-		const fixture = contractFixture('sidebar-brand-b-like')
+		const fixture = contractFixture('sidebar-storefront')
 		const proto = HTMLElement.prototype as HTMLElement & { setHTMLUnsafe?: (html: string) => void }
 		const seen: string[] = []
 		proto.setHTMLUnsafe = function (this: HTMLElement, html: string) {
@@ -216,7 +216,7 @@ describe('a client mount with no record on the page (an in-app navigation)', () 
 	})
 
 	it('a contract-1 read with no card: nothing, a reasoned none record, and card_missing reported once', async () => {
-		const fixture = contractFixture('banner-brand-b-like')
+		const fixture = contractFixture('banner-storefront')
 		browser(contractBody(issuer, fixture, { card: undefined }))
 		const container = await clientMount(block())
 		expect(container.querySelector('certrev-card')).toBeNull()
@@ -229,7 +229,7 @@ describe('a client mount with no record on the page (an in-app navigation)', () 
 	})
 
 	it('`clientRead={false}`: no read, and nothing (2.0.1; through 2.0.0 the options face), client_read_off reported once', async () => {
-		const calls = browser(contractBody(issuer, contractFixture('banner-brand-b-like')))
+		const calls = browser(contractBody(issuer, contractFixture('banner-storefront')))
 		const container = await clientMount(block({ clientRead: false }))
 		expect(calls).toEqual([])
 		expect(container.querySelector('certrev-card')).toBeNull()
@@ -249,7 +249,7 @@ describe("React's client re-render after a hydration error elsewhere on the page
 	)
 
 	it('prints the card again from the seed, with no read, once the browser has re-checked it', async () => {
-		const fixture = contractFixture('banner-brand-b-like')
+		const fixture = contractFixture('banner-storefront')
 		const html = await serverHtml(contractBody(issuer, fixture), page('rendered on the server'))
 		const calls = browser()
 		const container = mountServerHtml(html)
@@ -261,7 +261,7 @@ describe("React's client re-render after a hydration error elsewhere on the page
 	})
 
 	it('a seed whose card no longer hashes to the seed’s signed binding is never printed, and card_verify_failed is reported', async () => {
-		const fixture = contractFixture('banner-brand-b-like')
+		const fixture = contractFixture('banner-storefront')
 		const html = await serverHtml(contractBody(issuer, fixture), page('rendered on the server'))
 		browser()
 		const container = mountServerHtml(html)
@@ -279,7 +279,7 @@ describe("React's client re-render after a hydration error elsewhere on the page
 
 describe('the hydrating browser cannot confirm the seed card: it adopts the server’s card, then prints nothing', () => {
 	it('a tampered seed under hydration: no mismatch while hydrating; the card is down after, and reported', async () => {
-		const fixture = contractFixture('sidebar-brand-b-like')
+		const fixture = contractFixture('sidebar-storefront')
 		const html = await serverHtml(contractBody(issuer, fixture))
 		browser()
 		const container = mountServerHtml(html)
@@ -305,7 +305,7 @@ describe('the hosted runtime', () => {
 	}
 
 	it('a client mount injects it once into the head, with its integrity and no credentials; a second card does not', async () => {
-		const fixture = withRuntime(contractFixture('floating-brand-b-like'))
+		const fixture = withRuntime(contractFixture('floating-storefront'))
 		browser(contractBody(issuer, fixture))
 		await clientMount(block())
 		await clientMount(block())
@@ -348,7 +348,7 @@ describe('the hosted runtime', () => {
 	})
 
 	it('2.1.1: a hydrated split banner (header block and memo block) injects the runtime once, from the header block', async () => {
-		const fixture = withRuntime(contractFixture('banner-brand-b-like'))
+		const fixture = withRuntime(contractFixture('banner-storefront'))
 		const body = contractBody(issuer, fixture)
 		const page = (
 			<div>
@@ -372,7 +372,7 @@ describe('the hosted runtime', () => {
 
 	it('a runtime already running (its global guard) is not injected again', async () => {
 		;(document as unknown as Record<symbol, unknown>)[Symbol.for('certrev.card-runtime')] = true
-		browser(contractBody(issuer, withRuntime(contractFixture('floating-brand-b-like'))))
+		browser(contractBody(issuer, withRuntime(contractFixture('floating-storefront'))))
 		await clientMount(block())
 		expect(document.head.querySelectorAll('script')).toHaveLength(0)
 	})

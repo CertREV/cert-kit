@@ -38,7 +38,7 @@ async function page(ids: readonly string[], bodyFor: (id: string) => unknown, ms
 
 describe('B1: a page with more cards than the digest memos hold still finishes', () => {
 	it('40 distinct contract-1 cards (the card memo holds 32): every card printed', async () => {
-		const fixture = contractFixture('banner-brand-b-like')
+		const fixture = contractFixture('banner-storefront')
 		const bodyFor = (id: string) => {
 			const card = { ...fixture.card, subject: { platform: 'builder', externalId: id } }
 			const doc = sha256Hex(canonicalizeJson(card))

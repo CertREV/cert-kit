@@ -42,7 +42,6 @@ import {
 	chromeRoot,
 	DELIVERY_URL,
 	deliveryBody,
-	BRAND_B_LIKE_DEF,
 	ENTRY_ID,
 	type FixtureIssuer,
 	json,
@@ -50,6 +49,7 @@ import {
 	makeIssuer,
 	renderToHtml,
 	type ScriptedDelivery,
+	STOREFRONT_DEF,
 	scriptedDelivery,
 	seedOf,
 	T0,
@@ -246,14 +246,14 @@ describe('with the delivery marker: the envelope face', () => {
 		expect(root).toContain('data-certrev-delivery=""')
 		expect(root).toContain(`data-certrev-strings-version="${CERT_STRINGS_VERSION}"`)
 		expect(root).toContain('data-certrev-def-version="4"')
-		expect(html).toContain(expectedFace(BRAND_B_LIKE_DEF.hidden, '#000000'))
+		expect(html).toContain(expectedFace(STOREFRONT_DEF.hidden, '#000000'))
 	})
 
 	it('applies the def: the hidden reviewer photo is gone, the black accent carries white ink', async () => {
 		const withDef = await renderToHtml(card())
 		// The same verified cert with a def that hides nothing, to prove the difference is the def.
 		setCardDeliveryRuntimeForTests({ resolveKid: issuer.resolveKid, fetchImpl: () => delivery.fetch, now: () => clock })
-		delivery.respond(() => json(deliveryBody(issuer.envelope(), { ...BRAND_B_LIKE_DEF, hidden: [] })))
+		delivery.respond(() => json(deliveryBody(issuer.envelope(), { ...STOREFRONT_DEF, hidden: [] })))
 		const withoutHide = await renderToHtml(card())
 		const reviewerTile = '>JD</div>'
 		expect(withoutHide).toContain(reviewerTile)
@@ -264,7 +264,7 @@ describe('with the delivery marker: the envelope face', () => {
 
 	it('derives the accent ink from the def accent: a light accent carries dark ink', async () => {
 		delivery.respond(() =>
-			json(deliveryBody(issuer.envelope(), { ...BRAND_B_LIKE_DEF, tokens: { accentColor: '#ffe600' } })),
+			json(deliveryBody(issuer.envelope(), { ...STOREFRONT_DEF, tokens: { accentColor: '#ffe600' } })),
 		)
 		const html = await renderToHtml(card())
 		expect(html).toContain('--ba:#ffe600')
@@ -324,14 +324,17 @@ describe('with the delivery marker: the envelope face', () => {
 	it('a def cannot hide the scope line or the certificate link', async () => {
 		delivery.respond(() =>
 			json(
-				deliveryBody(issuer.envelope(), { ...BRAND_B_LIKE_DEF, hidden: ['scopeLine', 'certificateLink', 'reviewerPhoto'] }),
+				deliveryBody(issuer.envelope(), {
+					...STOREFRONT_DEF,
+					hidden: ['scopeLine', 'certificateLink', 'reviewerPhoto'],
+				}),
 			),
 		)
-		expect(await renderToHtml(card())).toContain(expectedFace(BRAND_B_LIKE_DEF.hidden, '#000000'))
+		expect(await renderToHtml(card())).toContain(expectedFace(STOREFRONT_DEF.hidden, '#000000'))
 	})
 
 	it('an editor-chosen mode wins over the def layout', async () => {
-		delivery.respond(() => json(deliveryBody(issuer.envelope(), { ...BRAND_B_LIKE_DEF, layout: 'sidebar' })))
+		delivery.respond(() => json(deliveryBody(issuer.envelope(), { ...STOREFRONT_DEF, layout: 'sidebar' })))
 		const byDef = await renderToHtml(card({ mode: undefined }))
 		setCardDeliveryRuntimeForTests({ resolveKid: issuer.resolveKid, fetchImpl: () => delivery.fetch, now: () => clock })
 		const byEditor = await renderToHtml(card({ mode: 'floating' }))
@@ -619,7 +622,7 @@ describe('with the delivery marker: the envelope face', () => {
 		it('a def change lands with the first refresh after the cache TTL', async () => {
 			expect(await renderToHtml(card())).toContain('--ba:#000000')
 			delivery.respond(() =>
-				json(deliveryBody(issuer.envelope(), { ...BRAND_B_LIKE_DEF, v: 5, tokens: { accentColor: '#e6007e' } })),
+				json(deliveryBody(issuer.envelope(), { ...STOREFRONT_DEF, v: 5, tokens: { accentColor: '#e6007e' } })),
 			)
 			clock = T0 + CARD_DELIVERY_TTL_MS + 1_000
 			expect(await renderToHtml(card())).toContain('--ba:#000000')
