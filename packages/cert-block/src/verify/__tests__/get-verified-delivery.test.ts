@@ -10,10 +10,10 @@ import {
 	builderSubject,
 	DELIVERY_URL,
 	deliveryBody,
-	STOREFRONT_DEF,
 	ENTRY_ID,
 	json,
 	makeIssuer,
+	STOREFRONT_DEF,
 	scriptedDelivery,
 	T0,
 } from '../../builder/__tests__/delivery-harness.js'
